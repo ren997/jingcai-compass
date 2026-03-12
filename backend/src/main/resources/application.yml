@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: jingcai-compass-backend
+
+server:
+  port: 8080

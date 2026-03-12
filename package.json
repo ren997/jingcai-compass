@@ -1,0 +1,15 @@
+{
+  "name": "jingcai-compass",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Transparent football match analysis platform for China Sports Lottery daily matches.",
+  "scripts": {
+    "prepare": "husky",
+    "lint:commit": "commitlint --from HEAD~1 --to HEAD --verbose"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
+    "husky": "^9.1.7"
+  }
+}

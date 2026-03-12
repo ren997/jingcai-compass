@@ -1,0 +1,12 @@
+package com.jingcaicompass;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class JingCaiCompassApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(JingCaiCompassApplication.class, args);
+    }
+}

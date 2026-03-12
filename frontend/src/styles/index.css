@@ -1,0 +1,60 @@
+:root {
+  font-family: "Segoe UI", "PingFang SC", sans-serif;
+  color: #132238;
+  background: linear-gradient(180deg, #f6f8fb 0%, #edf2f8 100%);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+.page {
+  min-height: 100vh;
+  padding: 48px 20px;
+}
+
+.hero,
+.panel {
+  max-width: 860px;
+  margin: 0 auto 20px;
+  padding: 28px;
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 20px 45px rgba(19, 34, 56, 0.08);
+}
+
+.eyebrow {
+  margin: 0 0 10px;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #5d7a99;
+}
+
+h1,
+h2,
+p,
+ul {
+  margin-top: 0;
+}
+
+h1 {
+  margin-bottom: 12px;
+  font-size: 42px;
+}
+
+.summary {
+  margin-bottom: 0;
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.list {
+  padding-left: 20px;
+  margin-bottom: 0;
+  line-height: 1.8;
+}

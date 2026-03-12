@@ -2,6 +2,8 @@
 
 JingCai Compass is a data analysis platform focused on China Sports Lottery football matches.
 
+Chinese README: `README.zh-CN.md`
+
 Working product name:
 
 - Chinese: 竞彩罗盘

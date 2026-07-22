@@ -48,6 +48,7 @@ Development defaults can be overridden with environment variables. The main grou
 - `REDIS_*`: Redis connection
 - `SPORTTERY_*`: Provider selection, base URL, timeout and retry settings
 - `SYNC_TASKS_ENABLED` and `SPORTTERY_POOL_*`: synchronization task switches and intervals
+- `MAX_PAGE_SIZE`: maximum records returned by a MyBatis-Plus page query (default `100`)
 - `SPRINGDOC_ENABLED`: OpenAPI/Swagger switch
 
 Copy `application-local.example.yml` to the Git-ignored `application-local.yml` only when local overrides are needed, then run with the `local` profile.
@@ -66,7 +67,7 @@ npm run backend:test
 GET http://localhost:8080/api/public/matches?lotteryDate=2026-07-22
 ```
 
-The response uses explicit `MatchSummaryVo` models. The default `china` Provider reads the public China Sport Lottery football pool; set `SPORTTERY_PROVIDER=stub` to use clearly labelled synthetic data. PostgreSQL must exist before startup; the application does not create databases.
+The response uses the common `ApiResponse<T>` envelope with `code`, `message`, `data` and `traceId`; match fields are modeled by `MatchSummaryVo`. The same trace ID is returned in the `X-Trace-Id` response header and written to the server log context. The default `china` Provider reads the public China Sport Lottery football pool; set `SPORTTERY_PROVIDER=stub` to use clearly labelled synthetic data. PostgreSQL must exist before startup; the application does not create databases.
 
 ## Development endpoints
 
@@ -84,4 +85,4 @@ Only `health` and `info` Actuator endpoints are exposed. Production health detai
 
 Follow `docs/implementation-guide.md` and `docs/dev-tasks.md` from the repository root.
 
-The cloud PostgreSQL and Redis connection has been verified in T001. T002 provides typed configuration, production separation, HTTP timeouts, health checks and OpenAPI. The next task is T003: replace the temporary external-infrastructure exclusions with isolated Testcontainers.
+The cloud PostgreSQL and Redis connection has been verified in T001. T002 provides typed configuration, production separation, HTTP timeouts, health checks and OpenAPI. T003 was skipped by project decision because local Docker is not used. T004 provides common API responses, error handling, trace IDs, paging, audit field filling and the minimum security boundary.

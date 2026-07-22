@@ -33,11 +33,14 @@ management:
 springdoc:
   api-docs:
     enabled: ${SPRINGDOC_ENABLED:true}
+    path: /v3/api-docs
   swagger-ui:
     enabled: ${SPRINGDOC_ENABLED:true}
     path: /swagger-ui.html
 
 app:
+  pagination:
+    max-page-size: ${MAX_PAGE_SIZE:100}
   sporttery:
     provider: ${SPORTTERY_PROVIDER:china}
     base-url: ${SPORTTERY_BASE_URL:https://webapi.sporttery.cn}
@@ -53,3 +56,7 @@ app:
       enabled: ${SPORTTERY_POOL_TASK_ENABLED:false}
       fixed-delay: ${SPORTTERY_POOL_FIXED_DELAY:15m}
       initial-delay: ${SPORTTERY_POOL_INITIAL_DELAY:30s}
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true

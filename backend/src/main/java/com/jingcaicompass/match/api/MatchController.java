@@ -2,6 +2,7 @@ package com.jingcaicompass.match.api;
 
 import com.jingcaicompass.match.api.vo.MatchSummaryVo;
 import com.jingcaicompass.match.application.MatchQueryService;
+import com.jingcaicompass.system.api.ApiResponse;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,7 +23,7 @@ public class MatchController {
     }
 
     @GetMapping
-    public List<MatchSummaryVo> listMatches(
+    public ApiResponse<List<MatchSummaryVo>> listMatches(
             @RequestParam(required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
             LocalDate lotteryDate
@@ -30,6 +31,6 @@ public class MatchController {
         LocalDate queryDate = lotteryDate == null
                 ? matchQueryService.currentLotteryDate()
                 : lotteryDate;
-        return matchQueryService.findDailyMatches(queryDate);
+        return ApiResponse.success(matchQueryService.findDailyMatches(queryDate));
     }
 }

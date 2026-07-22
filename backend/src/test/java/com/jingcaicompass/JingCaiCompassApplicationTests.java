@@ -35,6 +35,7 @@ class JingCaiCompassApplicationTests {
 
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.openapi").exists());
+                .andExpect(jsonPath("$.openapi").exists())
+                .andExpect(jsonPath("$.info.title").value("竞彩罗盘 API"));
     }
 }

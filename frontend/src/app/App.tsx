@@ -15,6 +15,13 @@ type MatchSummary = {
   dataSource: string;
 };
 
+type ApiResponse<T> = {
+  code: string;
+  message: string;
+  data: T;
+  traceId: string;
+};
+
 type MatchLoadState =
   | { type: 'loading' }
   | { type: 'ready'; matches: MatchSummary[] }
@@ -83,10 +90,11 @@ export default function App() {
     setLoadState({ type: 'loading' });
     fetch(`/api/public/matches?lotteryDate=${lotteryDate}`, { signal: controller.signal })
       .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
+        const body = (await response.json()) as ApiResponse<MatchSummary[]>;
+        if (!response.ok || body.code !== 'SUCCESS') {
+          throw new Error(`${body.message}（追踪号：${body.traceId}）`);
         }
-        return (await response.json()) as MatchSummary[];
+        return body.data;
       })
       .then((matches) => setLoadState({ type: 'ready', matches }))
       .catch((error: unknown) => {

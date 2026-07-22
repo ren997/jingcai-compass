@@ -3,6 +3,7 @@ package com.jingcaicompass.system.config;
 import com.jingcaicompass.match.infrastructure.sporttery.SportteryProviderProperties;
 import com.jingcaicompass.match.infrastructure.sporttery.SportteryProviderType;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
+import com.jingcaicompass.system.config.properties.PaginationProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.validation.ValidationAutoConfiguration;
@@ -28,6 +29,7 @@ class ApplicationConfigurationPropertiesTest {
                     "app.sporttery.retry.max-attempts=2",
                     "app.sporttery.retry.delay=500ms",
                     "app.sporttery.quota-warning-threshold=0",
+                    "app.pagination.max-page-size=100",
                     "app.tasks.enabled=false",
                     "app.tasks.sporttery-pool.enabled=false",
                     "app.tasks.sporttery-pool.fixed-delay=15m",
@@ -50,6 +52,9 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(tasks.enabled()).isFalse();
             assertThat(tasks.sportteryPool().enabled()).isFalse();
             assertThat(tasks.sportteryPool().fixedDelay()).isEqualTo(Duration.ofMinutes(15));
+
+            PaginationProperties pagination = context.getBean(PaginationProperties.class);
+            assertThat(pagination.maxPageSize()).isEqualTo(100);
         });
     }
 
@@ -77,8 +82,24 @@ class ApplicationConfigurationPropertiesTest {
                 });
     }
 
+    @Test
+    void rejectsPageSizeBelowOne() {
+        contextRunner
+                .withPropertyValues("app.pagination.max-page-size=0")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.pagination.max-page-size");
+                });
+    }
+
     @Configuration(proxyBeanMethods = false)
-    @EnableConfigurationProperties({SportteryProviderProperties.class, SyncTaskProperties.class})
+    @EnableConfigurationProperties({
+            SportteryProviderProperties.class,
+            SyncTaskProperties.class,
+            PaginationProperties.class
+    })
     static class PropertiesConfiguration {
     }
 }

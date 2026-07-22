@@ -1,12 +1,15 @@
 package com.jingcaicompass.match.infrastructure.sporttery;
 
-public class SportteryDataAccessException extends RuntimeException {
+import com.jingcaicompass.system.exception.BusinessException;
+import com.jingcaicompass.system.exception.ErrorCode;
+
+public class SportteryDataAccessException extends BusinessException {
 
     public SportteryDataAccessException(String message) {
-        super(message);
+        super(ErrorCode.DATA_SOURCE_UNAVAILABLE, message);
     }
 
     public SportteryDataAccessException(String message, Throwable cause) {
-        super(message, cause);
+        super(ErrorCode.DATA_SOURCE_UNAVAILABLE, message, cause);
     }
 }

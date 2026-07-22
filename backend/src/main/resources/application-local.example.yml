@@ -10,6 +10,8 @@ spring:
       password: <password>
 
 app:
+  pagination:
+    max-page-size: 100
   sporttery:
     provider: china
     base-url: https://webapi.sporttery.cn

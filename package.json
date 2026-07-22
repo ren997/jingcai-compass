@@ -5,7 +5,12 @@
   "description": "Transparent football match analysis platform for China Sports Lottery daily matches.",
   "scripts": {
     "prepare": "husky",
-    "lint:commit": "commitlint --from HEAD~1 --to HEAD --verbose"
+    "lint:commit": "commitlint --from HEAD~1 --to HEAD --verbose",
+    "backend:run": "mvn -f backend/pom.xml spring-boot:run",
+    "backend:test": "mvn -f backend/pom.xml test",
+    "frontend:install": "npm --prefix frontend install",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "frontend:build": "npm --prefix frontend run build"
   },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",

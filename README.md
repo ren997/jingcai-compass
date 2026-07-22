@@ -1,43 +1,89 @@
 # JingCai Compass
 
-JingCai Compass is a data analysis platform focused on China Sports Lottery football matches.
+JingCai Compass is an analysis platform for China Sports Lottery daily football matches.
 
 Chinese README: `README.zh-CN.md`
 
-Working product name:
+## Product focus
 
-- Chinese: 竞彩罗盘
-- English: JingCai Compass
+- Cover only the official daily football match pool published by China Sports Lottery
+- Build a transparent workflow around prediction publishing, locking, settlement, and history
+- Validate whether a small but trustworthy MVP has long-term value
 
-Current goal:
+## Repository map
 
-- Focus only on the daily official football match pool published by China Sports Lottery
-- Build a transparent analysis workflow around publishing, locking, settlement, and historical verification
-- Validate whether a small but trustworthy MVP has real long-term product value
+| Path | Purpose |
+| --- | --- |
+| `docs/` | Product, technical, and delivery documents |
+| `backend/` | Spring Boot API and scheduled task skeleton |
+| `frontend/` | React + Vite web application |
+| `.husky/` | Commit hooks |
 
-## Repository layout
+## Document entry points
 
-- `docs/`: product, technical, and implementation documents
-- `backend/`: Spring Boot backend
-- `frontend/`: React frontend
-
-## Current document entry
-
+- Document index: `docs/README.md`
 - MVP requirements: `docs/requirements-mvp.md`
+- Technical design draft: `docs/technical-design.md`
+- Delivery tasks: `docs/dev-tasks.md`
 
-## Commit message linting
+## Local development
 
-This repository uses `commitlint` with the Conventional Commits preset.
+Prerequisites:
 
-### Local setup
+- Node.js 18+
+- Java 21
+- Maven 3.9+ available in `PATH`
+
+### 1. Initialize repository tools
 
 ```bash
 npm install
 ```
 
-After installation, Husky will register the `commit-msg` hook automatically.
+This installs commit tooling and registers the `commit-msg` hook.
 
-### Commit message examples
+### 2. Install frontend dependencies
+
+```bash
+npm run frontend:install
+```
+
+### 3. Start the frontend
+
+```bash
+npm run frontend:dev
+```
+
+### 4. Start the backend
+
+```bash
+npm run backend:run
+```
+
+This command delegates to Maven and starts the Spring Boot service from `backend/pom.xml`.
+
+## Common scripts
+
+```bash
+npm run frontend:install
+npm run frontend:dev
+npm run frontend:build
+npm run backend:run
+npm run backend:test
+npm run lint:commit
+```
+
+## Commit convention
+
+This repository uses `commitlint` with the Conventional Commits preset.
+
+Format:
+
+```text
+<type>(<module>): <主题>
+```
+
+Examples:
 
 ```text
 feat(match): 新增竞彩比赛列表接口

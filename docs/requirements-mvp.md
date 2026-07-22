@@ -4,8 +4,8 @@
 
 - 项目名称: 竞彩罗盘
 - 英文名称: JingCai Compass
-- 文档版本: v0.1
-- 文档日期: 2026-03-12
+- 文档版本: v0.2
+- 文档日期: 2026-07-22
 - 文档目标: 定义首个可上线验证版本的产品范围、边界和验收标准
 
 ## 2. 项目定位
@@ -87,7 +87,8 @@ MVP 只验证三件事：
 - 今日已发布预测场次
 - 历史累计预测场次
 - 近7天命中率概览
-- 近30天 ROI 或 Yield 概览
+- 近30天概率评估概览
+- ROI 或 Yield 概览仅在赔率快照和计算口径可复核后展示
 - 最近一次发布快照时间
 - 历史记录入口
 
@@ -228,18 +229,22 @@ MVP 只验证三件事：
 - 让球胜平负命中率
 - 近7天命中率
 - 近30天命中率
-- 近30天 ROI
-- 累计 Yield
+- 近30天 Brier Score
+- 近30天 Log Loss
+- 近30天 ROI 与累计 Yield，仅在赔率来源、快照时点和固定下注规则明确后展示
 - 按联赛分布的样本数与命中率
 - 按模型版本分布的样本数与命中率
 
-### MVP 暂不纳入
+### MVP 暂不纳入公开页面
 
-- Log Loss
-- Brier Score
 - 概率校准图
 - 赔率区间表现拆分
 - 多模型对比图表
+
+说明：
+
+- Brier Score 和 Log Loss 是概率模型的基础验收指标，应纳入内部验证，并可在统计页展示简化结果
+- ROI / Yield 不能只根据命中率计算，必须绑定明确的赔率快照、市场、下注方向和固定资金规则
 
 ## 7.6 后台最小管理能力
 
@@ -332,9 +337,11 @@ MVP 只验证三件事：
 
 ## 8.1 主要数据来源
 
-MVP 至少需要以下数据：
+MVP 至少需要以下数据，详细选型和验证方法见 `data-sources.md`：
 
 - 体彩当日竞彩足球比赛池
+- 体彩官方比赛编号、让球、SP、销售状态和赛果
+- 足球亚洲让球盘的赛前盘口与赔率快照
 - 比赛基础信息
 - 历史赛果
 - 联赛与球队资料
@@ -342,10 +349,25 @@ MVP 至少需要以下数据：
 
 说明:
 
-- 赔率、欧赔、伤停、阵容、盘口变化都不作为 MVP 硬依赖
-- 如果后续数据源稳定，再纳入增强版本
+- 体彩数据源决定官方比赛池、官方让球、SP 和结算赛果
+- 亚盘数据源只提供外部分析数据，不得覆盖体彩官方字段
+- 亚洲让球盘与体彩让球胜平负是不同市场，必须分别建模
+- 亚盘的首次可见快照和封盘前快照属于 MVP 硬依赖
+- 欧赔、伤停、阵容和分钟级盘口变化不作为 MVP 硬依赖
+- 数据源必须通过覆盖率、稳定性、映射准确率和授权边界验证后才能进入生产环境
 
-## 8.2 核心实体
+## 8.2 数据源验收
+
+- 体彩比赛池字段完整率达到 100%
+- 体彩赛果能够支持全部正常完赛场次自动结算
+- 亚盘覆盖率达到目标竞彩比赛的 90% 以上
+- 亚盘快照包含来源、博彩公司、盘口、主客赔率和时间戳
+- 体彩比赛与亚盘比赛自动映射准确率达到 98% 以上
+- 未匹配和低置信度记录进入人工复核，不得静默丢弃或错误关联
+- 原始响应和解析结果均可追溯
+- 数据条款允许项目所需的缓存、模型训练和页面展示
+
+## 8.3 核心实体
 
 ### matches
 
@@ -362,6 +384,48 @@ MVP 至少需要以下数据：
 - away_score
 - created_at
 - updated_at
+
+### match_source_mappings
+
+- id
+- match_id
+- provider_code
+- external_match_id
+- mapping_status
+- mapping_confidence
+- mapping_method
+- created_at
+- updated_at
+
+### asian_odds_snapshots
+
+- id
+- match_id
+- provider_code
+- bookmaker_code
+- handicap_line
+- home_odds
+- away_odds
+- snapshot_type
+- captured_at
+- provider_updated_at
+- raw_payload_hash
+- created_at
+
+### raw_data_payloads
+
+- id
+- provider_code
+- data_type
+- request_key
+- requested_at
+- provider_updated_at
+- http_status
+- payload
+- payload_hash
+- parse_status
+- parse_error
+- created_at
 
 ### predictions
 

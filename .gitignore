@@ -27,4 +27,5 @@ frontend/.vite/
 backend/target/
 *.iml
 .DS_Store
+.env
 backend/src/main/resources/application-local.yml

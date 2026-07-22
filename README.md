@@ -23,14 +23,16 @@ Chinese README: `README.zh-CN.md`
 
 - Document index: `docs/README.md`
 - MVP requirements: `docs/requirements-mvp.md`
-- Technical design draft: `docs/technical-design.md`
-- Delivery tasks: `docs/dev-tasks.md`
+- Data source selection: `docs/data-sources.md`
+- Technical design: `docs/technical-design.md`
+- Implementation guide: `docs/implementation-guide.md`
+- Development task board: `docs/dev-tasks.md`
 
 ## Local development
 
 Prerequisites:
 
-- Node.js 18+
+- Node.js 22 LTS
 - Java 21
 - Maven 3.9+ available in `PATH`
 

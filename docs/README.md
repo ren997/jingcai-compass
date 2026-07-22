@@ -14,22 +14,28 @@
 
 3. `technical-design.md`
 
-记录后端、前端、数据流和关键机制的技术设计主题，后续应围绕需求文档持续细化。
+固定 MVP 的后端、前端、PostgreSQL、Redis、测试、部署选型，以及模块边界、数据链路、状态机和开发顺序。
 
-4. `dev-tasks.md`
+4. `implementation-guide.md`
 
-将当前阶段的工作拆成可执行的交付项，适合开发排期和阶段跟进。
+从当前脚手架开始逐步落地，包含环境、依赖、Flyway、包和类、Provider、接口、测试、部署与验收命令。
+
+5. `dev-tasks.md`
+
+使用 T001～T605 的任务编号维护状态、依赖、交付物和完成标准，是日常开发执行看板。
 
 ## 当前状态
 
 - `requirements-mvp.md`：内容最完整，可直接作为后续实现依据
 - `data-sources.md`：已完成第一轮候选源调研，等待真实竞彩池样本验证
-- `technical-design.md`：已建立主题清单，等待按模块展开
-- `dev-tasks.md`：已按阶段拆分，适合作为近期执行列表
+- `technical-design.md`：技术选型和总体架构已定稿
+- `implementation-guide.md`：已按当前仓库基线写成可逐步执行的开发手册
+- `dev-tasks.md`：已改造成编号化执行看板，T001 已完成，下一项为 T002
 
 ## 维护建议
 
 - 产品范围变更优先更新 `requirements-mvp.md`
 - 数据源套餐、接口状态和选型结论更新到 `data-sources.md`，并注明核查日期
 - 数据模型、接口边界和流程图优先落在 `technical-design.md`
+- 实现步骤、文件约定和验证命令更新到 `implementation-guide.md`
 - 实施顺序、阶段目标和完成情况更新到 `dev-tasks.md`

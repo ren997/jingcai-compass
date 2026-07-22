@@ -1,0 +1,10 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://<cloud-host>:<port>/<database>
+    username: <username>
+    password: <password>
+  data:
+    redis:
+      host: <cloud-host>
+      port: <port>
+      password: <password>

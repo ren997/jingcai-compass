@@ -16,7 +16,7 @@ The backend will own the MVP closed loop:
 
 - Spring Boot 3
 - Java 21
-- PostgreSQL
+- PostgreSQL 16
 - Redis
 - Flyway
 - MyBatis-Plus
@@ -28,9 +28,10 @@ The backend will own the MVP closed loop:
 
 ## Local run
 
-From repository root:
+Copy `application-local.example.yml` to the Git-ignored `application-local.yml`, fill in the approved cloud development PostgreSQL/Redis credentials, then run from the repository root:
 
-```bash
+```powershell
+$env:SPRING_PROFILES_ACTIVE='local'
 npm run backend:run
 ```
 
@@ -48,7 +49,6 @@ npm run backend:test
 
 ## Suggested next implementation order
 
-1. Base package structure for controller, application, domain, infrastructure
-2. Match sync task skeleton
-3. Prediction aggregate and immutable-field rules
-4. Settlement flow and audit append-only records
+Follow `docs/implementation-guide.md` and `docs/dev-tasks.md` from the repository root.
+
+The cloud PostgreSQL and Redis connection has been verified in T001. The next task is T002: complete dependency and configuration layering. Automated tests use isolated Testcontainers from T003 and must not use the shared cloud database.

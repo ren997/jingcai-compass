@@ -14,7 +14,7 @@ Planned MVP pages:
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22 LTS
 - frontend dependencies installed
 
 ## Local run
@@ -51,7 +51,6 @@ npm run frontend:build
 
 ## Suggested next implementation order
 
-1. Introduce route layout and page-level components
-2. Split homepage into reusable sections
-3. Add list/detail/history/statistics page shells
-4. Connect typed API models after backend contracts stabilize
+Follow `docs/implementation-guide.md` and `docs/dev-tasks.md` from the repository root.
+
+Frontend foundation starts at T005. Business pages start after the public API contracts in T501 are explicit; the first vertical page flow is T503 match list and detail.

@@ -22,14 +22,15 @@
 - 文档索引：`docs/README.md`
 - MVP 需求文档：`docs/requirements-mvp.md`
 - 数据源选型与验证：`docs/data-sources.md`
-- 技术设计草案：`docs/technical-design.md`
-- 开发任务草案：`docs/dev-tasks.md`
+- 技术方案：`docs/technical-design.md`
+- 开发落地手册：`docs/implementation-guide.md`
+- 开发任务看板：`docs/dev-tasks.md`
 
 ## 本地开发
 
 前置要求：
 
-- Node.js 18+
+- Node.js 22 LTS
 - Java 21
 - Maven 3.9+，且已加入 `PATH`
 

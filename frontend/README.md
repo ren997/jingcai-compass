@@ -31,6 +31,8 @@ From repository root you can also use:
 npm run frontend:dev
 ```
 
+The Vite development server proxies `/api` to `http://localhost:8080`. Start the backend with the `local` profile first, then open `http://localhost:5173` to view the daily match Demo.
+
 ## Build
 
 ```bash

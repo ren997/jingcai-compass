@@ -28,10 +28,9 @@ The backend will own the MVP closed loop:
 
 ## Local run
 
-Copy `application-local.example.yml` to the Git-ignored `application-local.yml`, fill in the approved cloud development PostgreSQL/Redis credentials, then run from the repository root:
+The cloud development PostgreSQL and Redis defaults are configured in `application.yml` and can be overridden with environment variables. Run from the repository root:
 
-```powershell
-$env:SPRING_PROFILES_ACTIVE='local'
+```bash
 npm run backend:run
 ```
 
@@ -46,6 +45,14 @@ mvn -f backend/pom.xml spring-boot:run
 ```bash
 npm run backend:test
 ```
+
+## Product demo API
+
+```text
+GET http://localhost:8080/api/public/matches?lotteryDate=2026-07-22
+```
+
+The response uses explicit `MatchSummaryVo` models and is currently backed by clearly labelled Stub data. PostgreSQL must exist before startup; the application does not create databases.
 
 ## Suggested next implementation order
 

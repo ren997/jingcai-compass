@@ -56,11 +56,25 @@ npm run frontend:dev
 
 ### 4. 启动后端
 
+数据库和 Redis 已在 `application.yml` 中提供开发默认值，可通过环境变量覆盖。直接执行：
+
 ```bash
 npm run backend:run
 ```
 
 该命令会调用 Maven，使用 `backend/pom.xml` 启动 Spring Boot。
+
+### 5. 产品 Demo
+
+后端启动后可访问：
+
+```text
+GET http://localhost:8080/api/public/matches?lotteryDate=2026-07-22
+```
+
+前端开发服务器会将 `/api` 代理到后端。打开 `http://localhost:5173` 可查看按日期筛选的竞彩比赛卡片。
+
+当前比赛为明确标记的 Stub 演示数据，不代表真实赛程或推荐结果。应用不会自动创建 PostgreSQL 数据库，目标数据库需在启动前存在；库内结构后续统一由 Flyway 管理。
 
 ## 常用命令
 

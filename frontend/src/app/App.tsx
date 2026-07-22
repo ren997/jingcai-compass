@@ -10,7 +10,7 @@ type MatchSummary = {
   homeTeamName: string;
   awayTeamName: string;
   kickoffTime: string;
-  officialHandicap: number;
+  officialHandicap: number | null;
   matchStatus: MatchStatus;
   dataSource: string;
 };
@@ -46,11 +46,32 @@ function formatKickoff(value: string) {
   }).format(new Date(value));
 }
 
-function formatHandicap(value: number) {
+function formatHandicap(value: number | null) {
+  if (value === null) {
+    return '让球暂缺';
+  }
   if (value === 0) {
     return '让球 0';
   }
   return `主队 ${value > 0 ? '+' : ''}${value}`;
+}
+
+function formatDataSources(matches: MatchSummary[]) {
+  const sources = [...new Set(matches.map((match) => match.dataSource))];
+  if (sources.length === 0) {
+    return '暂无比赛';
+  }
+  return sources
+    .map((source) => {
+      if (source === 'CHINA_SPORTTERY') {
+        return '中国体彩网公开数据';
+      }
+      if (source === 'STUB') {
+        return 'Stub 演示数据';
+      }
+      return source;
+    })
+    .join('、');
 }
 
 export default function App() {
@@ -111,31 +132,41 @@ export default function App() {
             </div>
             <div>
               <span>当前来源</span>
-              <strong>Stub 演示数据</strong>
+              <strong>{formatDataSources(loadState.matches)}</strong>
             </div>
-            <p>演示数据不代表真实赛程或推荐结果。</p>
+            <p>
+              {loadState.matches.length === 0
+                ? '当前日期没有可展示的比赛。'
+                : loadState.matches.some((match) => match.dataSource === 'STUB')
+                ? '演示数据不代表真实赛程或推荐结果。'
+                : '比赛池来自中国体彩网公开前台，暂不代表已取得生产数据授权。'}
+            </p>
           </section>
 
-          <section className="match-list" aria-label="竞彩比赛列表">
-            {loadState.matches.map((match) => (
-              <article className="match-card" key={match.matchId}>
-                <header>
-                  <span className="match-number">{match.lotteryMatchNo}</span>
-                  <span>{match.leagueName}</span>
-                  <time dateTime={match.kickoffTime}>{formatKickoff(match.kickoffTime)}</time>
-                </header>
-                <div className="teams">
-                  <strong>{match.homeTeamName}</strong>
-                  <span className="versus">VS</span>
-                  <strong>{match.awayTeamName}</strong>
-                </div>
-                <footer>
-                  <span className="handicap">{formatHandicap(match.officialHandicap)}</span>
-                  <span className="match-status">{statusLabels[match.matchStatus]}</span>
-                </footer>
-              </article>
-            ))}
-          </section>
+          {loadState.matches.length === 0 ? (
+            <section className="state-card">所选竞彩日期暂无比赛。</section>
+          ) : (
+            <section className="match-list" aria-label="竞彩比赛列表">
+              {loadState.matches.map((match) => (
+                <article className="match-card" key={match.matchId}>
+                  <header>
+                    <span className="match-number">{match.lotteryMatchNo}</span>
+                    <span>{match.leagueName}</span>
+                    <time dateTime={match.kickoffTime}>{formatKickoff(match.kickoffTime)}</time>
+                  </header>
+                  <div className="teams">
+                    <strong>{match.homeTeamName}</strong>
+                    <span className="versus">VS</span>
+                    <strong>{match.awayTeamName}</strong>
+                  </div>
+                  <footer>
+                    <span className="handicap">{formatHandicap(match.officialHandicap)}</span>
+                    <span className="match-status">{statusLabels[match.matchStatus]}</span>
+                  </footer>
+                </article>
+              ))}
+            </section>
+          )}
         </>
       )}
     </main>

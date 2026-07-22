@@ -30,27 +30,30 @@
 - React 18 + Vite 6 + TypeScript 前端骨架。
 - 根目录 npm 开发命令和 commitlint/husky。
 - MVP、数据源和技术方案文档。
-- 公共配置使用环境变量，云端开发凭据保存在 Git 忽略的 `application-local.yml`。
+- `GET /api/public/matches` 与每日比赛列表前端纵向切片。
+- `MatchQueryService` 接口、默认实现和 `SportteryProvider` 边界。
+- 可配置切换的中国体彩网公开前台 Provider 与 Stub Provider。
+- 公共配置支持环境变量覆盖，当前开发连接默认值按项目约定保存在 `application.yml`。
 
 ### 3.2 尚未完成
 
 - 没有 `application-test.yml` 和 `application-prod.yml`。
-- `application.yml` 尚未补齐 Provider、任务、Actuator 和 SpringDoc 配置。
+- `application.yml` 尚未补齐任务、Actuator、SpringDoc、超时和重试配置。
 - 没有 Flyway migration。
-- 后端只有启动类，没有业务包、Controller、Service、Mapper 或 Entity。
-- 上下文测试因缺少数据源配置失败。
+- 比赛池尚未持久化，没有 Mapper、Entity、原始响应和同步运行记录。
+- 尚未接入亚盘 Provider、体彩赛果 Provider 和定时同步任务。
 - 前端没有安装 Ant Design、TanStack Query 和测试依赖。
-- 没有数据源 Stub、真实 Provider 或样例数据。
-- 没有 API 契约、状态机实现、结算器和快照存储。
+- 当前只有比赛列表 API 契约，没有详情、预测、历史和统计契约。
+- 没有完整状态机、结算器和快照存储。
 
 ### 3.3 开发前置原则
 
 - 先让工程在干净环境可重复启动和测试，再写业务。
 - Provider 未选型完成不阻塞领域开发，先用固定样例的 Stub Provider。
 - 每个阶段只打通一条纵向链路，不同时铺开全部页面。
-- 真实 API Key 只通过环境变量注入，不提交仓库。
-- 云端数据库和 Redis 密码只保存在 Git 忽略的本机配置或部署平台密钥中。
-- 自动化测试不得连接共享云端数据库，统一使用 Testcontainers。
+- 新增的第三方 API Key 只通过环境变量注入，不提交仓库。
+- 当前云端开发连接遵循项目已确认的直配方式；生产部署前必须迁移到部署平台密钥并轮换开发凭据。
+- 自动化测试不得连接共享云端数据库；T003 完成前通过测试配置排除外部基础设施，之后统一使用 Testcontainers。
 - 不修改已执行的 Flyway migration。
 - 锁定、结算和审计规则必须先写测试，再接 Controller。
 
@@ -373,15 +376,29 @@ V6__add_core_indexes.sql
 
 M1 不等待真实供应商选型，先定义稳定内部接口并用固定样例跑通。
 
+当前已经先落地“比赛列表查询”纵向切片，执行路径固定为：
+
+```text
+MatchController
+  -> MatchQueryService
+    -> DefaultMatchQueryService
+      -> SportteryProvider
+        -> ChinaSportteryProvider
+        -> StubSportteryProvider
+```
+
+当前切片只负责实时查询和显式 DTO 映射，不代表 M1 已完成。原始响应入库、同步运行、重试、超时、赛果和亚盘 Provider 仍按后续任务实现。
+
 ### 7.1 Provider 接口
 
 新增：
 
 ```text
-provider/sporttery/SportteryProvider.java
-provider/asianodds/AsianOddsProvider.java
-provider/common/ProviderRequestContext.java
-provider/common/ProviderCallResult.java
+match/application/provider/SportteryProvider.java
+match/application/provider/SportteryMatchDto.java
+odds/application/provider/AsianOddsProvider.java
+system/provider/ProviderRequestContext.java
+system/provider/ProviderCallResult.java
 ```
 
 建议方法：
@@ -400,8 +417,8 @@ AsianOddsProvider.fetchPreMatchOdds(AsianOddsQueryDto query)
 新增 `@ConfigurationProperties`：
 
 ```text
-provider/sporttery/config/SportteryProviderProperties.java
-provider/asianodds/config/AsianOddsProviderProperties.java
+match/infrastructure/sporttery/SportteryProviderProperties.java
+odds/infrastructure/asianodds/AsianOddsProviderProperties.java
 ```
 
 配置包含：
@@ -421,9 +438,9 @@ provider/asianodds/config/AsianOddsProviderProperties.java
 新增：
 
 ```text
-backend/src/test/resources/fixtures/providers/sporttery-pool.json
-backend/src/test/resources/fixtures/providers/sporttery-result.json
-backend/src/test/resources/fixtures/providers/asian-odds.json
+backend/src/test/resources/sporttery/get-match-calculator-success.json
+backend/src/test/resources/sporttery/sporttery-result.json
+backend/src/test/resources/asianodds/asian-odds.json
 ```
 
 开发 profile 可提供最小 Stub，实现：

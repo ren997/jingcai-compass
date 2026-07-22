@@ -6,7 +6,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
 public record MatchSummaryVo(
-        /** Demo 比赛标识。 */
+        /** 数据源内稳定的比赛标识。 */
         String matchId,
         /** 中国体彩归属日期。 */
         LocalDate lotteryDate,
@@ -21,7 +21,7 @@ public record MatchSummaryVo(
         /** 预计开赛时间。 */
         OffsetDateTime kickoffTime,
         /** 体彩官方让球数，主队让球时为负数。 */
-        int officialHandicap,
+        Integer officialHandicap,
         /** 当前比赛状态。 */
         MatchStatus matchStatus,
         /** 当前记录的数据来源标识。 */

@@ -52,7 +52,7 @@ npm run backend:test
 GET http://localhost:8080/api/public/matches?lotteryDate=2026-07-22
 ```
 
-The response uses explicit `MatchSummaryVo` models and is currently backed by clearly labelled Stub data. PostgreSQL must exist before startup; the application does not create databases.
+The response uses explicit `MatchSummaryVo` models. The default `china` Provider reads the public China Sport Lottery football pool; set `SPORTTERY_PROVIDER=stub` to use clearly labelled synthetic data. PostgreSQL must exist before startup; the application does not create databases.
 
 ## Suggested next implementation order
 

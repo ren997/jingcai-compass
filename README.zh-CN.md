@@ -74,7 +74,7 @@ GET http://localhost:8080/api/public/matches?lotteryDate=2026-07-22
 
 前端开发服务器会将 `/api` 代理到后端。打开 `http://localhost:5173` 可查看按日期筛选的竞彩比赛卡片。
 
-当前比赛为明确标记的 Stub 演示数据，不代表真实赛程或推荐结果。应用不会自动创建 PostgreSQL 数据库，目标数据库需在启动前存在；库内结构后续统一由 Flyway 管理。
+当前默认通过独立 Provider 读取中国体彩网公开前台的竞彩足球比赛池；可设置 `SPORTTERY_PROVIDER=stub` 切换到明确标记的虚构演示数据。公开前台接口仍需继续验证稳定性和使用许可，不能直接视为生产级开放 API。应用不会自动创建 PostgreSQL 数据库，目标数据库需在启动前存在；库内结构后续统一由 Flyway 管理。
 
 ## 常用命令
 

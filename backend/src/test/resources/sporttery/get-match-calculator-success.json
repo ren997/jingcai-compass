@@ -1,0 +1,52 @@
+{
+  "dataFrom": "",
+  "emptyFlag": false,
+  "errorCode": "0",
+  "errorMessage": "处理成功",
+  "success": true,
+  "value": {
+    "matchInfoList": [
+      {
+        "businessDate": "2026-07-22",
+        "matchCount": 1,
+        "subMatchList": [
+          {
+            "awayTeamAbbName": "浦项制铁",
+            "businessDate": "2026-07-22",
+            "hhad": {
+              "goalLine": "-1",
+              "goalLineValue": "-1.00",
+              "h": "3.43",
+              "d": "3.05",
+              "a": "1.96"
+            },
+            "homeTeamAbbName": "首尔FC",
+            "leagueAbbName": "韩职",
+            "matchDate": "2026-07-22",
+            "matchId": 2040584,
+            "matchNumStr": "周三201",
+            "matchStatus": "Selling",
+            "matchTime": "18:30:00"
+          }
+        ]
+      },
+      {
+        "businessDate": "2026-07-23",
+        "matchCount": 1,
+        "subMatchList": [
+          {
+            "awayTeamAbbName": "里莫",
+            "hhad": { "goalLine": "-1" },
+            "homeTeamAbbName": "科林蒂安",
+            "leagueAbbName": "巴甲",
+            "matchDate": "2026-07-24",
+            "matchId": 2040594,
+            "matchNumStr": "周四201",
+            "matchStatus": "Selling",
+            "matchTime": "06:30:00"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -226,80 +226,57 @@ backend/src/main/java/com/jingcaicompass/
     security/
     exception/
     infrastructure/
-  provider/
-    sporttery/
-      client/
-      adapter/
-      dto/
-      config/
-    asianodds/
-      client/
-      adapter/
-      dto/
-      config/
   match/
-    controller/
-    service/
-    mapper/
-    entity/
-    dto/
-    vo/
-    enums/
-    job/
+    api/
+      vo/
+    application/
+      provider/
+    domain/
+    infrastructure/
+      persistence/
+      sporttery/
   odds/
-    service/
-    mapper/
-    entity/
-    dto/
-    vo/
-    enums/
-    job/
+    api/
+    application/
+      provider/
+    domain/
+    infrastructure/
+      asianodds/
   prediction/
-    controller/
-    service/
-    mapper/
-    entity/
-    dto/
-    vo/
-    enums/
-    job/
+    api/
+    application/
+    domain/
+    infrastructure/
   settlement/
-    service/
-    mapper/
-    entity/
-    dto/
-    vo/
-    enums/
-    job/
+    application/
+    domain/
+    infrastructure/
   snapshot/
-    service/
-    storage/
-    entity/
-    job/
+    application/
+    domain/
+    infrastructure/
   statistics/
-    controller/
-    service/
-    dto/
-    vo/
+    api/
+    application/
   audit/
-    service/
-    mapper/
-    entity/
+    application/
+    domain/
+    infrastructure/
   admin/
-    controller/
-    dto/
-    vo/
+    api/
+    application/
 ```
 
 约定：
 
 - `system` 只放跨模块基础设施，不承载具体预测业务。
 - Controller 只做协议转换、校验和权限入口，不编写核心规则。
-- Service 使用 `XxxService` 接口和 `XxxServiceImpl` 实现。
+- application 层 Service 使用 `XxxService` 接口和 `DefaultXxxService` 默认实现；存在明确策略含义时使用业务化实现名。
+- 外部 Provider 接口放在消费方的 application 层，供应商 DTO、HTTP 客户端和适配实现放在 infrastructure 层。
 - 简单 CRUD 优先使用 MyBatis-Plus；复杂统计和锁查询才编写自定义 SQL。
 - 请求模型以 `Dto` 结尾，返回模型以 `Vo` 结尾。
 - 枚举名称表达业务含义，例如 `MatchStatus`、`MarketType`、`SettlementStatus`，不绑定具体供应商术语。
-- Provider DTO 只存在于 Provider 模块，不直接作为公开 API 返回值。
+- Provider DTO 只用于 application 与 infrastructure 的边界，不直接作为公开 API 返回值。
 
 ## 8. 数据分层
 

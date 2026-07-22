@@ -4,7 +4,7 @@
 
 - 文档版本：v0.1
 - 最后核查日期：2026-07-22
-- 当前状态：候选源调研完成，等待样本验证
+- 当前状态：中国体彩网比赛池接口已完成首个真实样本验证，等待连续覆盖率与授权验证
 - 目标：为 MVP 确定可持续的体彩官方数据源和足球亚洲让球盘数据源
 
 > 本文记录的是候选方案和验证结论，不等同于已经取得数据授权。供应商套餐、字段和使用条款可能变化，正式接入前必须再次核查。
@@ -19,7 +19,7 @@ MVP 必须采用双数据源，而不是寻找一个来源包办所有数据：
 当前推荐的验证顺序：
 
 1. 使用 **The Odds API** 免费档验证足球让球盘覆盖率。它很可能就是此前记忆中的“每月有免费额度”的数据源。
-2. 使用中国体彩网前台及其网关接口验证官方比赛池和赛果同步，但在确认稳定性和使用许可前，只作为技术验证源。
+2. 已通过中国体彩网竞彩足球页面核对比赛池网关及真实响应；继续验证赛果同步、连续稳定性和使用许可，在此之前只作为技术验证源。
 3. 同时保留 **API-Football（API-Sports）** 和合规商业数据供应商作为亚盘备选。
 
 当前不能直接宣布选型完成。The Odds API 虽然提供 `spreads`，但官方文档提示让球盘目前主要覆盖美国体育和博彩公司，必须用真实的每日竞彩池做覆盖率测试。
@@ -146,9 +146,22 @@ MVP 必须采用双数据源，而不是寻找一个来源包办所有数据：
 
 - 官网：<https://www.sporttery.cn/>
 - 已知网关域名：`https://webapi.sporttery.cn`
-- 候选比赛池接口：`/gateway/jc/football/getMatchCalculatorV1.qry`
+- 已验证比赛池接口：`/gateway/uniform/football/getMatchCalculatorV1.qry?channel=c&poolCode=hhad,had`
 - 候选赛果接口：`/gateway/jc/football/getMatchResultV1.qry`
-- 核查状态：接口形态待在中国大陆部署节点实测
+- 核查状态：2026-07-22 已从竞彩足球计算器页面观测请求，并取得真实 JSON 响应
+
+已验证的比赛池响应路径：
+
+- 日期分组：`value.matchInfoList[]`
+- 分组内比赛：`subMatchList[]`
+- 体彩比赛 ID：`matchId`
+- 体彩编号：`matchNumStr`
+- 联赛、主队、客队：`leagueAbbName`、`homeTeamAbbName`、`awayTeamAbbName`
+- 开赛日期和时间：`matchDate`、`matchTime`
+- 销售状态：`matchStatus`
+- 体彩让球胜平负让球：`hhad.goalLine`
+
+2026-07-22 样本中，接口返回该竞彩日期 10 场比赛，页面与接口的编号、对阵、开赛时间和让球一致。接口同时返回下一竞彩日期的预售比赛，因此应用必须按 `businessDate` 分组过滤，不能按自然开赛日期直接归组。
 
 优点：
 

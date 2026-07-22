@@ -18,6 +18,15 @@
 - Settlement results must be derived from final match data, not edited directly.
 - Audit records should append changes instead of overwriting history.
 
+## Task Tracking
+
+- Use `docs/dev-tasks.md` as the single execution board for development order and status.
+- Before changing product code, set exactly one task to `IN_PROGRESS`, update the current active task, and record the intended scope.
+- During development, check off completed task steps in order.
+- Before finishing an increment, run the task validation commands and record the result.
+- Finish by setting the task to `DONE`, `PARTIAL`, or `BLOCKED`, updating the next task and milestone status, and committing the task-board update together with the code.
+- Do not mark a task `DONE` when only a prototype or partial vertical slice exists.
+
 ## Commit Messages
 
 - Use the format `<type>(<module>): <主题>`.

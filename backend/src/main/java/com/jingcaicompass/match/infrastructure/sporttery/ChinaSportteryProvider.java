@@ -3,9 +3,8 @@ package com.jingcaicompass.match.infrastructure.sporttery;
 import com.jingcaicompass.match.application.provider.SportteryMatchDto;
 import com.jingcaicompass.match.application.provider.SportteryProvider;
 import com.jingcaicompass.match.domain.MatchStatus;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -27,15 +26,9 @@ public class ChinaSportteryProvider implements SportteryProvider {
     private final RestClient restClient;
 
     public ChinaSportteryProvider(
-            RestClient.Builder restClientBuilder,
-            @Value("${app.sporttery.base-url:https://webapi.sporttery.cn}") String baseUrl
+            @Qualifier("chinaSportteryRestClient") RestClient restClient
     ) {
-        this.restClient = restClientBuilder
-                .baseUrl(baseUrl)
-                .defaultHeader(HttpHeaders.ACCEPT, "application/json, text/plain, */*")
-                .defaultHeader(HttpHeaders.REFERER, "https://www.sporttery.cn/jc/jsq/zqspf/")
-                .defaultHeader(HttpHeaders.USER_AGENT, "Mozilla/5.0 JingCai-Compass/0.1")
-                .build();
+        this.restClient = restClient;
     }
 
     @Override

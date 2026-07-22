@@ -1,25 +1,20 @@
 spring:
-  application:
-    name: jingcai-compass-backend
-  autoconfigure:
-    exclude: org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
   datasource:
-    url: ${DB_URL:jdbc:postgresql://110.40.155.140:35432/jingcai_compass}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:2r6ZpEKEATdB8kis}
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
   data:
     redis:
-      host: ${REDIS_HOST:110.40.155.140}
-      port: ${REDIS_PORT:26739}
-      password: ${REDIS_PASSWORD:JrSh6bfDxanXwm3c}
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+      password: ${REDIS_PASSWORD}
   flyway:
-    enabled: true
-    locations: classpath:db/migration
-  jackson:
-    time-zone: UTC
+    enabled: ${FLYWAY_ENABLED:true}
+    clean-disabled: true
 
 server:
   port: ${SERVER_PORT:8080}
+  forward-headers-strategy: framework
 
 management:
   endpoints:
@@ -28,14 +23,13 @@ management:
         include: health,info
   endpoint:
     health:
-      show-details: when_authorized
+      show-details: never
 
 springdoc:
   api-docs:
-    enabled: ${SPRINGDOC_ENABLED:true}
+    enabled: ${SPRINGDOC_ENABLED:false}
   swagger-ui:
-    enabled: ${SPRINGDOC_ENABLED:true}
-    path: /swagger-ui.html
+    enabled: ${SPRINGDOC_ENABLED:false}
 
 app:
   sporttery:

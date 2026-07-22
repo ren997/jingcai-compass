@@ -20,6 +20,8 @@ The backend will own the MVP closed loop:
 - Redis
 - Flyway
 - MyBatis-Plus
+- Actuator
+- SpringDoc OpenAPI
 
 ## Prerequisites
 
@@ -40,6 +42,18 @@ Or run Maven directly:
 mvn -f backend/pom.xml spring-boot:run
 ```
 
+Development defaults can be overridden with environment variables. The main groups are:
+
+- `DB_*`: PostgreSQL connection
+- `REDIS_*`: Redis connection
+- `SPORTTERY_*`: Provider selection, base URL, timeout and retry settings
+- `SYNC_TASKS_ENABLED` and `SPORTTERY_POOL_*`: synchronization task switches and intervals
+- `SPRINGDOC_ENABLED`: OpenAPI/Swagger switch
+
+Copy `application-local.example.yml` to the Git-ignored `application-local.yml` only when local overrides are needed, then run with the `local` profile.
+
+Production must run with the `prod` profile. `application-prod.yml` requires PostgreSQL and Redis credentials from deployment environment variables and disables Swagger by default.
+
 ## Local test
 
 ```bash
@@ -54,8 +68,20 @@ GET http://localhost:8080/api/public/matches?lotteryDate=2026-07-22
 
 The response uses explicit `MatchSummaryVo` models. The default `china` Provider reads the public China Sport Lottery football pool; set `SPORTTERY_PROVIDER=stub` to use clearly labelled synthetic data. PostgreSQL must exist before startup; the application does not create databases.
 
+## Development endpoints
+
+With the default development configuration:
+
+```text
+GET http://localhost:8080/actuator/health
+GET http://localhost:8080/v3/api-docs
+GET http://localhost:8080/swagger-ui.html
+```
+
+Only `health` and `info` Actuator endpoints are exposed. Production health details are hidden and Swagger remains disabled unless explicitly enabled.
+
 ## Suggested next implementation order
 
 Follow `docs/implementation-guide.md` and `docs/dev-tasks.md` from the repository root.
 
-The cloud PostgreSQL and Redis connection has been verified in T001. The next task is T002: complete dependency and configuration layering. Automated tests use isolated Testcontainers from T003 and must not use the shared cloud database.
+The cloud PostgreSQL and Redis connection has been verified in T001. T002 provides typed configuration, production separation, HTTP timeouts, health checks and OpenAPI. The next task is T003: replace the temporary external-infrastructure exclusions with isolated Testcontainers.

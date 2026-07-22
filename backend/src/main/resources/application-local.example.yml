@@ -8,3 +8,20 @@ spring:
       host: <cloud-host>
       port: <port>
       password: <password>
+
+app:
+  sporttery:
+    provider: china
+    base-url: https://webapi.sporttery.cn
+    connect-timeout: 5s
+    read-timeout: 10s
+    retry:
+      max-attempts: 2
+      delay: 500ms
+    quota-warning-threshold: 0
+  tasks:
+    enabled: false
+    sporttery-pool:
+      enabled: false
+      fixed-delay: 15m
+      initial-delay: 30s

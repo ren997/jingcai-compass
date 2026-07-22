@@ -27,7 +27,11 @@ class ChinaSportteryProviderTest {
         server.expect(once(), requestTo(baseUrl + ChinaSportteryProvider.MATCH_CALCULATOR_PATH))
                 .andExpect(header(HttpHeaders.REFERER, "https://www.sporttery.cn/jc/jsq/zqspf/"))
                 .andRespond(withSuccess(readFixture(), MediaType.APPLICATION_JSON));
-        ChinaSportteryProvider provider = new ChinaSportteryProvider(restClientBuilder, baseUrl);
+        RestClient restClient = restClientBuilder
+                .baseUrl(baseUrl)
+                .defaultHeader(HttpHeaders.REFERER, "https://www.sporttery.cn/jc/jsq/zqspf/")
+                .build();
+        ChinaSportteryProvider provider = new ChinaSportteryProvider(restClient);
 
         var matches = provider.findDailyMatches(LocalDate.of(2026, 7, 22));
 

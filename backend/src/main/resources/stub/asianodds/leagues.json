@@ -1,0 +1,12 @@
+[
+  {
+    "leagueId": "demo-league",
+    "leagueName": "演示联赛",
+    "sportKey": "soccer"
+  },
+  {
+    "leagueId": "demo-league-alias",
+    "leagueName": "演示联赛别名源",
+    "sportKey": "soccer"
+  }
+]

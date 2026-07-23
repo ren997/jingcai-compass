@@ -15,6 +15,7 @@ spring:
 app:
   pagination:
     max-page-size: 100
+  # 离线联调可将 sporttery/asian-odds.provider 都设为 stub（classpath:stub/** fixtures）
   sporttery:
     provider: china
     base-url: https://webapi.sporttery.cn

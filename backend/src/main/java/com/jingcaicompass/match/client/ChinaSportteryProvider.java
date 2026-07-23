@@ -2,6 +2,7 @@ package com.jingcaicompass.match.client;
 
 import com.jingcaicompass.match.dto.ChinaSportteryResponseDto;
 import com.jingcaicompass.match.dto.SportteryMatchDto;
+import com.jingcaicompass.match.dto.SportteryMatchResultDto;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.exception.SportteryDataAccessException;
 import com.jingcaicompass.match.service.SportteryProvider;
@@ -58,6 +59,14 @@ public class ChinaSportteryProvider implements SportteryProvider {
                 .flatMap(group -> safeMatches(group).stream())
                 .map(match -> toMatchDto(lotteryDate, match))
                 .toList();
+    }
+
+    /**
+     * 真实赛果接口接入前返回空列表；赛果同步任务（T401）再补齐。
+     */
+    @Override
+    public List<SportteryMatchResultDto> fetchMatchResults(LocalDate startDate, LocalDate endDate) {
+        return List.of();
     }
 
     private ChinaSportteryResponseDto requestMatchPool() {

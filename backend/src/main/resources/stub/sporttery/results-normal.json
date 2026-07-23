@@ -1,0 +1,42 @@
+[
+  {
+    "matchId": "stub-base-001",
+    "lotteryDate": "2026-07-22",
+    "lotteryMatchNo": "周三001",
+    "homeScore": 2,
+    "awayScore": 1,
+    "matchStatus": "FINISHED",
+    "amended": false,
+    "providerUpdatedAt": "2026-07-22T23:30:00+08:00"
+  },
+  {
+    "matchId": "stub-base-002",
+    "lotteryDate": "2026-07-22",
+    "lotteryMatchNo": "周三002",
+    "homeScore": 0,
+    "awayScore": 0,
+    "matchStatus": "FINISHED",
+    "amended": false,
+    "providerUpdatedAt": "2026-07-22T23:45:00+08:00"
+  },
+  {
+    "matchId": "stub-base-004",
+    "lotteryDate": "2026-07-22",
+    "lotteryMatchNo": "周三004",
+    "homeScore": null,
+    "awayScore": null,
+    "matchStatus": "POSTPONED",
+    "amended": false,
+    "providerUpdatedAt": "2026-07-22T20:15:00+08:00"
+  },
+  {
+    "matchId": "stub-base-005",
+    "lotteryDate": "2026-07-22",
+    "lotteryMatchNo": "周三005",
+    "homeScore": null,
+    "awayScore": null,
+    "matchStatus": "CANCELLED",
+    "amended": false,
+    "providerUpdatedAt": "2026-07-22T18:00:00+08:00"
+  }
+]

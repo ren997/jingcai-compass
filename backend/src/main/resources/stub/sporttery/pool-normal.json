@@ -1,0 +1,35 @@
+[
+  {
+    "matchId": "stub-base-001",
+    "lotteryDate": "2026-07-22",
+    "lotteryMatchNo": "周三001",
+    "leagueName": "演示联赛",
+    "homeTeamName": "演示主队 A",
+    "awayTeamName": "演示客队 A",
+    "kickoffTime": "2026-07-22T19:30:00+08:00",
+    "officialHandicap": -1,
+    "matchStatus": "SCHEDULED"
+  },
+  {
+    "matchId": "stub-base-002",
+    "lotteryDate": "2026-07-22",
+    "lotteryMatchNo": "周三002",
+    "leagueName": "演示联赛",
+    "homeTeamName": "演示主队 B",
+    "awayTeamName": "演示客队 B",
+    "kickoffTime": "2026-07-22T21:00:00+08:00",
+    "officialHandicap": 0,
+    "matchStatus": "SCHEDULED"
+  },
+  {
+    "matchId": "stub-base-003",
+    "lotteryDate": "2026-07-22",
+    "lotteryMatchNo": "周三003",
+    "leagueName": "演示联赛",
+    "homeTeamName": "演示主队 C",
+    "awayTeamName": "演示客队 C",
+    "kickoffTime": "2026-07-22T22:45:00+08:00",
+    "officialHandicap": 1,
+    "matchStatus": "SCHEDULED"
+  }
+]

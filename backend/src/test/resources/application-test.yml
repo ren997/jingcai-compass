@@ -1,0 +1,5 @@
+app:
+  sporttery:
+    provider: stub
+  asian-odds:
+    provider: stub

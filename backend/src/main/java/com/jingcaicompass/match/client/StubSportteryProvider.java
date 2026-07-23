@@ -1,23 +1,49 @@
 package com.jingcaicompass.match.client;
 
 import com.jingcaicompass.match.dto.SportteryMatchDto;
-import com.jingcaicompass.match.enums.MatchStatusEnum;
+import com.jingcaicompass.match.dto.SportteryMatchResultDto;
 import com.jingcaicompass.match.service.SportteryProvider;
+import com.jingcaicompass.system.stub.StubFixtureLoader;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalTime;
-import java.time.ZoneId;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Component
 @ConditionalOnProperty(name = "app.sporttery.provider", havingValue = "stub")
 public class StubSportteryProvider implements SportteryProvider {
 
-    private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
+    private static final Pattern SEQUENCE_PATTERN = Pattern.compile("(\\d+)$");
+
+    private final List<SportteryMatchDto> poolTemplates;
+    private final List<SportteryMatchResultDto> resultTemplates;
+
+    public StubSportteryProvider() {
+        List<SportteryMatchDto> pool = new ArrayList<>();
+        pool.addAll(StubFixtureLoader.readList(
+                "stub/sporttery/pool-normal.json", SportteryMatchDto.class));
+        pool.addAll(StubFixtureLoader.readList(
+                "stub/sporttery/pool-postponed-cancelled.json", SportteryMatchDto.class));
+        this.poolTemplates = List.copyOf(pool.stream()
+                .sorted(Comparator.comparing(this::sequenceOf))
+                .toList());
+
+        List<SportteryMatchResultDto> results = new ArrayList<>();
+        results.addAll(StubFixtureLoader.readList(
+                "stub/sporttery/results-normal.json", SportteryMatchResultDto.class));
+        results.addAll(StubFixtureLoader.readList(
+                "stub/sporttery/results-amended.json", SportteryMatchResultDto.class));
+        this.resultTemplates = List.copyOf(results);
+    }
 
     @Override
     public String providerCode() {
@@ -27,35 +53,74 @@ public class StubSportteryProvider implements SportteryProvider {
     @Override
     public List<SportteryMatchDto> findDailyMatches(LocalDate lotteryDate) {
         String weekday = weekdayLabel(lotteryDate.getDayOfWeek());
-        return List.of(
-                createMatch(lotteryDate, weekday, 1, "演示联赛", "演示主队 A", "演示客队 A", LocalTime.of(19, 30), -1),
-                createMatch(lotteryDate, weekday, 2, "演示联赛", "演示主队 B", "演示客队 B", LocalTime.of(21, 0), 0),
-                createMatch(lotteryDate, weekday, 3, "演示联赛", "演示主队 C", "演示客队 C", LocalTime.of(22, 45), 1)
-        );
+        return poolTemplates.stream()
+                .map(template -> remapMatch(template, lotteryDate, weekday))
+                .toList();
     }
 
-    private SportteryMatchDto createMatch(
-            LocalDate lotteryDate,
-            String weekday,
-            int sequence,
-            String leagueName,
-            String homeTeamName,
-            String awayTeamName,
-            LocalTime kickoffTime,
-            int officialHandicap
-    ) {
-        ZoneOffset offset = SHANGHAI.getRules().getOffset(lotteryDate.atTime(kickoffTime));
+    @Override
+    public List<SportteryMatchResultDto> fetchMatchResults(LocalDate startDate, LocalDate endDate) {
+        if (startDate == null || endDate == null || endDate.isBefore(startDate)) {
+            return List.of();
+        }
+        List<SportteryMatchResultDto> results = new ArrayList<>();
+        for (LocalDate lotteryDate = startDate; !lotteryDate.isAfter(endDate); lotteryDate = lotteryDate.plusDays(1)) {
+            String weekday = weekdayLabel(lotteryDate.getDayOfWeek());
+            for (SportteryMatchResultDto template : resultTemplates) {
+                results.add(remapResult(template, lotteryDate, weekday));
+            }
+        }
+        return List.copyOf(results);
+    }
+
+    private SportteryMatchDto remapMatch(SportteryMatchDto template, LocalDate lotteryDate, String weekday) {
+        int sequence = sequenceOf(template);
+        LocalTime kickoffTime = template.kickoffTime().toLocalTime();
+        ZoneOffset offset = template.kickoffTime().getOffset();
         return new SportteryMatchDto(
                 "stub-%s-%03d".formatted(lotteryDate, sequence),
                 lotteryDate,
                 "%s%03d".formatted(weekday, sequence),
-                leagueName,
-                homeTeamName,
-                awayTeamName,
+                template.leagueName(),
+                template.homeTeamName(),
+                template.awayTeamName(),
                 lotteryDate.atTime(kickoffTime).atOffset(offset),
-                officialHandicap,
-                MatchStatusEnum.SCHEDULED
+                template.officialHandicap(),
+                template.matchStatus()
         );
+    }
+
+    private SportteryMatchResultDto remapResult(
+            SportteryMatchResultDto template,
+            LocalDate lotteryDate,
+            String weekday
+    ) {
+        int sequence = sequenceOf(template.matchId());
+        LocalTime updatedTime = template.providerUpdatedAt().toLocalTime();
+        ZoneOffset offset = template.providerUpdatedAt().getOffset();
+        LocalDate updatedDate = template.amended() ? lotteryDate.plusDays(1) : lotteryDate;
+        return new SportteryMatchResultDto(
+                "stub-%s-%03d".formatted(lotteryDate, sequence),
+                lotteryDate,
+                "%s%03d".formatted(weekday, sequence),
+                template.homeScore(),
+                template.awayScore(),
+                template.matchStatus(),
+                template.amended(),
+                OffsetDateTime.of(updatedDate, updatedTime, offset)
+        );
+    }
+
+    private int sequenceOf(SportteryMatchDto template) {
+        return sequenceOf(template.matchId());
+    }
+
+    private int sequenceOf(String matchId) {
+        Matcher matcher = SEQUENCE_PATTERN.matcher(matchId);
+        if (!matcher.find()) {
+            throw new IllegalStateException("Stub matchId 缺少序号：" + matchId);
+        }
+        return Integer.parseInt(matcher.group(1));
     }
 
     private String weekdayLabel(DayOfWeek dayOfWeek) {

@@ -1,0 +1,12 @@
+[
+  {
+    "matchId": "stub-base-001",
+    "lotteryDate": "2026-07-22",
+    "lotteryMatchNo": "周三001",
+    "homeScore": 1,
+    "awayScore": 1,
+    "matchStatus": "FINISHED",
+    "amended": true,
+    "providerUpdatedAt": "2026-07-23T10:00:00+08:00"
+  }
+]

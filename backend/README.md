@@ -30,7 +30,13 @@ The backend will own the MVP closed loop:
 
 ## Local run
 
-The cloud development PostgreSQL and Redis defaults are configured in `application.yml` and can be overridden with environment variables. Run from the repository root:
+Default profile is `local`. Copy the example file and fill in cloud/dev credentials first:
+
+```bash
+cp backend/src/main/resources/application-local.example.yml backend/src/main/resources/application-local.yml
+```
+
+`application-local.yml` is git-ignored and must not be committed. Then run from the repository root:
 
 ```bash
 npm run backend:run
@@ -42,7 +48,7 @@ Or run Maven directly:
 mvn -f backend/pom.xml spring-boot:run
 ```
 
-Development defaults can be overridden with environment variables. The main groups are:
+Credentials can also be supplied by environment variables instead of `application-local.yml`. The main groups are:
 
 - `DB_*`: PostgreSQL connection
 - `REDIS_*`: Redis connection
@@ -51,9 +57,7 @@ Development defaults can be overridden with environment variables. The main grou
 - `MAX_PAGE_SIZE`: maximum records returned by a MyBatis-Plus page query (default `100`)
 - `SPRINGDOC_ENABLED`: OpenAPI/Swagger switch
 
-Copy `application-local.example.yml` to the Git-ignored `application-local.yml` only when local overrides are needed, then run with the `local` profile.
-
-Production must run with the `prod` profile. `application-prod.yml` requires PostgreSQL and Redis credentials from deployment environment variables and disables Swagger by default.
+`application.yml` does not embed database or Redis secrets. Production must run with the `prod` profile; `application-prod.yml` requires credentials from deployment environment variables and disables Swagger by default.
 
 ## Local test
 

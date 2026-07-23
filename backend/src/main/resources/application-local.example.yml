@@ -1,3 +1,6 @@
+# Copy to application-local.yml (git-ignored) and fill in cloud/dev credentials.
+# Default profile is local; Spring Boot loads this overlay automatically.
+
 spring:
   datasource:
     url: jdbc:postgresql://<cloud-host>:<port>/<database>

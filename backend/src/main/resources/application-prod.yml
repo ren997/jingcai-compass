@@ -41,6 +41,16 @@ app:
       max-attempts: ${SPORTTERY_RETRY_MAX_ATTEMPTS:2}
       delay: ${SPORTTERY_RETRY_DELAY:500ms}
     quota-warning-threshold: ${SPORTTERY_QUOTA_WARNING_THRESHOLD:0}
+  asian-odds:
+    provider: ${ASIAN_ODDS_PROVIDER:stub}
+    base-url: ${ASIAN_ODDS_BASE_URL:https://api.the-odds-api.com}
+    api-key: ${ASIAN_ODDS_API_KEY:}
+    connect-timeout: ${ASIAN_ODDS_CONNECT_TIMEOUT:5s}
+    read-timeout: ${ASIAN_ODDS_READ_TIMEOUT:10s}
+    retry:
+      max-attempts: ${ASIAN_ODDS_RETRY_MAX_ATTEMPTS:2}
+      delay: ${ASIAN_ODDS_RETRY_DELAY:500ms}
+    quota-warning-threshold: ${ASIAN_ODDS_QUOTA_WARNING_THRESHOLD:0}
   tasks:
     enabled: ${SYNC_TASKS_ENABLED:false}
     sporttery-pool:

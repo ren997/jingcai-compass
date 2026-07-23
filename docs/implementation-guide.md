@@ -200,6 +200,8 @@ system/exception/ErrorCode.java
 system/exception/BusinessException.java
 system/exception/GlobalExceptionHandler.java
 system/infrastructure/TraceIdFilter.java
+system/provider/ProviderException.java
+system/provider/ProviderErrorCategory.java
 system/config/MybatisPlusConfig.java
 system/config/OpenApiConfig.java
 system/security/SecurityConfig.java
@@ -381,7 +383,7 @@ M1 不等待真实供应商选型，先定义稳定内部接口并用固定样�
 ```text
 MatchController
   -> MatchQueryService
-    -> DefaultMatchQueryService
+    -> MatchQueryServiceImpl
       -> SportteryProvider
         -> ChinaSportteryProvider
         -> StubSportteryProvider
@@ -394,18 +396,16 @@ MatchController
 新增：
 
 ```text
-match/application/provider/SportteryProvider.java
-match/application/provider/SportteryMatchDto.java
-odds/application/provider/AsianOddsProvider.java
-system/provider/ProviderRequestContext.java
-system/provider/ProviderCallResult.java
+match/service/SportteryProvider.java
+match/dto/SportteryMatchDto.java
+odds/service/AsianOddsProvider.java
+system/provider/ProviderException.java
 ```
 
 建议方法：
 
 ```text
-SportteryProvider.fetchMatchPool(LocalDate lotteryDate)
-SportteryProvider.fetchMatchResults(LocalDate startDate, LocalDate endDate)
+SportteryProvider.findDailyMatches(LocalDate lotteryDate)
 AsianOddsProvider.fetchLeagues()
 AsianOddsProvider.fetchPreMatchOdds(AsianOddsQueryDto query)
 ```
@@ -417,8 +417,8 @@ AsianOddsProvider.fetchPreMatchOdds(AsianOddsQueryDto query)
 新增 `@ConfigurationProperties`：
 
 ```text
-match/infrastructure/sporttery/SportteryProviderProperties.java
-odds/infrastructure/asianodds/AsianOddsProviderProperties.java
+match/client/SportteryProviderProperties.java
+odds/client/AsianOddsProviderProperties.java
 ```
 
 配置包含：
@@ -533,7 +533,7 @@ match/service/MatchMappingReviewService.java
 
 ### 9.1 首批枚举
 
-- `MatchStatus`
+- `MatchStatusEnum`
 - `PredictionStatus`
 - `ConfidenceLevel`
 - `MarketType`

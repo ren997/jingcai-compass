@@ -215,7 +215,7 @@ Spring Boot 模块化单体
 
 ## 7. 后端模块与包结构
 
-推荐采用“顶层按业务域、模块内按技术职责”的结构：
+推荐采用“顶层按业务域、模块内按技术角色”的结构（对齐 StableFlow）：
 
 ```text
 backend/src/main/java/com/jingcaicompass/
@@ -223,60 +223,70 @@ backend/src/main/java/com/jingcaicompass/
   system/
     api/
     config/
-    security/
     exception/
+    provider/
     infrastructure/
   match/
-    api/
-      vo/
-    application/
-      provider/
-    domain/
-    infrastructure/
-      persistence/
-      sporttery/
+    controller/
+    dto/
+    vo/
+    enums/
+    service/
+    client/
+    exception/
+    entity/
+    mapper/
+    job/
   odds/
-    api/
-    application/
-      provider/
-    domain/
-    infrastructure/
-      asianodds/
+    controller/
+    dto/
+    vo/
+    enums/
+    service/
+    client/
+    entity/
+    mapper/
+    job/
   prediction/
-    api/
-    application/
-    domain/
-    infrastructure/
+    controller/
+    dto/
+    vo/
+    enums/
+    service/
+    entity/
+    mapper/
   settlement/
-    application/
-    domain/
-    infrastructure/
+    service/
+    enums/
+    entity/
+    mapper/
   snapshot/
-    application/
-    domain/
-    infrastructure/
+    service/
+    entity/
+    mapper/
   statistics/
-    api/
-    application/
+    controller/
+    service/
+    vo/
   audit/
-    application/
-    domain/
-    infrastructure/
+    service/
+    entity/
   admin/
-    api/
-    application/
+    controller/
+    service/
 ```
 
 约定：
 
 - `system` 只放跨模块基础设施，不承载具体预测业务。
 - Controller 只做协议转换、校验和权限入口，不编写核心规则。
-- application 层 Service 使用 `XxxService` 接口和 `DefaultXxxService` 默认实现；存在明确策略含义时使用业务化实现名。
-- 外部 Provider 接口放在消费方的 application 层，供应商 DTO、HTTP 客户端和适配实现放在 infrastructure 层。
+- `service` 层使用 `XxxService` 接口和 `XxxServiceImpl` 实现；Provider 端口接口也放在消费方 `service` 包。
+- 外部适配器、HTTP 客户端和 Provider Properties 放在 `client`。
 - 简单 CRUD 优先使用 MyBatis-Plus；复杂统计和锁查询才编写自定义 SQL。
 - 请求模型以 `Dto` 结尾，返回模型以 `Vo` 结尾。
-- 枚举名称表达业务含义，例如 `MatchStatus`、`MarketType`、`SettlementStatus`，不绑定具体供应商术语。
-- Provider DTO 只用于 application 与 infrastructure 的边界，不直接作为公开 API 返回值。
+- 枚举使用 `*Enum` 后缀并表达业务含义，例如 `MatchStatusEnum`、`MarketTypeEnum`、`SettlementStatusEnum`，不绑定具体供应商术语。
+- Provider Dto 只用于 service 与 client 边界，不直接作为公开 API 返回值。
+- 禁止在业务模块新增 `api` / `application` / `domain` / `infrastructure` 分层包名。
 
 ## 8. 数据分层
 
@@ -337,7 +347,7 @@ P0 第一批表建议：
 
 ## 10. 状态模型
 
-### 10.1 MatchStatus
+### 10.1 MatchStatusEnum
 
 - `SCHEDULED`
 - `IN_PROGRESS`
@@ -366,7 +376,7 @@ P0 第一批表建议：
 - `MISS`
 - `VOID`
 
-延期是 `MatchStatus`，在恢复并取得最终赛果前保持 `PENDING`。MVP 中亚洲盘是模型输入，不是自动结算市场，因此不使用走水、半赢或半输结算状态。
+延期是 `MatchStatusEnum`，在恢复并取得最终赛果前保持 `PENDING`。MVP 中亚洲盘是模型输入，不是自动结算市场，因此不使用走水、半赢或半输结算状态。
 
 ### 10.4 MappingStatus
 

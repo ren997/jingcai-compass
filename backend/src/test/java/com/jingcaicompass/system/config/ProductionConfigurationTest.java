@@ -32,6 +32,7 @@ class ProductionConfigurationTest {
         assertThatThrownBy(() -> resolver.getProperty("spring.data.redis.host"))
                 .hasMessageContaining("REDIS_HOST");
         assertThat(application.getProperty("spring.profiles.active")).isEqualTo("local");
+        assertThat(application.getProperty("app.asian-odds.api-key")).isEqualTo("${ASIAN_ODDS_API_KEY:}");
     }
 
     @Test

@@ -24,6 +24,16 @@ app:
       max-attempts: 2
       delay: 500ms
     quota-warning-threshold: 0
+  asian-odds:
+    provider: stub
+    base-url: https://api.the-odds-api.com
+    api-key: <api-key>
+    connect-timeout: 5s
+    read-timeout: 10s
+    retry:
+      max-attempts: 2
+      delay: 500ms
+    quota-warning-threshold: 0
   tasks:
     enabled: false
     sporttery-pool:

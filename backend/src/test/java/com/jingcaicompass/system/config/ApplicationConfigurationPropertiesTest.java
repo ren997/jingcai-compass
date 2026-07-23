@@ -1,9 +1,11 @@
 package com.jingcaicompass.system.config;
 
-import com.jingcaicompass.match.infrastructure.sporttery.SportteryProviderProperties;
-import com.jingcaicompass.match.infrastructure.sporttery.SportteryProviderType;
-import com.jingcaicompass.system.config.properties.SyncTaskProperties;
+import com.jingcaicompass.match.client.SportteryProviderProperties;
+import com.jingcaicompass.match.client.SportteryProviderType;
+import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
+import com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
+import com.jingcaicompass.system.config.properties.SyncTaskProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.validation.ValidationAutoConfiguration;
@@ -29,6 +31,14 @@ class ApplicationConfigurationPropertiesTest {
                     "app.sporttery.retry.max-attempts=2",
                     "app.sporttery.retry.delay=500ms",
                     "app.sporttery.quota-warning-threshold=0",
+                    "app.asian-odds.provider=stub",
+                    "app.asian-odds.base-url=https://api.the-odds-api.com",
+                    "app.asian-odds.api-key=secret-key",
+                    "app.asian-odds.connect-timeout=5s",
+                    "app.asian-odds.read-timeout=10s",
+                    "app.asian-odds.retry.max-attempts=2",
+                    "app.asian-odds.retry.delay=500ms",
+                    "app.asian-odds.quota-warning-threshold=0",
                     "app.pagination.max-page-size=100",
                     "app.tasks.enabled=false",
                     "app.tasks.sporttery-pool.enabled=false",
@@ -47,6 +57,13 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(sporttery.readTimeout()).isEqualTo(Duration.ofSeconds(10));
             assertThat(sporttery.retry().maxAttempts()).isEqualTo(2);
             assertThat(sporttery.retry().delay()).isEqualTo(Duration.ofMillis(500));
+
+            AsianOddsProviderProperties asianOdds = context.getBean(AsianOddsProviderProperties.class);
+            assertThat(asianOdds.provider()).isEqualTo(AsianOddsProviderTypeEnum.STUB);
+            assertThat(asianOdds.baseUrl()).isEqualTo(URI.create("https://api.the-odds-api.com"));
+            assertThat(asianOdds.apiKey()).isEqualTo("secret-key");
+            assertThat(asianOdds.toString()).doesNotContain("secret-key");
+            assertThat(asianOdds.toString()).contains("apiKey=***");
 
             SyncTaskProperties tasks = context.getBean(SyncTaskProperties.class);
             assertThat(tasks.enabled()).isFalse();
@@ -67,6 +84,18 @@ class ApplicationConfigurationPropertiesTest {
                     assertThat(context.getStartupFailure())
                             .rootCause()
                             .hasMessageContaining("app.sporttery.connect-timeout");
+                });
+    }
+
+    @Test
+    void rejectsAsianOddsConnectTimeoutBelowOneSecond() {
+        contextRunner
+                .withPropertyValues("app.asian-odds.connect-timeout=0s")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.asian-odds.connect-timeout");
                 });
     }
 
@@ -97,6 +126,7 @@ class ApplicationConfigurationPropertiesTest {
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties({
             SportteryProviderProperties.class,
+            AsianOddsProviderProperties.class,
             SyncTaskProperties.class,
             PaginationProperties.class
     })

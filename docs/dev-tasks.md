@@ -3,11 +3,11 @@
 ## 0. 文档状态
 
 - 文档版本：v0.2
-- 最后更新：2026-07-22
+- 最后更新：2026-07-23
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
 - 当前活动任务：无
-- 下一任务：`T101 Provider 契约与配置`
-- 最近完成增量：`T005 前端依赖与测试基线`
+- 下一任务：`T102 Provider 与原始数据 migration`
+- 最近完成增量：`T101 Provider 契约与配置`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -116,7 +116,7 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 | 里程碑 | 状态 | 说明 |
 | --- | --- | --- |
 | M0 工程基线 | `DONE` | T000～T005 已完成；T003 按项目决定跳过并记录替代验证约束 |
-| M1 Provider 基础 | `PARTIAL` | 体彩查询契约、真实适配器和最小 Stub 已完成，下一步恢复 T101 亚盘契约 |
+| M1 Provider 基础 | `PARTIAL` | T101 契约/配置/错误分类已完成；下一步 T102 migration，再恢复 T103 Stub |
 | M2 标准化与映射 | `TODO` | 依赖基础表和 Provider 契约 |
 | M3 预测发布闭环 | `TODO` | 可使用 Stub 比赛数据开发 |
 | M4 赛果与结算 | `TODO` | 依赖锁定预测和最终赛果 |
@@ -342,7 +342,7 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 
 ### T101 Provider 契约与配置
 
-- 状态：`PARTIAL`
+- 状态：`DONE`
 - 优先级：P0
 - 依赖：T004
 - 交付物：
@@ -350,17 +350,19 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
   - `AsianOddsProvider`
   - Provider Properties
   - 内部请求/响应 Dto
+  - stableflow 风格角色分包（`dto`/`vo`/`service`/`client`/`enums`）
 - 执行步骤：
   - [x] 定义 `SportteryProvider` 和 `SportteryMatchDto`，与公开 `Vo` 隔离。
   - [x] 实现 `ChinaSportteryProvider`，只映射已验证的官方字段。
   - [x] 使用配置条件在真实体彩 Provider 与 Stub 之间切换。
   - [x] 用固定官方响应 fixture 编写适配器契约测试。
-  - [ ] 定义 `AsianOddsProvider`、查询 Dto、比赛和盘口响应 Dto。
+  - [x] 将 `match` 模块对齐 stableflow 角色分包，并同步设计文档。
+  - [x] 定义 `AsianOddsProvider`、查询 Dto、比赛和盘口响应 Dto。
   - [x] 新增 `SportteryProviderProperties` 并应用于真实体彩客户端。
-  - [ ] 新增 `AsianOddsProviderProperties`。
-  - [ ] 配置连接超时、读取超时、重试、额度阈值和可选 API Key。
-  - [ ] 定义统一 Provider 错误分类，区分参数错误、限额、上游故障和解析失败。
-  - [ ] 补齐空比赛池、异常响应、未知状态和让球缺失测试。
+  - [x] 新增 `AsianOddsProviderProperties`。
+  - [x] 配置连接超时、读取超时、重试、额度阈值和可选 API Key。
+  - [x] 定义统一 Provider 错误分类，区分参数错误、限额、上游故障和解析失败。
+  - [x] 补齐空比赛池、异常响应、未知状态和让球缺失测试。
 - 验证命令：
 
   ```bash
@@ -368,9 +370,10 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
   npm run backend:test
   ```
 
-- 恢复入口：T004 已完成；从 `AsianOddsProvider` 契约和配置属性继续。
+- 恢复入口：已完成；下一任务进入 T102。
 - 执行记录：
   - 2026-07-22：为核对真实比赛先完成体彩查询契约与适配器；正式 Provider 基础任务等待 T004 后恢复。
+  - 2026-07-23：恢复执行；范围含 match 角色分包、`MatchStatusEnum`、亚盘契约/配置、统一 Provider 错误分类与边界测试。
 - 完成标准：
   - Provider 返回明确 Dto，不向业务层暴露原始 JSON。
   - 连接、读取、重试和额度阈值可配置。
@@ -378,6 +381,7 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 
 - 验证记录：
   - 2026-07-22：体彩契约、真实/Stub 适配器及 3 个相关测试通过，提交 `67352d3`。
+  - 2026-07-23：后端 27 个测试通过；完成角色分包、亚盘契约、`app.asian-odds` 配置脱敏与 Provider 错误分类。
 
 ### T102 Provider 与原始数据 migration
 
@@ -1414,22 +1418,21 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 
 ## 14. 推荐的下一步
 
-当前没有 `IN_PROGRESS` 任务。下一次开发按以下步骤恢复 `T101 Provider 契约与配置`：
+当前没有 `IN_PROGRESS` 任务。下一次开发按以下步骤执行 `T102 Provider 与原始数据 migration`：
 
-1. 将文档顶部“当前活动任务”改为 T101，并把 T101 从 `PARTIAL` 改为 `IN_PROGRESS`。
-2. 定义 `AsianOddsProvider`、查询 Dto、比赛 Dto 和盘口 Dto。
-3. 新增 `AsianOddsProviderProperties`，API Key 只允许由环境变量提供。
-4. 配置亚盘 Provider 的连接/读取超时、重试和额度阈值。
-5. 定义参数错误、限额、上游故障和解析失败等统一 Provider 错误分类。
-6. 补齐体彩边界测试和亚盘契约测试，运行 T101 验证命令并回写状态。
+1. 将文档顶部“当前活动任务”改为 T102，并把 T102 从 `TODO` 改为 `IN_PROGRESS`。
+2. 编写 `V1__init_provider_and_raw_data.sql` 及 Provider/原始响应/同步运行表。
+3. 定义相关业务枚举、Entity、Mapper。
+4. 补充 JSONB、SHA-256 与幂等约束测试；若仍跳过 Testcontainers，在任务中记录替代验证方式。
+5. 运行 T102 验证命令并回写状态。
 
 随后严格按以下顺序补齐底座：
 
 ```text
-T101 -> T102 -> 恢复 T103 -> T104
+T102 -> 恢复 T103 -> T104
 ```
 
-T101 完成前不绑定具体亚盘供应商实现；先稳定业务无关的契约、配置和错误分类，再进入 migration 与原始数据入库。
+T101 已完成契约与配置；T103 再实现 `StubAsianOddsProvider`，真实 The Odds API 适配留待后续覆盖率验证任务。
 
 ## 15. 变更记录
 
@@ -1444,3 +1447,4 @@ T101 完成前不绑定具体亚盘供应商实现；先稳定业务无关的契
 | 2026-07-22 | T003 | `TODO -> SKIPPED` | 项目负责人决定不安装本地 Docker；保留测试禁连共享云数据库约束，下一任务 T004 |
 | 2026-07-22 | T004 | `TODO -> DONE` | 完成统一响应、异常、traceId、分页、审计、安全和 OpenAPI；后端 19 个测试、前端构建及端点启动验证通过 |
 | 2026-07-22 | T005 | `PARTIAL -> DONE` | 完成 Ant Design、TanStack Query、Vitest/Testing Library、错误边界和 lockfile 验证；前端 3 个测试、构建及后端回归通过 |
+| 2026-07-23 | T101 | `PARTIAL -> DONE` | 对齐 stableflow 角色分包与文档；完成亚盘契约/配置、Provider 错误分类与边界测试；后端 27 个测试通过 |

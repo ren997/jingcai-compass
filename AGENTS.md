@@ -4,7 +4,16 @@
 
 - Request and input parameter objects use the `Dto` suffix.
 - Response and outward-facing view objects use the `Vo` suffix.
-- Enum names should reflect sportsbook-independent business meaning, such as `MatchStatus`, `MarketType`, and `SettlementStatus`.
+- Business enums use the `*Enum` suffix and sportsbook-independent names, such as `MatchStatusEnum`, `MarketTypeEnum`, and `SettlementStatusEnum`.
+
+## Package Layout
+
+- Organize by business module first (`match`, `odds`, `system`, ...), then by technical role inside each module:
+  `controller`, `dto`, `vo`, `entity`, `enums`, `mapper`, `service`, `client`, `job`, `exception`.
+- Controllers depend on `XxxService` interfaces; implementations are named `XxxServiceImpl` and live in the same `service` package.
+- External provider adapters, HTTP clients and provider properties live in `client`.
+- Do not introduce new hexagonal layer packages such as `api`, `application`, `domain`, or `infrastructure` for business modules.
+- `system` holds cross-cutting concerns (`api` envelopes, `config`, `exception`, shared `provider` error types). Filter/audit helpers may remain under `system.infrastructure` until relocated.
 
 ## API Modeling
 

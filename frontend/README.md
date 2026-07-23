@@ -45,9 +45,21 @@ Or from repository root:
 npm run frontend:build
 ```
 
+## Test
+
+Run the Vitest and Testing Library suite once:
+
+```bash
+npm run test
+```
+
+Use `npm run test:watch` while developing. From the repository root, run `npm run frontend:test`.
+
 ## Current structure
 
 - `src/app/`: application entry view
+- `src/api/`: typed backend API clients
+- `src/test/`: shared test setup
 - `src/styles/`: global styles
 - `src/main.tsx`: bootstrap and router mount
 

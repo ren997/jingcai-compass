@@ -6,8 +6,8 @@
 - 最后更新：2026-07-22
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
 - 当前活动任务：无
-- 下一任务：`T005 前端依赖与测试基线`
-- 最近完成增量：`T004 公共后端基础设施`
+- 下一任务：`T101 Provider 契约与配置`
+- 最近完成增量：`T005 前端依赖与测试基线`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -115,8 +115,8 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 
 | 里程碑 | 状态 | 说明 |
 | --- | --- | --- |
-| M0 工程基线 | `PARTIAL` | T004 公共后端基础设施已完成；T003 跳过，下一步完成 T005 |
-| M1 Provider 基础 | `PARTIAL` | 体彩查询契约、真实适配器和最小 Stub 已完成，等待 M0 底座 |
+| M0 工程基线 | `DONE` | T000～T005 已完成；T003 按项目决定跳过并记录替代验证约束 |
+| M1 Provider 基础 | `PARTIAL` | 体彩查询契约、真实适配器和最小 Stub 已完成，下一步恢复 T101 亚盘契约 |
 | M2 标准化与映射 | `TODO` | 依赖基础表和 Provider 契约 |
 | M3 预测发布闭环 | `TODO` | 可使用 Stub 比赛数据开发 |
 | M4 赛果与结算 | `TODO` | 依赖锁定预测和最终赛果 |
@@ -298,7 +298,7 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 
 ### T005 前端依赖与测试基线
 
-- 状态：`PARTIAL`
+- 状态：`DONE`
 - 优先级：P1
 - 依赖：T000
 - 交付物：
@@ -311,11 +311,11 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
   - [x] 建立 React、Vite、TypeScript 和独立 `package-lock.json`。
   - [x] 配置开发服务器 `/api` 反向代理并通过生产构建。
   - [x] 安装 React Router 依赖。
-  - [ ] 安装 Ant Design 和 TanStack Query。
-  - [ ] 安装 Vitest、Testing Library、jsdom 和用户交互测试依赖。
-  - [ ] 增加 `test`/`test:watch` 脚本和测试初始化文件。
-  - [ ] 编写 App 冒烟测试，覆盖页面挂载和基础错误边界。
-  - [ ] 使用干净依赖安装验证 lockfile 可重复性。
+  - [x] 安装 Ant Design 和 TanStack Query。
+  - [x] 安装 Vitest、Testing Library、jsdom 和用户交互测试依赖。
+  - [x] 增加 `test`/`test:watch` 脚本和测试初始化文件。
+  - [x] 编写 App 冒烟测试，覆盖页面挂载和基础错误边界。
+  - [x] 使用干净依赖安装验证 lockfile 可重复性。
 - 验证命令：
 
   ```bash
@@ -325,15 +325,18 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
   npm run test
   ```
 
-- 恢复入口：T004 完成后安装前端依赖并先补测试基线，不继续堆页面业务。
+- 恢复入口：已在 T004 完成后恢复并补齐前端测试基线。
 - 执行记录：
   - 2026-07-22：完成 React/Vite/TypeScript、Router 依赖、API 代理和比赛列表构建；测试与状态管理基线未完成。
+  - 2026-07-22：恢复执行；范围为 Ant Design、TanStack Query、Vitest/Testing Library、测试脚本、错误边界与 lockfile 验证。
+  - 2026-07-22：完成 QueryClient/ConfigProvider 接入，将比赛请求迁移到 TanStack Query，并增加应用错误边界。
 - 完成标准：
   - `npm run frontend:build` 通过。
   - 前端测试命令可执行并至少有一个 App 冒烟测试。
   - 干净克隆使用 `npm ci` 能还原相同依赖。
 - 验证记录：
   - 2026-07-22：现有 React/Vite 比赛列表可通过 `npm run build`，测试框架尚未接入。
+  - 2026-07-22：`npm ci` 成功还原 225 个包且审计 0 漏洞；Vitest 3 个测试、前端生产构建和后端 19 个回归测试通过。
 
 ## 6. M1 Provider 基础与数据源验证
 
@@ -353,7 +356,8 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
   - [x] 使用配置条件在真实体彩 Provider 与 Stub 之间切换。
   - [x] 用固定官方响应 fixture 编写适配器契约测试。
   - [ ] 定义 `AsianOddsProvider`、查询 Dto、比赛和盘口响应 Dto。
-  - [ ] 新增 `SportteryProviderProperties` 与 `AsianOddsProviderProperties`。
+  - [x] 新增 `SportteryProviderProperties` 并应用于真实体彩客户端。
+  - [ ] 新增 `AsianOddsProviderProperties`。
   - [ ] 配置连接超时、读取超时、重试、额度阈值和可选 API Key。
   - [ ] 定义统一 Provider 错误分类，区分参数错误、限额、上游故障和解析失败。
   - [ ] 补齐空比赛池、异常响应、未知状态和让球缺失测试。
@@ -364,7 +368,7 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
   npm run backend:test
   ```
 
-- 恢复入口：等待 T004 `DONE` 后，先完成配置属性和超时，再定义亚盘契约。
+- 恢复入口：T004 已完成；从 `AsianOddsProvider` 契约和配置属性继续。
 - 执行记录：
   - 2026-07-22：为核对真实比赛先完成体彩查询契约与适配器；正式 Provider 基础任务等待 T004 后恢复。
 - 完成标准：
@@ -1410,22 +1414,22 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 
 ## 14. 推荐的下一步
 
-当前没有 `IN_PROGRESS` 任务。下一次开发按以下步骤恢复 `T005 前端依赖与测试基线`：
+当前没有 `IN_PROGRESS` 任务。下一次开发按以下步骤恢复 `T101 Provider 契约与配置`：
 
-1. 将文档顶部“当前活动任务”改为 T005，并把 T005 从 `PARTIAL` 改为 `IN_PROGRESS`。
-2. 安装 Ant Design、TanStack Query、Vitest、Testing Library 和 jsdom。
-3. 增加 `test`/`test:watch` 脚本与测试初始化文件。
-4. 编写 App 冒烟测试和基础错误边界测试。
-5. 使用 `npm ci` 验证前端 lockfile 可重复安装。
-6. 运行 T005 验证命令及通用检查并回写状态。
+1. 将文档顶部“当前活动任务”改为 T101，并把 T101 从 `PARTIAL` 改为 `IN_PROGRESS`。
+2. 定义 `AsianOddsProvider`、查询 Dto、比赛 Dto 和盘口 Dto。
+3. 新增 `AsianOddsProviderProperties`，API Key 只允许由环境变量提供。
+4. 配置亚盘 Provider 的连接/读取超时、重试和额度阈值。
+5. 定义参数错误、限额、上游故障和解析失败等统一 Provider 错误分类。
+6. 补齐体彩边界测试和亚盘契约测试，运行 T101 验证命令并回写状态。
 
 随后严格按以下顺序补齐底座：
 
 ```text
-T005 -> 恢复 T101
+T101 -> T102 -> 恢复 T103 -> T104
 ```
 
-在 T005 `DONE` 前，不继续扩展当前实时比赛列表的业务功能；已经存在的 Provider 和页面只作为经过验证的纵向原型保留。
+T101 完成前不绑定具体亚盘供应商实现；先稳定业务无关的契约、配置和错误分类，再进入 migration 与原始数据入库。
 
 ## 15. 变更记录
 
@@ -1439,3 +1443,4 @@ T005 -> 恢复 T101
 | 2026-07-22 | T002 | `PARTIAL -> DONE` | 完成生产配置、类型安全配置、HTTP 超时、Actuator/OpenAPI 和 10 个后端测试；当时下一任务为 T003（后决定跳过） |
 | 2026-07-22 | T003 | `TODO -> SKIPPED` | 项目负责人决定不安装本地 Docker；保留测试禁连共享云数据库约束，下一任务 T004 |
 | 2026-07-22 | T004 | `TODO -> DONE` | 完成统一响应、异常、traceId、分页、审计、安全和 OpenAPI；后端 19 个测试、前端构建及端点启动验证通过 |
+| 2026-07-22 | T005 | `PARTIAL -> DONE` | 完成 Ant Design、TanStack Query、Vitest/Testing Library、错误边界和 lockfile 验证；前端 3 个测试、构建及后端回归通过 |

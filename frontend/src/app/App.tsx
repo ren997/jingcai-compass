@@ -1,31 +1,6 @@
-import { useEffect, useState } from 'react';
-
-type MatchStatus = 'SCHEDULED' | 'LOCKED' | 'FINISHED' | 'POSTPONED' | 'CANCELLED';
-
-type MatchSummary = {
-  matchId: string;
-  lotteryDate: string;
-  lotteryMatchNo: string;
-  leagueName: string;
-  homeTeamName: string;
-  awayTeamName: string;
-  kickoffTime: string;
-  officialHandicap: number | null;
-  matchStatus: MatchStatus;
-  dataSource: string;
-};
-
-type ApiResponse<T> = {
-  code: string;
-  message: string;
-  data: T;
-  traceId: string;
-};
-
-type MatchLoadState =
-  | { type: 'loading' }
-  | { type: 'ready'; matches: MatchSummary[] }
-  | { type: 'error'; message: string };
+import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
+import { fetchDailyMatches, type MatchStatus, type MatchSummaryVo } from '../api/matches';
 
 const statusLabels: Record<MatchStatus, string> = {
   SCHEDULED: '未开赛',
@@ -63,7 +38,7 @@ function formatHandicap(value: number | null) {
   return `主队 ${value > 0 ? '+' : ''}${value}`;
 }
 
-function formatDataSources(matches: MatchSummary[]) {
+function formatDataSources(matches: MatchSummaryVo[]) {
   const sources = [...new Set(matches.map((match) => match.dataSource))];
   if (sources.length === 0) {
     return '暂无比赛';
@@ -83,31 +58,11 @@ function formatDataSources(matches: MatchSummary[]) {
 
 export default function App() {
   const [lotteryDate, setLotteryDate] = useState(todayInShanghai);
-  const [loadState, setLoadState] = useState<MatchLoadState>({ type: 'loading' });
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoadState({ type: 'loading' });
-    fetch(`/api/public/matches?lotteryDate=${lotteryDate}`, { signal: controller.signal })
-      .then(async (response) => {
-        const body = (await response.json()) as ApiResponse<MatchSummary[]>;
-        if (!response.ok || body.code !== 'SUCCESS') {
-          throw new Error(`${body.message}（追踪号：${body.traceId}）`);
-        }
-        return body.data;
-      })
-      .then((matches) => setLoadState({ type: 'ready', matches }))
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return;
-        }
-        setLoadState({
-          type: 'error',
-          message: error instanceof Error ? error.message : '未知错误',
-        });
-      });
-    return () => controller.abort();
-  }, [lotteryDate]);
+  const matchesQuery = useQuery({
+    queryKey: ['daily-matches', lotteryDate],
+    queryFn: ({ signal }) => fetchDailyMatches(lotteryDate, signal),
+  });
+  const matches = matchesQuery.data ?? [];
 
   return (
     <main className="page">
@@ -127,35 +82,37 @@ export default function App() {
         </label>
       </section>
 
-      {loadState.type === 'loading' && <section className="state-card">正在加载比赛池……</section>}
-      {loadState.type === 'error' && (
-        <section className="state-card error">后端连接失败：{loadState.message}</section>
+      {matchesQuery.isPending && <section className="state-card">正在加载比赛池……</section>}
+      {matchesQuery.isError && (
+        <section className="state-card error">
+          后端连接失败：{matchesQuery.error.message}
+        </section>
       )}
-      {loadState.type === 'ready' && (
+      {matchesQuery.isSuccess && (
         <>
           <section className="summary-strip">
             <div>
               <span>比赛数量</span>
-              <strong>{loadState.matches.length}</strong>
+              <strong>{matches.length}</strong>
             </div>
             <div>
               <span>当前来源</span>
-              <strong>{formatDataSources(loadState.matches)}</strong>
+              <strong>{formatDataSources(matches)}</strong>
             </div>
             <p>
-              {loadState.matches.length === 0
+              {matches.length === 0
                 ? '当前日期没有可展示的比赛。'
-                : loadState.matches.some((match) => match.dataSource === 'STUB')
+                : matches.some((match) => match.dataSource === 'STUB')
                 ? '演示数据不代表真实赛程或推荐结果。'
                 : '比赛池来自中国体彩网公开前台，暂不代表已取得生产数据授权。'}
             </p>
           </section>
 
-          {loadState.matches.length === 0 ? (
+          {matches.length === 0 ? (
             <section className="state-card">所选竞彩日期暂无比赛。</section>
           ) : (
             <section className="match-list" aria-label="竞彩比赛列表">
-              {loadState.matches.map((match) => (
+              {matches.map((match) => (
                 <article className="match-card" key={match.matchId}>
                   <header>
                     <span className="match-number">{match.lotteryMatchNo}</span>

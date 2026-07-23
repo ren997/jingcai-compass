@@ -1,7 +1,6 @@
 package com.jingcaicompass.odds.dto;
 
 import java.time.OffsetDateTime;
-import java.util.List;
 
 /**
  * 亚盘赛前赔率查询条件。

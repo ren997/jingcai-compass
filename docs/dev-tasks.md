@@ -6,8 +6,8 @@
 - 最后更新：2026-07-23
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
 - 当前活动任务：无
-- 下一任务：`T102 Provider 与原始数据 migration`
-- 最近完成增量：`T101 Provider 契约与配置`
+- 下一任务：`T103 Stub 双数据源`
+- 最近完成增量：`T102 Provider 与原始数据 migration`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -116,7 +116,7 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 | 里程碑 | 状态 | 说明 |
 | --- | --- | --- |
 | M0 工程基线 | `DONE` | T000～T005 已完成；T003 按项目决定跳过并记录替代验证约束 |
-| M1 Provider 基础 | `PARTIAL` | T101 契约/配置/错误分类已完成；下一步 T102 migration，再恢复 T103 Stub |
+| M1 Provider 基础 | `PARTIAL` | T101/T102 已完成；下一步恢复 T103 Stub 双数据源 |
 | M2 标准化与映射 | `TODO` | 依赖基础表和 Provider 契约 |
 | M3 预测发布闭环 | `TODO` | 可使用 Stub 比赛数据开发 |
 | M4 赛果与结算 | `TODO` | 依赖锁定预测和最终赛果 |
@@ -385,31 +385,37 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 
 ### T102 Provider 与原始数据 migration
 
-- 状态：`TODO`
+- 状态：`DONE`
 - 优先级：P0
-- 依赖：T003
+- 依赖：T003（`SKIPPED`；按替代约束验证 migration）
 - 交付物：
   - `V1__init_provider_and_raw_data.sql`
   - Provider、原始响应和同步运行 Entity/Mapper
 - 执行步骤：
-  - [ ] 按 `technical-design.md` 字段定义编写 `V1__init_provider_and_raw_data.sql`。
-  - [ ] 创建 Provider 配置、`raw_data_payloads`、`data_sync_runs` 表和约束。
-  - [ ] 为状态、数据类型和解析结果定义业务枚举。
-  - [ ] 创建 Entity、Mapper 与最小 Repository/Service 查询。
-  - [ ] 增加 JSONB、SHA-256、请求键和幂等唯一约束测试。
-  - [ ] 使用 Testcontainers 从空库执行 migration，并验证重复启动不重复执行。
+  - [x] 按 `technical-design.md` 字段定义编写 `V1__init_provider_and_raw_data.sql`。
+  - [x] 创建 Provider 配置、`raw_data_payloads`、`data_sync_runs` 表和约束。
+  - [x] 为状态、数据类型和解析结果定义业务枚举。
+  - [x] 创建 Entity、Mapper 与最小 Repository/Service 查询。
+  - [x] 增加 JSONB、SHA-256、请求键和幂等唯一约束测试。
+  - [x] 使用 Testcontainers 从空库执行 migration，并验证重复启动不重复执行。
 - 验证命令：
 
   ```bash
-  mvn -f backend/pom.xml -Dtest=*MigrationTest test
+  mvn -f backend/pom.xml -Dtest=*MigrationTest,*PayloadHash*,*DataProvider* test
   npm run backend:test
   ```
 
+- 执行记录：
+  - 2026-07-23：开始执行；因 T003 跳过，不引入 Testcontainers；改用 migration SQL 契约测试、哈希单测，并在云端开发库启动验证 Flyway。
+  - 2026-07-23：Testcontainers 步骤按 T003 替代约束完成——SQL 契约测试 + 云端开发库成功 apply V1。
 - 完成标准：
   - migration 可从空库执行。
   - 原始响应保存 JSONB 和 SHA-256。
   - 重复响应由唯一约束去重。
-  - migration 集成测试通过。
+  - migration 集成测试通过（或在 T003 跳过前提下完成文档约定的替代验证）。
+
+- 验证记录：
+  - 2026-07-23：后端 31 个测试通过（含 migration SQL 契约、SHA-256、枚举）；云端开发库 Flyway `Successfully applied 1 migration ... now at version v1`。
 
 ### T103 Stub 双数据源
 
@@ -1418,21 +1424,19 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 
 ## 14. 推荐的下一步
 
-当前没有 `IN_PROGRESS` 任务。下一次开发按以下步骤执行 `T102 Provider 与原始数据 migration`：
+当前没有 `IN_PROGRESS` 任务。下一次开发按以下步骤恢复 `T103 Stub 双数据源`：
 
-1. 将文档顶部“当前活动任务”改为 T102，并把 T102 从 `TODO` 改为 `IN_PROGRESS`。
-2. 编写 `V1__init_provider_and_raw_data.sql` 及 Provider/原始响应/同步运行表。
-3. 定义相关业务枚举、Entity、Mapper。
-4. 补充 JSONB、SHA-256 与幂等约束测试；若仍跳过 Testcontainers，在任务中记录替代验证方式。
-5. 运行 T102 验证命令并回写状态。
+1. 将文档顶部“当前活动任务”改为 T103，并把 T103 从 `PARTIAL` 改为 `IN_PROGRESS`。
+2. 补齐体彩比赛池/赛果 fixtures（正常、延期、取消、修正）。
+3. 增加亚盘 fixtures，并实现 `StubAsianOddsProvider`。
+4. 配置 test profile 强制 Stub，确保测试不发真实网络请求。
+5. 运行 T103 验证命令并回写状态。
 
 随后严格按以下顺序补齐底座：
 
 ```text
-T102 -> 恢复 T103 -> T104
+恢复 T103 -> T104
 ```
-
-T101 已完成契约与配置；T103 再实现 `StubAsianOddsProvider`，真实 The Odds API 适配留待后续覆盖率验证任务。
 
 ## 15. 变更记录
 
@@ -1448,3 +1452,4 @@ T101 已完成契约与配置；T103 再实现 `StubAsianOddsProvider`，真实 
 | 2026-07-22 | T004 | `TODO -> DONE` | 完成统一响应、异常、traceId、分页、审计、安全和 OpenAPI；后端 19 个测试、前端构建及端点启动验证通过 |
 | 2026-07-22 | T005 | `PARTIAL -> DONE` | 完成 Ant Design、TanStack Query、Vitest/Testing Library、错误边界和 lockfile 验证；前端 3 个测试、构建及后端回归通过 |
 | 2026-07-23 | T101 | `PARTIAL -> DONE` | 对齐 stableflow 角色分包与文档；完成亚盘契约/配置、Provider 错误分类与边界测试；后端 27 个测试通过 |
+| 2026-07-23 | T102 | `TODO -> DONE` | 完成 V1 migration、data 模块 Entity/Mapper/Service；SQL 契约与哈希测试通过；云端库 Flyway 应用到 v1 |

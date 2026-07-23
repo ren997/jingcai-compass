@@ -226,6 +226,12 @@ backend/src/main/java/com/jingcaicompass/
     exception/
     provider/
     infrastructure/
+  data/
+    entity/
+    enums/
+    mapper/
+    service/
+    support/
   match/
     controller/
     dto/

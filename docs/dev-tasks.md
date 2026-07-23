@@ -6,8 +6,8 @@
 - 最后更新：2026-07-23
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
 - 当前活动任务：无
-- 下一任务：`T105 Provider 重试、限额与契约测试`
-- 最近完成增量：`T104 原始响应入库与同步运行服务`
+- 下一任务：`T201 比赛与映射 migration`（T106/T107 为连续观测，可与主线穿插）
+- 最近完成增量：`T105 Provider 重试、限额与契约测试`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -116,7 +116,7 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 | 里程碑 | 状态 | 说明 |
 | --- | --- | --- |
 | M0 工程基线 | `DONE` | T000～T005 已完成；T003 按项目决定跳过并记录替代验证约束 |
-| M1 Provider 基础 | `PARTIAL` | T101～T104 已完成；下一步 T105 Provider 重试与契约测试 |
+| M1 Provider 基础 | `DONE` | T101～T105 已完成；T106/T107 为连续观测可穿插 |
 | M2 标准化与映射 | `TODO` | 依赖基础表和 Provider 契约 |
 | M3 预测发布闭环 | `TODO` | 可使用 Stub 比赛数据开发 |
 | M4 赛果与结算 | `TODO` | 依赖锁定预测和最终赛果 |
@@ -489,20 +489,20 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
   - 2026-07-23：`*RawData*Test,*DataSyncRun*Test` 13 通过；`npm run backend:test` 48 通过；前端未改动故未跑 `frontend:build`。
 ### T105 Provider 重试、限额与契约测试
 
-- 状态：`TODO`
+- 状态：`DONE`
 - 优先级：P0
 - 依赖：T101、T104
 - 交付物：
-  - WireMock 测试
+  - MockWebServer 契约/重试测试
   - 429/5xx/超时重试策略
   - 用量响应头解析和额度告警
 - 执行步骤：
-  - [ ] 为体彩与亚盘 HTTP 客户端统一接入可配置超时。
-  - [ ] 定义仅对网络错误、429 和可恢复 5xx 生效的重试策略。
-  - [ ] 解析 `Retry-After` 和供应商额度响应头。
-  - [ ] 把每次尝试、最终状态和额度写入同步运行记录。
-  - [ ] 使用 MockWebServer/WireMock 覆盖 400、401、429、500、超时和非法 JSON。
-  - [ ] 检查日志、异常和测试快照没有 API Key、密码或 Cookie。
+  - [x] 为体彩与亚盘 HTTP 客户端统一接入可配置超时。
+  - [x] 定义仅对网络错误、429 和可恢复 5xx 生效的重试策略。
+  - [x] 解析 `Retry-After` 和供应商额度响应头。
+  - [x] 把每次尝试、最终状态和额度写入同步运行记录。
+  - [x] 使用 MockWebServer/WireMock 覆盖 400、401、429、500、超时和非法 JSON。
+  - [x] 检查日志、异常和测试快照没有 API Key、密码或 Cookie。
 - 验证命令：
 
   ```bash
@@ -510,11 +510,16 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
   npm run backend:test
   ```
 
+- 执行记录：
+  - 2026-07-23：开始 T105；范围：共享 ProviderHttpExecutor、体彩接入重试/额度、亚盘 RestClient 超时装配、MockWebServer 契约测试；验证 `*Provider*ContractTest,*Retry*Test` 与 `npm run backend:test`。
 - 完成标准：
   - 4xx 参数错误不重试。
   - 429 尊重 `Retry-After`。
   - 重试和额度消耗进入同步记录。
   - 凭据不进入 WireMock 快照或测试报告。
+
+- 验证记录：
+  - 2026-07-23：`*Provider*ContractTest,*Retry*Test`（含 ChinaSporttery/Template）通过；`npm run backend:test` 57 通过；前端未改动故未跑 `frontend:build`。
 
 ### T106 体彩候选源两周验证
 
@@ -1430,18 +1435,19 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 
 ## 14. 推荐的下一步
 
-当前没有 `IN_PROGRESS` 任务。下一次开发按以下步骤执行 `T105 Provider 重试、限额与契约测试`：
+当前没有 `IN_PROGRESS` 任务。下一次开发优先进入阶段 C：`T201 比赛与映射 migration`。
 
-1. 将文档顶部“当前活动任务”改为 T105，并把 T105 从 `TODO` 改为 `IN_PROGRESS`。
-2. 为体彩与亚盘 HTTP 客户端统一接入可配置超时与重试策略。
-3. 解析 `Retry-After` 和供应商额度响应头，写入同步运行记录。
-4. 使用 WireMock 覆盖 400、401、429、500、超时和非法 JSON。
-5. 运行 T105 验证命令并回写状态。
+1. 将文档顶部“当前活动任务”改为 T201，并把 T201 从 `TODO` 改为 `IN_PROGRESS`。
+2. 编写联赛/球队/比赛映射相关 Flyway migration。
+3. 定义 Entity/Enum/Mapper，并补充契约测试。
+4. 运行 T201 验证命令并回写状态。
 
-随后严格按以下顺序补齐底座：
+T106/T107 为数据源连续观测，可与主线穿插，不阻塞 T201。
+
+随后严格按以下顺序推进：
 
 ```text
-T105 -> T106/T107（连续观测，可与主线穿插）
+T201 -> T202 -> ...
 ```
 
 ## 15. 变更记录
@@ -1461,3 +1467,4 @@ T105 -> T106/T107（连续观测，可与主线穿插）
 | 2026-07-23 | T102 | `TODO -> DONE` | 完成 V1 migration、data 模块 Entity/Mapper/Service；SQL 契约与哈希测试通过；云端库 Flyway 应用到 v1 |
 | 2026-07-23 | T103 | `PARTIAL -> DONE` | classpath Stub fixtures、体彩赛果 Stub、`StubAsianOddsProvider`、test profile 强制 stub；后端 36 个测试通过 |
 | 2026-07-23 | T104 | `TODO -> DONE` | 同步运行状态机、原始响应幂等入库、`ProviderSyncTemplate`；后端 48 个测试通过 |
+| 2026-07-23 | T105 | `TODO -> DONE` | ProviderHttpExecutor 重试/额度、体彩接入、亚盘 RestClient 超时装配、MockWebServer 契约；后端 57 个测试通过 |

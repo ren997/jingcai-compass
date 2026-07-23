@@ -10,9 +10,13 @@ import com.jingcaicompass.data.entity.DataSyncRun;
 import com.jingcaicompass.data.entity.RawDataPayload;
 import com.jingcaicompass.data.enums.ProviderDataTypeEnum;
 import com.jingcaicompass.data.enums.SyncStatusEnum;
+import com.jingcaicompass.match.exception.SportteryDataAccessException;
+import com.jingcaicompass.system.provider.ProviderErrorCategory;
+import com.jingcaicompass.system.provider.ProviderHttpException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -113,6 +117,43 @@ class RawDataProviderSyncTemplateTest {
         assertThat(outcome.payload()).isNull();
         verify(rawDataPayloadService, never()).savePayload(any());
         verify(rawDataPayloadService, never()).markParseSuccess(any());
+    }
+
+    @Test
+    void fetchHttpFailureRecordsRetryAndQuotaOnSyncRun() {
+        DataSyncRun running = run(6L, SyncStatusEnum.RUNNING);
+        DataSyncRun failed = run(6L, SyncStatusEnum.FAILED);
+        when(dataSyncRunService.startRun("CHINA_SPORTTERY", ProviderDataTypeEnum.SPORTTERY_POOL))
+                .thenReturn(running);
+        when(dataSyncRunService.finishFailed(eq(6L), any())).thenReturn(failed);
+
+        ProviderHttpException httpFailure = new ProviderHttpException(
+                "CHINA_SPORTTERY",
+                ProviderErrorCategory.QUOTA_EXCEEDED,
+                "provider HTTP 429",
+                2,
+                1,
+                429
+        );
+
+        ProviderSyncOutcome outcome = template.execute(
+                "CHINA_SPORTTERY",
+                ProviderDataTypeEnum.SPORTTERY_POOL,
+                () -> {
+                    throw new SportteryDataAccessException(
+                            ProviderErrorCategory.QUOTA_EXCEEDED,
+                            "wrapped",
+                            httpFailure
+                    );
+                },
+                (dataType, requestKey, saved) -> new ProviderParseResult(1, 0, null)
+        );
+
+        assertThat(outcome.status()).isEqualTo(SyncStatusEnum.FAILED);
+        ArgumentCaptor<SyncRunFinishDto> captor = ArgumentCaptor.forClass(SyncRunFinishDto.class);
+        verify(dataSyncRunService).finishFailed(eq(6L), captor.capture());
+        assertThat(captor.getValue().retryCount()).isEqualTo(2);
+        assertThat(captor.getValue().quotaCost()).isEqualTo(1);
     }
 
     @Test

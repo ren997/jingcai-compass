@@ -26,6 +26,7 @@ app:
       delay: 500ms
     quota-warning-threshold: 0
   asian-odds:
+    # stub | THE_ODDS_API（THE_ODDS_API 时装配带超时的 RestClient，业务适配后续任务）
     provider: stub
     base-url: https://api.the-odds-api.com
     api-key: <api-key>

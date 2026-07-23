@@ -10,6 +10,7 @@ import com.jingcaicompass.data.entity.DataSyncRun;
 import com.jingcaicompass.data.entity.RawDataPayload;
 import com.jingcaicompass.data.enums.ProviderDataTypeEnum;
 import com.jingcaicompass.data.enums.SyncStatusEnum;
+import com.jingcaicompass.system.provider.ProviderHttpException;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -69,9 +70,12 @@ public class ProviderSyncTemplate {
         try {
             fetchResult = fetcher.fetch();
         } catch (RuntimeException exception) {
+            ProviderHttpException httpFailure = findHttpException(exception);
+            int retryCount = httpFailure == null ? 0 : httpFailure.retryCount();
+            int quotaCost = httpFailure == null ? 0 : httpFailure.quotaCost();
             DataSyncRun finished = dataSyncRunService.finishFailed(
                     run.getId(),
-                    new SyncRunFinishDto(0, 0, 0, 0, 0, truncate(exception.getMessage()))
+                    new SyncRunFinishDto(0, 0, 0, retryCount, quotaCost, truncate(exception.getMessage()))
             );
             log.warn("sync fetch failed syncRunId={} providerCode={} dataType={}",
                     run.getId(), providerCode, dataType, exception);
@@ -172,6 +176,17 @@ public class ProviderSyncTemplate {
                 )
         );
         return new ProviderSyncOutcome(finished, payload, SyncStatusEnum.FAILED, saveResult.duplicate());
+    }
+
+    private ProviderHttpException findHttpException(Throwable throwable) {
+        Throwable current = throwable;
+        while (current != null) {
+            if (current instanceof ProviderHttpException httpException) {
+                return httpException;
+            }
+            current = current.getCause();
+        }
+        return null;
     }
 
     private String truncate(String message) {

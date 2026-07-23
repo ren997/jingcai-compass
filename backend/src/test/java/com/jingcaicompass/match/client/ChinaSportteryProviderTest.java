@@ -1,8 +1,10 @@
 package com.jingcaicompass.match.client;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.match.exception.SportteryDataAccessException;
 import com.jingcaicompass.system.exception.ErrorCode;
 import com.jingcaicompass.system.provider.ProviderErrorCategory;
+import com.jingcaicompass.system.provider.ProviderHttpExecutor;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpHeaders;
@@ -11,7 +13,9 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -142,6 +146,21 @@ class ChinaSportteryProviderTest {
                 });
     }
 
+    @Test
+    void fetchMatchPoolRawExposesRetryAndQuotaCounters() {
+        ChinaSportteryProvider provider = providerWithBody("""
+                {"success":true,"errorCode":"0","errorMessage":"","value":{"matchInfoList":[]}}
+                """);
+
+        var result = provider.fetchMatchPoolRaw(LocalDate.of(2026, 7, 22));
+
+        assertThat(result.requestKey()).isEqualTo("2026-07-22");
+        assertThat(result.httpStatus()).isEqualTo(200);
+        assertThat(result.retryCount()).isZero();
+        assertThat(result.quotaCost()).isZero();
+        assertThat(result.payloadJson()).contains("matchInfoList");
+    }
+
     private ChinaSportteryProvider providerWithBody(String body) {
         RestClient.Builder restClientBuilder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(restClientBuilder).build();
@@ -153,7 +172,21 @@ class ChinaSportteryProviderTest {
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.REFERER, "https://www.sporttery.cn/jc/jsq/zqspf/")
                 .build();
-        return new ChinaSportteryProvider(restClient);
+        SportteryProviderProperties properties = new SportteryProviderProperties(
+                SportteryProviderType.CHINA,
+                URI.create(baseUrl),
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(10),
+                new SportteryProviderProperties.RetryProperties(2, Duration.ofMillis(100)),
+                0
+        );
+        return new ChinaSportteryProvider(
+                restClient,
+                properties,
+                new ProviderHttpExecutor(duration -> {
+                }),
+                new ObjectMapper().findAndRegisterModules()
+        );
     }
 
     private String readFixture() throws IOException {

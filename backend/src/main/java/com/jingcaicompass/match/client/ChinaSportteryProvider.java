@@ -1,5 +1,7 @@
 package com.jingcaicompass.match.client;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jingcaicompass.data.dto.ProviderFetchResult;
 import com.jingcaicompass.match.dto.ChinaSportteryResponseDto;
 import com.jingcaicompass.match.dto.SportteryMatchDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultDto;
@@ -7,12 +9,18 @@ import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.exception.SportteryDataAccessException;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.system.provider.ProviderErrorCategory;
+import com.jingcaicompass.system.provider.ProviderHttpException;
+import com.jingcaicompass.system.provider.ProviderHttpExecutor;
+import com.jingcaicompass.system.provider.ProviderHttpRequest;
+import com.jingcaicompass.system.provider.ProviderHttpResponse;
+import com.jingcaicompass.system.provider.ProviderRetryPolicy;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -28,11 +36,20 @@ public class ChinaSportteryProvider implements SportteryProvider {
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
 
     private final RestClient restClient;
+    private final SportteryProviderProperties properties;
+    private final ProviderHttpExecutor httpExecutor;
+    private final ObjectMapper objectMapper;
 
     public ChinaSportteryProvider(
-            @Qualifier("chinaSportteryRestClient") RestClient restClient
+            @Qualifier("chinaSportteryRestClient") RestClient restClient,
+            SportteryProviderProperties properties,
+            ProviderHttpExecutor httpExecutor,
+            ObjectMapper objectMapper
     ) {
         this.restClient = restClient;
+        this.properties = properties;
+        this.httpExecutor = httpExecutor;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -42,7 +59,7 @@ public class ChinaSportteryProvider implements SportteryProvider {
 
     @Override
     public List<SportteryMatchDto> findDailyMatches(LocalDate lotteryDate) {
-        ChinaSportteryResponseDto response = requestMatchPool();
+        ChinaSportteryResponseDto response = parseMatchPool(fetchMatchPoolRaw(lotteryDate).payloadJson());
         if (!response.success()) {
             throw new SportteryDataAccessException(
                     "中国体彩网比赛池接口返回失败：%s %s".formatted(
@@ -62,6 +79,43 @@ public class ChinaSportteryProvider implements SportteryProvider {
     }
 
     /**
+     * 拉取比赛池原始响应，供同步模板写入 raw payload 与重试/额度计数。
+     */
+    public ProviderFetchResult fetchMatchPoolRaw(LocalDate lotteryDate) {
+        LocalDate requestDate = lotteryDate == null ? LocalDate.now(SHANGHAI) : lotteryDate;
+        ProviderRetryPolicy policy = new ProviderRetryPolicy(
+                properties.retry().maxAttempts(),
+                properties.retry().delay()
+        );
+        try {
+            ProviderHttpResponse response = httpExecutor.get(
+                    restClient,
+                    providerCode(),
+                    ProviderHttpRequest.of(MATCH_CALCULATOR_PATH),
+                    policy,
+                    properties.quotaWarningThreshold()
+            );
+            if (!StringUtils.hasText(response.body())) {
+                throw new SportteryDataAccessException("中国体彩网比赛池接口返回空响应");
+            }
+            return new ProviderFetchResult(
+                    requestDate.toString(),
+                    response.body(),
+                    response.status(),
+                    Instant.now(),
+                    response.retryCount(),
+                    response.quotaCost()
+            );
+        } catch (ProviderHttpException exception) {
+            throw toSportteryException(exception);
+        } catch (SportteryDataAccessException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            throw new SportteryDataAccessException("读取中国体彩网比赛池失败", exception);
+        }
+    }
+
+    /**
      * 真实赛果接口接入前返回空列表；赛果同步任务（T401）再补齐。
      */
     @Override
@@ -69,21 +123,32 @@ public class ChinaSportteryProvider implements SportteryProvider {
         return List.of();
     }
 
-    private ChinaSportteryResponseDto requestMatchPool() {
+    private ChinaSportteryResponseDto parseMatchPool(String payloadJson) {
         try {
-            ChinaSportteryResponseDto response = restClient.get()
-                    .uri(MATCH_CALCULATOR_PATH)
-                    .retrieve()
-                    .body(ChinaSportteryResponseDto.class);
+            ChinaSportteryResponseDto response = objectMapper.readValue(
+                    payloadJson, ChinaSportteryResponseDto.class
+            );
             if (response == null) {
                 throw new SportteryDataAccessException("中国体彩网比赛池接口返回空响应");
             }
             return response;
         } catch (SportteryDataAccessException exception) {
             throw exception;
-        } catch (RuntimeException exception) {
-            throw new SportteryDataAccessException("读取中国体彩网比赛池失败", exception);
+        } catch (Exception exception) {
+            throw new SportteryDataAccessException(
+                    ProviderErrorCategory.PARSE_FAILURE,
+                    "无法解析中国体彩网比赛池响应",
+                    exception
+            );
         }
+    }
+
+    private SportteryDataAccessException toSportteryException(ProviderHttpException exception) {
+        return new SportteryDataAccessException(
+                exception.category(),
+                exception.getMessage(),
+                exception
+        );
     }
 
     private List<ChinaSportteryResponseDto.MatchDto> safeMatches(

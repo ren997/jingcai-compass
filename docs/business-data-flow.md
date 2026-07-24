@@ -338,8 +338,8 @@ flowchart TD
 
 - 预测、快照、结算相关表：见 `technical-design.md` M3/M4，本文不画。
 - 体彩同步写库后**尚未强制**调用标准化回填 `league_id` 等（服务已就绪，接入在后续任务）。
-- 亚盘同步 Job 接入 `MatchMappingService` 与仅对已确认映射写 `asian_odds_snapshots`：后续任务。
-- 映射人工确认/拒绝 HTTP API：T205。
+- 亚盘同步 Job 接入 `MatchMappingService` 与仅对已确认映射写 `asian_odds_snapshots`：后续任务（T206）。
+- 映射人工确认/拒绝 HTTP API：T205 已落地（`/api/admin/provider/mappings/*`）；生产鉴权仍待 T601，当前 Security 对 admin 路径 denyAll。
 
 ## 11. 变更记录
 

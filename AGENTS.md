@@ -21,6 +21,22 @@
 - Prefer explicit Java models for request and response payloads.
 - Add brief field comments on public request and response models when the meaning is not obvious.
 
+## Comment Conventions
+
+- Keep comments short and high-signal; do not restate the obvious from a method or field name.
+- Public service interfaces and other externally consumed public methods should have a brief contract comment (purpose, key params, or special behavior when not obvious).
+- Service implementations, orchestrators, Jobs, and multi-step helpers in `service` (including `*Writer` / `*Mapper` components used by sync flows) should:
+  - Carry a short class-level comment of responsibility.
+  - Annotate main business steps in order (`// 1) ...`, `// 2) ...`) so a reader can follow the flow without reconstructing it.
+- Entity / migration SQL should use bilingual `COMMENT ON` for tables and non-obvious columns when adding Flyway scripts.
+- Enum classes should have a brief class-level comment; enum items should carry readable descriptions when they represent business states.
+
+## Service Layer
+
+- Prefer interface + `XxxServiceImpl` in the same module `service` package; controllers and other services depend on the interface.
+- Orchestration-style helpers that are not entity-centric CRUD may stay as `@Component` in `service` (e.g. payload mappers, match writers) but still follow the comment conventions above.
+- For persistence-gated services, keep `@ConditionalOnBean(DataSource.class)` when the bean must not load without a database.
+
 ## Domain Rules
 
 - Core prediction fields become immutable after the match enters the locked state.

@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 将同步条目幂等写入 matches，并按盘口变化追加快照。
+ * 体彩比赛池写库：按体彩编号+业务日幂等写 matches，盘口变化时追加快照。
  */
 @Component
 @ConditionalOnBean(DataSource.class)
@@ -32,6 +32,12 @@ public class SportteryPoolMatchWriter {
         this.snapshotMapper = snapshotMapper;
     }
 
+    /**
+     * 批量写入；单场失败不影响其余场次。
+     *
+     * @param items 已解析的同步条目
+     * @param rawPayloadHash 关联原始载荷哈希
+     */
     public WriteResult writeAll(List<SportteryPoolSyncItemDto> items, String rawPayloadHash) {
         if (items == null || items.isEmpty()) {
             return WriteResult.empty();
@@ -45,8 +51,10 @@ public class SportteryPoolMatchWriter {
 
         for (SportteryPoolSyncItemDto item : items) {
             try {
+                // 1) 幂等 upsert 比赛主表
                 MatchEntity match = upsertMatch(item);
                 matchUpsertCount++;
+                // 2) 与最新快照比对；有变化才追加
                 if (appendSnapshotIfChanged(match, item, rawPayloadHash)) {
                     snapshotInsertCount++;
                 }
@@ -65,6 +73,7 @@ public class SportteryPoolMatchWriter {
         );
     }
 
+    /** 按 lotteryMatchNo + lotteryDate 查找，不存在则插入，存在则更新展示字段。 */
     private MatchEntity upsertMatch(SportteryPoolSyncItemDto item) {
         MatchEntity existing = matchMapper.selectOne(new LambdaQueryWrapper<MatchEntity>()
                 .eq(MatchEntity::getLotteryMatchNo, item.lotteryMatchNo())
@@ -93,6 +102,7 @@ public class SportteryPoolMatchWriter {
         entity.setMatchStatus(item.matchStatus());
     }
 
+    /** 让球/HAD/HHAD/销售状态与最新快照一致则跳过，否则插入新快照行。 */
     private boolean appendSnapshotIfChanged(
             MatchEntity match,
             SportteryPoolSyncItemDto item,

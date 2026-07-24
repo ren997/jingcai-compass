@@ -17,7 +17,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 将体彩比赛池原始 JSON 解析为同步条目。
+ * 体彩比赛池载荷解析：原始 JSON → 同步写库条目（含 HAD/HHAD SP）。
  */
 @Component
 public class SportteryPoolPayloadMapper {
@@ -30,7 +30,11 @@ public class SportteryPoolPayloadMapper {
         this.objectMapper = objectMapper;
     }
 
+    /**
+     * 解析指定业务日的比赛条目；接口失败抛业务异常，无分组则返回空列表。
+     */
     public List<SportteryPoolSyncItemDto> parseItems(String payloadJson, LocalDate businessDate) {
+        // 1) 反序列化并校验 success
         ChinaSportteryResponseDto response = readResponse(payloadJson);
         if (!response.success()) {
             throw new SportteryDataAccessException(
@@ -43,6 +47,7 @@ public class SportteryPoolPayloadMapper {
             return List.of();
         }
 
+        // 2) 只保留目标 businessDate 分组，逐场映射为 SyncItem
         List<SportteryPoolSyncItemDto> items = new ArrayList<>();
         for (ChinaSportteryResponseDto.MatchGroupDto group : response.value().matchInfoList()) {
             if (group == null || !businessDate.toString().equals(group.businessDate())) {

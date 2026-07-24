@@ -10,15 +10,15 @@ import com.jingcaicompass.match.dto.SportteryPoolSyncRequestDto;
 import com.jingcaicompass.match.dto.SportteryPoolSyncResultDto;
 import com.jingcaicompass.match.exception.SportteryDataAccessException;
 import com.jingcaicompass.system.provider.ProviderErrorCategory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.stereotype.Service;
-
-import javax.sql.DataSource;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.sql.DataSource;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.stereotype.Service;
 
+/** 体彩比赛池同步实现：经 ProviderSyncTemplate 拉 raw、解析条目、幂等写库。 */
 @Service
 @ConditionalOnBean(DataSource.class)
 public class SportteryPoolSyncServiceImpl implements SportteryPoolSyncService {
@@ -47,6 +47,7 @@ public class SportteryPoolSyncServiceImpl implements SportteryPoolSyncService {
 
     @Override
     public SportteryPoolSyncResultDto sync(SportteryPoolSyncRequestDto request) {
+        // 1) 确定竞彩业务日
         LocalDate businessDate = request == null || request.businessDate() == null
                 ? LocalDate.now(SHANGHAI)
                 : request.businessDate();
@@ -54,15 +55,18 @@ public class SportteryPoolSyncServiceImpl implements SportteryPoolSyncService {
         AtomicInteger matchUpsertCount = new AtomicInteger();
         AtomicInteger snapshotInsertCount = new AtomicInteger();
 
+        // 2) 模板：拉 raw → 幂等入库 → 回调解析写业务表
         ProviderSyncOutcome outcome = providerSyncTemplate.execute(
                 sportteryProvider.providerCode(),
                 ProviderDataTypeEnum.SPORTTERY_POOL,
                 () -> sportteryProvider.fetchMatchPoolRaw(businessDate),
                 (dataType, requestKey, payload) -> {
+                    // 3) 原始 JSON → 同步条目
                     List<SportteryPoolSyncItemDto> items = payloadMapper.parseItems(
                             toJson(payload.getPayload()),
                             businessDate
                     );
+                    // 4) 幂等 upsert matches，盘口变化则追加快照
                     SportteryPoolMatchWriter.WriteResult writeResult = matchWriter.writeAll(
                             items,
                             payload.getPayloadHash()

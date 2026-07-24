@@ -215,6 +215,7 @@ system/security/SecurityConfig.java
 - traceId 进入响应头、响应体和日志 MDC。
 - MyBatis-Plus 开启分页插件，并限制最大页大小。
 - M0 安全配置只放行健康检查、Swagger 和后续公共只读路径，后台路径在 T601 完成前默认拒绝。
+- Service 注释约定（权威全文见仓库根目录 `AGENTS.md`）：接口写简短契约；`*ServiceImpl` 与编排型 `service` 组件（如 Writer/PayloadMapper）写类职责说明，并在主流程用 `// 1) ...` 标注步骤。
 
 ### 5.5 测试数据库
 

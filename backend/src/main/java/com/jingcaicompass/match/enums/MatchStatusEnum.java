@@ -15,15 +15,19 @@ public enum MatchStatusEnum {
     SCHEDULED("SCHEDULED", "未开赛"),
     /** 已截止售卖或进入锁定阶段 */
     LOCKED("LOCKED", "已锁定"),
+    /** 比赛进行中 */
+    IN_PROGRESS("IN_PROGRESS", "进行中"),
     /** 比赛已结束 */
     FINISHED("FINISHED", "已结束"),
     /** 比赛延期 */
     POSTPONED("POSTPONED", "延期"),
     /** 比赛取消 */
-    CANCELLED("CANCELLED", "取消");
+    CANCELLED("CANCELLED", "取消"),
+    /** 比赛中止 */
+    ABANDONED("ABANDONED", "中止");
 
     public static final String DESC =
-            "比赛状态: SCHEDULED-未开赛, LOCKED-已锁定, FINISHED-已结束, POSTPONED-延期, CANCELLED-取消";
+            "比赛状态: SCHEDULED-未开赛, LOCKED-已锁定, IN_PROGRESS-进行中, FINISHED-已结束, POSTPONED-延期, CANCELLED-取消, ABANDONED-中止";
 
     private static final Map<String, MatchStatusEnum> CODE_MAP = Stream.of(values())
             .collect(Collectors.toMap(MatchStatusEnum::getCode, Function.identity()));

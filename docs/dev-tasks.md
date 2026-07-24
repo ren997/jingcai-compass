@@ -3,11 +3,11 @@
 ## 0. 文档状态
 
 - 文档版本：v0.2
-- 最后更新：2026-07-23
+- 最后更新：2026-07-24
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
 - 当前活动任务：无
-- 下一任务：`T201 比赛与映射 migration`（T106/T107 为连续观测，可与主线穿插）
-- 最近完成增量：`T105 Provider 重试、限额与契约测试`
+- 下一任务：`T202 体彩比赛池同步`（T106/T107 为连续观测，可与主线穿插）
+- 最近完成增量：`T201 比赛与映射 migration`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -117,7 +117,7 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 | --- | --- | --- |
 | M0 工程基线 | `DONE` | T000～T005 已完成；T003 按项目决定跳过并记录替代验证约束 |
 | M1 Provider 基础 | `DONE` | T101～T105 已完成；T106/T107 为连续观测可穿插 |
-| M2 标准化与映射 | `TODO` | 依赖基础表和 Provider 契约 |
+| M2 标准化与映射 | `TODO` | T201 已完成；下一任务 T202 |
 | M3 预测发布闭环 | `TODO` | 可使用 Stub 比赛数据开发 |
 | M4 赛果与结算 | `TODO` | 依赖锁定预测和最终赛果 |
 | M5 公共 API 与前端 | `PARTIAL` | 比赛列表纵向切片已完成，等待正式主线依赖 |
@@ -625,7 +625,7 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 
 ### T201 比赛与映射 migration
 
-- 状态：`TODO`
+- 状态：`DONE`
 - 优先级：P0
 - 依赖：T003
 - 交付物：
@@ -633,12 +633,12 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
   - `V3__init_sporttery_and_asian_odds_snapshots.sql`
   - 对应 Entity/Mapper/Enum
 - 执行步骤：
-  - [ ] 从 `technical-design.md` 提取联赛、球队、比赛、来源映射和快照字段。
-  - [ ] 编写 V2，创建联赛、球队、比赛和来源映射表。
-  - [ ] 编写 V3，创建体彩池快照和亚盘快照追加表。
-  - [ ] 增加业务唯一约束、状态检查、时间字段和必要索引。
-  - [ ] 创建 Entity、Mapper 和供应商无关枚举。
-  - [ ] 编写空库 migration、约束失败和重复执行测试。
+  - [x] 从 `technical-design.md` 提取联赛、球队、比赛、来源映射和快照字段。
+  - [x] 编写 V2，创建联赛、球队、比赛和来源映射表。
+  - [x] 编写 V3，创建体彩池快照和亚盘快照追加表。
+  - [x] 增加业务唯一约束、状态检查、时间字段和必要索引。
+  - [x] 创建 Entity、Mapper 和供应商无关枚举。
+  - [x] 编写空库 migration、约束失败和重复执行测试。
 - 验证命令：
 
   ```bash
@@ -646,11 +646,16 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
   npm run backend:test
   ```
 
+- 执行记录：
+  - 2026-07-24：开始 T201；范围：V2/V3 Flyway、match/odds Entity·Mapper·Enum、静态 SQL 契约测试（T003 跳过 Testcontainers）；验证 `*MigrationTest,*ConstraintTest` 与 `npm run backend:test`。
 - 完成标准：
   - 体彩比赛、联赛、球队、来源映射和快照表完整。
   - 唯一约束和检查约束生效。
   - 快照表只追加。
   - migration 集成测试通过。
+
+- 验证记录：
+  - 2026-07-24：`*MigrationTest,*ConstraintTest,MatchMappingEnumsTest` 3 通过；`npm run backend:test` 60 通过；前端未改动故未跑 `frontend:build`；T003 跳过环境下以静态 SQL 契约替代空库 Flyway 集成。
 
 ### T202 体彩比赛池同步
 
@@ -1435,19 +1440,19 @@ T108 + T601 -> T602 -> T603 -> T604 -> T605
 
 ## 14. 推荐的下一步
 
-当前没有 `IN_PROGRESS` 任务。下一次开发优先进入阶段 C：`T201 比赛与映射 migration`。
+当前没有 `IN_PROGRESS` 任务。下一次开发优先进入：`T202 体彩比赛池同步`。
 
-1. 将文档顶部“当前活动任务”改为 T201，并把 T201 从 `TODO` 改为 `IN_PROGRESS`。
-2. 编写联赛/球队/比赛映射相关 Flyway migration。
-3. 定义 Entity/Enum/Mapper，并补充契约测试。
-4. 运行 T201 验证命令并回写状态。
+1. 将文档顶部“当前活动任务”改为 T202，并把 T202 从 `TODO` 改为 `IN_PROGRESS`。
+2. 实现 `SportteryPoolSyncService` / Job，幂等写入 `matches` 与 `sporttery_pool_snapshots`。
+3. 覆盖首次同步、重复同步、赔率变化与空池测试。
+4. 运行 T202 验证命令并回写状态。
 
-T106/T107 为数据源连续观测，可与主线穿插，不阻塞 T201。
+T106/T107 为数据源连续观测，可与主线穿插，不阻塞主线。
 
 随后严格按以下顺序推进：
 
 ```text
-T201 -> T202 -> ...
+T202 -> T203 -> ...
 ```
 
 ## 15. 变更记录
@@ -1468,3 +1473,4 @@ T201 -> T202 -> ...
 | 2026-07-23 | T103 | `PARTIAL -> DONE` | classpath Stub fixtures、体彩赛果 Stub、`StubAsianOddsProvider`、test profile 强制 stub；后端 36 个测试通过 |
 | 2026-07-23 | T104 | `TODO -> DONE` | 同步运行状态机、原始响应幂等入库、`ProviderSyncTemplate`；后端 48 个测试通过 |
 | 2026-07-23 | T105 | `TODO -> DONE` | ProviderHttpExecutor 重试/额度、体彩接入、亚盘 RestClient 超时装配、MockWebServer 契约；后端 57 个测试通过 |
+| 2026-07-24 | T201 | `TODO -> DONE` | V2/V3 migration、match/odds Entity·Mapper·Enum、静态 SQL 契约；后端 60 个测试通过 |

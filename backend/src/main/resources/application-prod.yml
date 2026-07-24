@@ -57,3 +57,7 @@ app:
       enabled: ${SPORTTERY_POOL_TASK_ENABLED:false}
       fixed-delay: ${SPORTTERY_POOL_FIXED_DELAY:15m}
       initial-delay: ${SPORTTERY_POOL_INITIAL_DELAY:30s}
+    asian-odds:
+      enabled: ${ASIAN_ODDS_TASK_ENABLED:false}
+      fixed-delay: ${ASIAN_ODDS_FIXED_DELAY:20m}
+      initial-delay: ${ASIAN_ODDS_INITIAL_DELAY:45s}

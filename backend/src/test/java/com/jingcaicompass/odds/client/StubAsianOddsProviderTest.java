@@ -51,6 +51,25 @@ class StubAsianOddsProviderTest {
     }
 
     @Test
+    void fetchPreMatchOddsRawSerializesFilteredMatches() {
+        AsianOddsQueryDto query = new AsianOddsQueryDto(
+                null,
+                OffsetDateTime.parse("2026-07-22T19:00:00+08:00"),
+                OffsetDateTime.parse("2026-07-22T20:00:00+08:00"),
+                "pinnacle"
+        );
+
+        var raw = provider.fetchPreMatchOddsRaw(query);
+
+        assertThat(raw.requestKey()).startsWith("asian-odds:");
+        assertThat(raw.httpStatus()).isEqualTo(200);
+        assertThat(raw.quotaCost()).isEqualTo(StubAsianOddsProvider.STUB_QUOTA_COST);
+        assertThat(raw.payloadJson()).contains("asian-stub-001");
+        assertThat(raw.payloadJson()).contains("\"matches\"");
+        assertThat(raw.payloadJson()).contains("\"totalLine\":2.5");
+    }
+
+    @Test
     void repeatsIdenticalOddsForSameQuery() {
         AsianOddsQueryDto query = new AsianOddsQueryDto(null, null, null, null);
 

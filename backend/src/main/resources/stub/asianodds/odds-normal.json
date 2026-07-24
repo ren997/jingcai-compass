@@ -11,6 +11,9 @@
         "handicapLine": -0.5,
         "homeOdds": 1.90,
         "awayOdds": 1.95,
+        "totalLine": 2.5,
+        "overOdds": 1.92,
+        "underOdds": 1.94,
         "providerUpdatedAt": "2026-07-22T12:00:00+08:00"
       }
     ]

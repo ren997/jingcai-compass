@@ -12,7 +12,8 @@ import java.time.Duration;
 @ConfigurationProperties("app.tasks")
 public record SyncTaskProperties(
         boolean enabled,
-        @Valid @NotNull SportteryPoolTaskProperties sportteryPool
+        @Valid @NotNull SportteryPoolTaskProperties sportteryPool,
+        @Valid @NotNull AsianOddsTaskProperties asianOdds
 ) {
 
     public record SportteryPoolTaskProperties(
@@ -27,6 +28,23 @@ public record SyncTaskProperties(
         }
 
         @AssertTrue(message = "app.tasks.sporttery-pool.initial-delay must not be negative")
+        public boolean isInitialDelayValid() {
+            return initialDelay != null && !initialDelay.isNegative();
+        }
+    }
+
+    public record AsianOddsTaskProperties(
+            boolean enabled,
+            @NotNull Duration fixedDelay,
+            @NotNull Duration initialDelay
+    ) {
+
+        @AssertTrue(message = "app.tasks.asian-odds.fixed-delay must be at least 1 second")
+        public boolean isFixedDelayValid() {
+            return fixedDelay != null && fixedDelay.compareTo(Duration.ofSeconds(1)) >= 0;
+        }
+
+        @AssertTrue(message = "app.tasks.asian-odds.initial-delay must not be negative")
         public boolean isInitialDelayValid() {
             return initialDelay != null && !initialDelay.isNegative();
         }

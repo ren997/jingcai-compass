@@ -1,5 +1,6 @@
 package com.jingcaicompass.odds.service;
 
+import com.jingcaicompass.data.dto.ProviderFetchResult;
 import com.jingcaicompass.odds.dto.AsianOddsLeagueDto;
 import com.jingcaicompass.odds.dto.AsianOddsLineDto;
 import com.jingcaicompass.odds.dto.AsianOddsMatchOddsDto;
@@ -7,6 +8,7 @@ import com.jingcaicompass.odds.dto.AsianOddsQueryDto;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 
@@ -40,9 +42,24 @@ class AsianOddsProviderContractTest {
                                 new BigDecimal("-0.5"),
                                 new BigDecimal("1.90"),
                                 new BigDecimal("1.95"),
+                                null,
+                                null,
+                                null,
                                 OffsetDateTime.parse("2026-07-22T12:00:00+08:00")
                         ))
                 ));
+            }
+
+            @Override
+            public ProviderFetchResult fetchPreMatchOddsRaw(AsianOddsQueryDto query) {
+                return new ProviderFetchResult(
+                        "asian-odds:*:*",
+                        "{\"matches\":[]}",
+                        200,
+                        Instant.now(),
+                        0,
+                        0
+                );
             }
         };
 
@@ -61,5 +78,6 @@ class AsianOddsProviderContractTest {
             assertThat(match.lines()).singleElement().extracting(AsianOddsLineDto::handicapLine)
                     .isEqualTo(new BigDecimal("-0.5"));
         });
+        assertThat(provider.fetchPreMatchOddsRaw(query).payloadJson()).isEqualTo("{\"matches\":[]}");
     }
 }

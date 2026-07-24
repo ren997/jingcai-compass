@@ -330,6 +330,7 @@ flowchart TD
 | --- | --- |
 | 同步模板 | `data.service.ProviderSyncTemplate` |
 | 体彩池同步 | `SportteryPoolSyncServiceImpl` → `SportteryPoolPayloadMapper` → `SportteryPoolMatchWriter` |
+| 亚盘同步 | `AsianOddsSyncServiceImpl` → `AsianOddsPayloadMapper` → `MatchMappingService` → `AsianOddsSnapshotWriter` |
 | 联赛/球队标准化 | `LeagueNormalizationService` / `TeamNormalizationService` |
 | 名称规范化 | `NameNormalizationSupport` |
 | 比赛级映射 | `MatchMappingService` / `MatchMappingScoreSupport` |
@@ -338,7 +339,7 @@ flowchart TD
 
 - 预测、快照、结算相关表：见 `technical-design.md` M3/M4，本文不画。
 - 体彩同步写库后**尚未强制**调用标准化回填 `league_id` 等（服务已就绪，接入在后续任务）。
-- 亚盘同步 Job 接入 `MatchMappingService` 与仅对已确认映射写 `asian_odds_snapshots`：后续任务（T206）。
+- 亚盘同步 Job + 已确认映射写 `asian_odds_snapshots`：T206 已落地（Stub Provider；THE_ODDS_API 业务适配后续）。
 - 映射人工确认/拒绝 HTTP API：T205 已落地（`/api/admin/provider/mappings/*`）；生产鉴权仍待 T601，当前 Security 对 admin 路径 denyAll。
 
 ## 11. 变更记录
@@ -347,3 +348,4 @@ flowchart TD
 | --- | --- |
 | 2026-07-24 | 初版：基于 V1～V4 与 T202/T203 落地情况整理表关系与主链路图 |
 | 2026-07-24 | 补充 T204：MatchMappingService 打分/待复核与 V5 解释候选列 |
+| 2026-07-24 | 补充 T206：亚盘快照同步与 AH/totals 写入 |

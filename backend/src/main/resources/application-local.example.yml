@@ -42,3 +42,7 @@ app:
       enabled: false
       fixed-delay: 15m
       initial-delay: 30s
+    asian-odds:
+      enabled: false
+      fixed-delay: 20m
+      initial-delay: 45s

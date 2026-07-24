@@ -43,7 +43,10 @@ class ApplicationConfigurationPropertiesTest {
                     "app.tasks.enabled=false",
                     "app.tasks.sporttery-pool.enabled=false",
                     "app.tasks.sporttery-pool.fixed-delay=15m",
-                    "app.tasks.sporttery-pool.initial-delay=30s"
+                    "app.tasks.sporttery-pool.initial-delay=30s",
+                    "app.tasks.asian-odds.enabled=false",
+                    "app.tasks.asian-odds.fixed-delay=20m",
+                    "app.tasks.asian-odds.initial-delay=45s"
             );
 
     @Test
@@ -69,6 +72,8 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(tasks.enabled()).isFalse();
             assertThat(tasks.sportteryPool().enabled()).isFalse();
             assertThat(tasks.sportteryPool().fixedDelay()).isEqualTo(Duration.ofMinutes(15));
+            assertThat(tasks.asianOdds().enabled()).isFalse();
+            assertThat(tasks.asianOdds().fixedDelay()).isEqualTo(Duration.ofMinutes(20));
 
             PaginationProperties pagination = context.getBean(PaginationProperties.class);
             assertThat(pagination.maxPageSize()).isEqualTo(100);

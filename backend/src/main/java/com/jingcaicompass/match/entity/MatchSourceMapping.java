@@ -5,14 +5,18 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
+import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
 import lombok.Data;
+import org.apache.ibatis.type.JdbcType;
 
 /** 供应商比赛到内部比赛的映射。 */
 @Data
-@TableName("match_source_mappings")
+@TableName(value = "match_source_mappings", autoResultMap = true)
 public class MatchSourceMapping {
 
     @TableId(type = IdType.AUTO)
@@ -48,6 +52,13 @@ public class MatchSourceMapping {
 
     /** 映射方法说明 */
     private String mappingMethod;
+
+    /** 可读映射解释 */
+    private String mappingExplanation;
+
+    /** 打分后的候选列表 */
+    @TableField(typeHandler = JacksonTypeHandler.class, jdbcType = JdbcType.OTHER)
+    private List<Map<String, Object>> mappingCandidates;
 
     /** 人工确认人 */
     private String confirmedBy;

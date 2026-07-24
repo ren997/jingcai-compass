@@ -1,0 +1,61 @@
+{
+  "dataFrom": "",
+  "emptyFlag": false,
+  "errorCode": "0",
+  "errorMessage": "处理成功",
+  "success": true,
+  "value": {
+    "matchInfoList": [
+      {
+        "businessDate": "2026-07-22",
+        "matchCount": 2,
+        "subMatchList": [
+          {
+            "awayTeamAbbName": "演示客队 A",
+            "businessDate": "2026-07-22",
+            "had": {
+              "h": "2.10",
+              "d": "3.20",
+              "a": "3.40"
+            },
+            "hhad": {
+              "goalLine": "-1",
+              "h": "1.85",
+              "d": "3.45",
+              "a": "3.90"
+            },
+            "homeTeamAbbName": "演示主队 A",
+            "leagueAbbName": "演示联赛",
+            "matchDate": "2026-07-22",
+            "matchId": 900001,
+            "matchNumStr": "周三001",
+            "matchStatus": "Selling",
+            "matchTime": "19:30:00"
+          },
+          {
+            "awayTeamAbbName": "演示客队 B",
+            "businessDate": "2026-07-22",
+            "had": {
+              "h": "2.55",
+              "d": "3.10",
+              "a": "2.70"
+            },
+            "hhad": {
+              "goalLine": "0",
+              "h": "2.05",
+              "d": "3.15",
+              "a": "3.25"
+            },
+            "homeTeamAbbName": "演示主队 B",
+            "leagueAbbName": "演示联赛",
+            "matchDate": "2026-07-22",
+            "matchId": 900002,
+            "matchNumStr": "周三002",
+            "matchStatus": "Selling",
+            "matchTime": "21:00:00"
+          }
+        ]
+      }
+    ]
+  }
+}

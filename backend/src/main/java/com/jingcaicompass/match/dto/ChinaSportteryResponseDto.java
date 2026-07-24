@@ -35,13 +35,20 @@ public record ChinaSportteryResponseDto(
             String matchDate,
             String matchTime,
             String matchStatus,
-            HandicapOddsDto hhad
+            OddsDto had,
+            OddsDto hhad
     ) {
     }
 
+    /**
+     * 胜平负或让球胜平负盘口；HAD 可无 goalLine，HHAD 通常带 goalLine。
+     */
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record HandicapOddsDto(
-            String goalLine
+    public record OddsDto(
+            String goalLine,
+            String h,
+            String d,
+            String a
     ) {
     }
 }

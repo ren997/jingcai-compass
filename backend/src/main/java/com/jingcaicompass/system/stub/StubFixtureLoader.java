@@ -32,6 +32,14 @@ public final class StubFixtureLoader {
         }
     }
 
+    public static String readText(String classpathLocation) {
+        try (InputStream inputStream = open(classpathLocation)) {
+            return new String(inputStream.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException exception) {
+            throw new IllegalStateException("无法加载 Stub fixture：" + classpathLocation, exception);
+        }
+    }
+
     private static InputStream open(String classpathLocation) {
         String normalized = classpathLocation.startsWith("/")
                 ? classpathLocation.substring(1)

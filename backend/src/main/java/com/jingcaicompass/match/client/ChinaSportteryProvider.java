@@ -81,6 +81,7 @@ public class ChinaSportteryProvider implements SportteryProvider {
     /**
      * 拉取比赛池原始响应，供同步模板写入 raw payload 与重试/额度计数。
      */
+    @Override
     public ProviderFetchResult fetchMatchPoolRaw(LocalDate lotteryDate) {
         LocalDate requestDate = lotteryDate == null ? LocalDate.now(SHANGHAI) : lotteryDate;
         ProviderRetryPolicy policy = new ProviderRetryPolicy(

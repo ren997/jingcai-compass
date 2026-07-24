@@ -1,5 +1,6 @@
 package com.jingcaicompass.match.client;
 
+import com.jingcaicompass.data.dto.ProviderFetchResult;
 import com.jingcaicompass.match.dto.SportteryMatchDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultDto;
 import com.jingcaicompass.match.service.SportteryProvider;
@@ -8,6 +9,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.time.DayOfWeek;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.OffsetDateTime;
@@ -23,9 +25,12 @@ import java.util.regex.Pattern;
 public class StubSportteryProvider implements SportteryProvider {
 
     private static final Pattern SEQUENCE_PATTERN = Pattern.compile("(\\d+)$");
+    private static final String RAW_TEMPLATE_DATE = "2026-07-22";
 
     private final List<SportteryMatchDto> poolTemplates;
     private final List<SportteryMatchResultDto> resultTemplates;
+    private final String rawPoolTemplate;
+    private final String rawEmptyPoolTemplate;
 
     public StubSportteryProvider() {
         List<SportteryMatchDto> pool = new ArrayList<>();
@@ -43,6 +48,8 @@ public class StubSportteryProvider implements SportteryProvider {
         results.addAll(StubFixtureLoader.readList(
                 "stub/sporttery/results-amended.json", SportteryMatchResultDto.class));
         this.resultTemplates = List.copyOf(results);
+        this.rawPoolTemplate = StubFixtureLoader.readText("stub/sporttery/pool-raw-normal.json");
+        this.rawEmptyPoolTemplate = StubFixtureLoader.readText("stub/sporttery/pool-raw-empty.json");
     }
 
     @Override
@@ -56,6 +63,38 @@ public class StubSportteryProvider implements SportteryProvider {
         return poolTemplates.stream()
                 .map(template -> remapMatch(template, lotteryDate, weekday))
                 .toList();
+    }
+
+    @Override
+    public ProviderFetchResult fetchMatchPoolRaw(LocalDate lotteryDate) {
+        LocalDate requestDate = lotteryDate == null ? LocalDate.of(2026, 7, 22) : lotteryDate;
+        String weekday = weekdayLabel(requestDate.getDayOfWeek());
+        String payload = rawPoolTemplate
+                .replace(RAW_TEMPLATE_DATE, requestDate.toString())
+                .replace("周三", weekday);
+        return new ProviderFetchResult(
+                requestDate.toString(),
+                payload,
+                200,
+                Instant.now(),
+                0,
+                0
+        );
+    }
+
+    /**
+     * 返回空比赛池原始响应，供同步空池场景测试。
+     */
+    public ProviderFetchResult fetchEmptyMatchPoolRaw(LocalDate lotteryDate) {
+        LocalDate requestDate = lotteryDate == null ? LocalDate.of(2026, 7, 22) : lotteryDate;
+        return new ProviderFetchResult(
+                requestDate.toString(),
+                rawEmptyPoolTemplate,
+                200,
+                Instant.now(),
+                0,
+                0
+        );
     }
 
     @Override

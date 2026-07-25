@@ -32,6 +32,8 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
     static final String METHOD_ALIAS = "ALIAS";
     static final String METHOD_EXACT_NAME = "EXACT_NAME";
     static final String METHOD_NAME_CANDIDATE = "NAME_CANDIDATE";
+    static final String METHOD_NAME_CANDIDATE_REUSE = "NAME_CANDIDATE_REUSE";
+    static final String METHOD_REJECTED_REUSE = "REJECTED_REUSE";
 
     private final TeamMapper teamMapper;
     private final TeamAliasMapper teamAliasMapper;
@@ -58,16 +60,21 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
         String providerCode = blankToNull(request.providerCode());
         String externalId = blankToNull(request.externalId());
 
-        // 1) 已确认外部 ID 映射优先
+        // 1) 外部 ID 映射优先；PENDING/REJECTED 也必须稳定复用，避免重跑静默确认
+        ProviderTeamMapping externalMapping = null;
         if (providerCode != null && externalId != null) {
-            ProviderTeamMapping confirmed = findConfirmedExternalMapping(providerCode, externalId);
-            if (confirmed != null) {
+            externalMapping = findExternalMapping(providerCode, externalId);
+            if (externalMapping != null && isConfirmed(externalMapping.getMappingStatus())) {
                 return new EntityNormalizeResultDto(
-                        confirmed.getTeamId(),
+                        externalMapping.getTeamId(),
                         EntityNormalizeOutcomeEnum.RESOLVED,
-                        confirmed.getMappingStatus(),
+                        externalMapping.getMappingStatus(),
                         METHOD_EXTERNAL_ID
                 );
+            }
+            if (externalMapping != null
+                    && externalMapping.getMappingStatus() == MappingStatusEnum.REJECTED) {
+                return unresolvedExternalMapping(externalMapping, METHOD_REJECTED_REUSE);
             }
         }
 
@@ -81,6 +88,14 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
                 .eq(TeamAlias::getAliasNormalized, normalizedKey)
                 .last("LIMIT 1"));
         if (alias != null) {
+            confirmExternalMapping(
+                    externalMapping,
+                    providerCode,
+                    externalId,
+                    alias.getTeamId(),
+                    MappingStatusEnum.MANUAL_CONFIRMED,
+                    METHOD_ALIAS
+            );
             return new EntityNormalizeResultDto(
                     alias.getTeamId(),
                     EntityNormalizeOutcomeEnum.RESOLVED,
@@ -89,18 +104,31 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
             );
         }
 
-        // 3) 标准名规范化后唯一精确命中
+        // 3) 旧候选在人工确认前保持 PENDING，不被候选自身名称反向“精确命中”
+        if (externalMapping != null) {
+            return unresolvedExternalMapping(externalMapping, METHOD_NAME_CANDIDATE_REUSE);
+        }
+
+        // 4) 标准名规范化后唯一精确命中
         List<Team> exactHits = findExactNameHits(normalizedKey);
         if (exactHits.size() == 1) {
+            confirmExternalMapping(
+                    null,
+                    providerCode,
+                    externalId,
+                    exactHits.get(0).getId(),
+                    MappingStatusEnum.AUTO_CONFIRMED,
+                    METHOD_EXACT_NAME
+            );
             return new EntityNormalizeResultDto(
                     exactHits.get(0).getId(),
                     EntityNormalizeOutcomeEnum.RESOLVED,
-                    null,
+                    providerCode == null || externalId == null ? null : MappingStatusEnum.AUTO_CONFIRMED,
                     METHOD_EXACT_NAME
             );
         }
 
-        // 4) 新建候选；有 externalId 时写 PENDING 映射
+        // 5) 新建候选；有 externalId 时写 PENDING 映射
         Team created = new Team();
         created.setNameZh(displayName);
         created.setNameEn(looksPrimarilyLatin(displayName) ? displayName : null);
@@ -165,16 +193,55 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
         return alias;
     }
 
-    private ProviderTeamMapping findConfirmedExternalMapping(String providerCode, String externalId) {
+    private ProviderTeamMapping findExternalMapping(String providerCode, String externalId) {
         return providerTeamMappingMapper.selectOne(new LambdaQueryWrapper<ProviderTeamMapping>()
                 .eq(ProviderTeamMapping::getProviderCode, providerCode)
                 .eq(ProviderTeamMapping::getExternalTeamId, externalId)
-                .in(
-                        ProviderTeamMapping::getMappingStatus,
-                        MappingStatusEnum.AUTO_CONFIRMED,
-                        MappingStatusEnum.MANUAL_CONFIRMED
-                )
                 .last("LIMIT 1"));
+    }
+
+    private EntityNormalizeResultDto unresolvedExternalMapping(
+            ProviderTeamMapping mapping,
+            String method
+    ) {
+        return new EntityNormalizeResultDto(
+                mapping.getTeamId(),
+                EntityNormalizeOutcomeEnum.CANDIDATE_CREATED,
+                mapping.getMappingStatus(),
+                method
+        );
+    }
+
+    private void confirmExternalMapping(
+            ProviderTeamMapping existing,
+            String providerCode,
+            String externalId,
+            Long teamId,
+            MappingStatusEnum status,
+            String method
+    ) {
+        if (providerCode == null || externalId == null) {
+            return;
+        }
+        if (existing != null) {
+            existing.setTeamId(teamId);
+            existing.setMappingStatus(status);
+            existing.setMappingMethod(method);
+            providerTeamMappingMapper.updateById(existing);
+            return;
+        }
+        ProviderTeamMapping mapping = new ProviderTeamMapping();
+        mapping.setTeamId(teamId);
+        mapping.setProviderCode(providerCode);
+        mapping.setExternalTeamId(externalId);
+        mapping.setMappingStatus(status);
+        mapping.setMappingMethod(method);
+        providerTeamMappingMapper.insert(mapping);
+    }
+
+    private static boolean isConfirmed(MappingStatusEnum status) {
+        return status == MappingStatusEnum.AUTO_CONFIRMED
+                || status == MappingStatusEnum.MANUAL_CONFIRMED;
     }
 
     private List<Team> findExactNameHits(String normalizedKey) {

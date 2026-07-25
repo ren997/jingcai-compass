@@ -14,6 +14,15 @@ public interface MatchMappingService {
     MatchMapResultDto resolve(MatchMapRequestDto request);
 
     /**
+     * 只读取已经确认的映射；不存在时返回 null，不创建候选。
+     *
+     * @param providerCode Provider 业务编码
+     * @param externalMatchId Provider 侧比赛 ID
+     * @return 已确认映射结果，不存在时返回 {@code null}
+     */
+    MatchMapResultDto findConfirmed(String providerCode, String externalMatchId);
+
+    /**
      * 待复核队列：status=PENDING，按 updatedAt 倒序。
      *
      * @param providerCode 可空；非空时按供应商过滤

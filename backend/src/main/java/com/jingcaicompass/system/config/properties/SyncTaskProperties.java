@@ -13,8 +13,19 @@ import java.time.Duration;
 public record SyncTaskProperties(
         boolean enabled,
         @Valid @NotNull SportteryPoolTaskProperties sportteryPool,
-        @Valid @NotNull AsianOddsTaskProperties asianOdds
+        @Valid @NotNull AsianOddsTaskProperties asianOdds,
+        @Valid @NotNull DataPipelineTaskProperties dataPipeline
 ) {
+
+    @AssertTrue(message = "app.tasks.data-pipeline.enabled cannot be combined with individual sync tasks")
+    public boolean isDataPipelineExclusive() {
+        return dataPipeline == null
+                || !dataPipeline.enabled()
+                || (sportteryPool != null
+                && asianOdds != null
+                && !sportteryPool.enabled()
+                && !asianOdds.enabled());
+    }
 
     public record SportteryPoolTaskProperties(
             boolean enabled,
@@ -45,6 +56,23 @@ public record SyncTaskProperties(
         }
 
         @AssertTrue(message = "app.tasks.asian-odds.initial-delay must not be negative")
+        public boolean isInitialDelayValid() {
+            return initialDelay != null && !initialDelay.isNegative();
+        }
+    }
+
+    public record DataPipelineTaskProperties(
+            boolean enabled,
+            @NotNull Duration fixedDelay,
+            @NotNull Duration initialDelay
+    ) {
+
+        @AssertTrue(message = "app.tasks.data-pipeline.fixed-delay must be at least 1 second")
+        public boolean isFixedDelayValid() {
+            return fixedDelay != null && fixedDelay.compareTo(Duration.ofSeconds(1)) >= 0;
+        }
+
+        @AssertTrue(message = "app.tasks.data-pipeline.initial-delay must not be negative")
         public boolean isInitialDelayValid() {
             return initialDelay != null && !initialDelay.isNegative();
         }

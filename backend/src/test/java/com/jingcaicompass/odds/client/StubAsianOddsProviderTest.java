@@ -18,11 +18,14 @@ class StubAsianOddsProviderTest {
 
         var odds = provider.fetchPreMatchOdds(new AsianOddsQueryDto(null, null, null, null));
 
-        assertThat(odds).hasSize(5);
+        assertThat(odds).hasSize(10);
         assertThat(odds)
                 .filteredOn(match -> match.lines().isEmpty())
                 .extracting(match -> match.providerMatchId())
-                .containsExactly("asian-stub-003");
+                .containsExactly(
+                        "asian-stub-003",
+                        "asian-stub-missing-window-001"
+                );
         assertThat(odds)
                 .filteredOn(match -> match.homeTeamName().contains("别名"))
                 .hasSize(1);
@@ -31,6 +34,15 @@ class StubAsianOddsProviderTest {
                 .singleElement()
                 .extracting(match -> match.kickoffTime())
                 .isEqualTo(OffsetDateTime.parse("2026-07-22T22:30:00+08:00"));
+        assertThat(odds)
+                .extracting(match -> match.providerMatchId())
+                .contains(
+                        "asian-stub-unknown-001",
+                        "asian-stub-time-conflict-window-001",
+                        "asian-stub-missing-window-001",
+                        "asian-stub-failure-001",
+                        "asian-stub-manual-001"
+                );
     }
 
     @Test
@@ -44,7 +56,7 @@ class StubAsianOddsProviderTest {
 
         var odds = provider.fetchPreMatchOdds(query);
 
-        assertThat(odds).hasSize(2);
+        assertThat(odds).hasSize(5);
         assertThat(odds).allSatisfy(match ->
                 assertThat(match.lines()).allSatisfy(line ->
                         assertThat(line.bookmakerCode()).isEqualToIgnoringCase("pinnacle")));

@@ -32,6 +32,8 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
     static final String METHOD_ALIAS = "ALIAS";
     static final String METHOD_EXACT_NAME = "EXACT_NAME";
     static final String METHOD_NAME_CANDIDATE = "NAME_CANDIDATE";
+    static final String METHOD_NAME_CANDIDATE_REUSE = "NAME_CANDIDATE_REUSE";
+    static final String METHOD_REJECTED_REUSE = "REJECTED_REUSE";
 
     private final LeagueMapper leagueMapper;
     private final LeagueAliasMapper leagueAliasMapper;
@@ -58,16 +60,21 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
         String providerCode = blankToNull(request.providerCode());
         String externalId = blankToNull(request.externalId());
 
-        // 1) 已确认外部 ID 映射优先
+        // 1) 外部 ID 映射优先；PENDING/REJECTED 也必须稳定复用，避免重跑静默确认
+        ProviderLeagueMapping externalMapping = null;
         if (providerCode != null && externalId != null) {
-            ProviderLeagueMapping confirmed = findConfirmedExternalMapping(providerCode, externalId);
-            if (confirmed != null) {
+            externalMapping = findExternalMapping(providerCode, externalId);
+            if (externalMapping != null && isConfirmed(externalMapping.getMappingStatus())) {
                 return new EntityNormalizeResultDto(
-                        confirmed.getLeagueId(),
+                        externalMapping.getLeagueId(),
                         EntityNormalizeOutcomeEnum.RESOLVED,
-                        confirmed.getMappingStatus(),
+                        externalMapping.getMappingStatus(),
                         METHOD_EXTERNAL_ID
                 );
+            }
+            if (externalMapping != null
+                    && externalMapping.getMappingStatus() == MappingStatusEnum.REJECTED) {
+                return unresolvedExternalMapping(externalMapping, METHOD_REJECTED_REUSE);
             }
         }
 
@@ -81,6 +88,14 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
                 .eq(LeagueAlias::getAliasNormalized, normalizedKey)
                 .last("LIMIT 1"));
         if (alias != null) {
+            confirmExternalMapping(
+                    externalMapping,
+                    providerCode,
+                    externalId,
+                    alias.getLeagueId(),
+                    MappingStatusEnum.MANUAL_CONFIRMED,
+                    METHOD_ALIAS
+            );
             return new EntityNormalizeResultDto(
                     alias.getLeagueId(),
                     EntityNormalizeOutcomeEnum.RESOLVED,
@@ -89,18 +104,31 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
             );
         }
 
-        // 3) 标准名规范化后唯一精确命中
+        // 3) 旧候选在人工确认前保持 PENDING，不被候选自身名称反向“精确命中”
+        if (externalMapping != null) {
+            return unresolvedExternalMapping(externalMapping, METHOD_NAME_CANDIDATE_REUSE);
+        }
+
+        // 4) 标准名规范化后唯一精确命中
         List<League> exactHits = findExactNameHits(normalizedKey);
         if (exactHits.size() == 1) {
+            confirmExternalMapping(
+                    null,
+                    providerCode,
+                    externalId,
+                    exactHits.get(0).getId(),
+                    MappingStatusEnum.AUTO_CONFIRMED,
+                    METHOD_EXACT_NAME
+            );
             return new EntityNormalizeResultDto(
                     exactHits.get(0).getId(),
                     EntityNormalizeOutcomeEnum.RESOLVED,
-                    null,
+                    providerCode == null || externalId == null ? null : MappingStatusEnum.AUTO_CONFIRMED,
                     METHOD_EXACT_NAME
             );
         }
 
-        // 4) 新建候选；有 externalId 时写 PENDING 映射
+        // 5) 新建候选；有 externalId 时写 PENDING 映射
         League created = new League();
         created.setNameZh(displayName);
         created.setNameEn(looksPrimarilyLatin(displayName) ? displayName : null);
@@ -165,16 +193,55 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
         return alias;
     }
 
-    private ProviderLeagueMapping findConfirmedExternalMapping(String providerCode, String externalId) {
+    private ProviderLeagueMapping findExternalMapping(String providerCode, String externalId) {
         return providerLeagueMappingMapper.selectOne(new LambdaQueryWrapper<ProviderLeagueMapping>()
                 .eq(ProviderLeagueMapping::getProviderCode, providerCode)
                 .eq(ProviderLeagueMapping::getExternalLeagueId, externalId)
-                .in(
-                        ProviderLeagueMapping::getMappingStatus,
-                        MappingStatusEnum.AUTO_CONFIRMED,
-                        MappingStatusEnum.MANUAL_CONFIRMED
-                )
                 .last("LIMIT 1"));
+    }
+
+    private EntityNormalizeResultDto unresolvedExternalMapping(
+            ProviderLeagueMapping mapping,
+            String method
+    ) {
+        return new EntityNormalizeResultDto(
+                mapping.getLeagueId(),
+                EntityNormalizeOutcomeEnum.CANDIDATE_CREATED,
+                mapping.getMappingStatus(),
+                method
+        );
+    }
+
+    private void confirmExternalMapping(
+            ProviderLeagueMapping existing,
+            String providerCode,
+            String externalId,
+            Long leagueId,
+            MappingStatusEnum status,
+            String method
+    ) {
+        if (providerCode == null || externalId == null) {
+            return;
+        }
+        if (existing != null) {
+            existing.setLeagueId(leagueId);
+            existing.setMappingStatus(status);
+            existing.setMappingMethod(method);
+            providerLeagueMappingMapper.updateById(existing);
+            return;
+        }
+        ProviderLeagueMapping mapping = new ProviderLeagueMapping();
+        mapping.setLeagueId(leagueId);
+        mapping.setProviderCode(providerCode);
+        mapping.setExternalLeagueId(externalId);
+        mapping.setMappingStatus(status);
+        mapping.setMappingMethod(method);
+        providerLeagueMappingMapper.insert(mapping);
+    }
+
+    private static boolean isConfirmed(MappingStatusEnum status) {
+        return status == MappingStatusEnum.AUTO_CONFIRMED
+                || status == MappingStatusEnum.MANUAL_CONFIRMED;
     }
 
     private List<League> findExactNameHits(String normalizedKey) {

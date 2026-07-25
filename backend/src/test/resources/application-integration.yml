@@ -31,3 +31,7 @@ app:
       enabled: false
       fixed-delay: 20m
       initial-delay: 45s
+    data-pipeline:
+      enabled: false
+      fixed-delay: 20m
+      initial-delay: 45s

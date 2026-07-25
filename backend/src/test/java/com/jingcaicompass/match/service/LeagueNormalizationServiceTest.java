@@ -85,6 +85,67 @@ class LeagueNormalizationServiceTest {
         assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.MANUAL_CONFIRMED);
     }
 
+    @Test
+    void pendingExternalMappingIsReusedWithoutSilentConfirmation() {
+        ProviderLeagueMapping mapping = new ProviderLeagueMapping();
+        mapping.setLeagueId(12L);
+        mapping.setMappingStatus(MappingStatusEnum.PENDING);
+        when(providerLeagueMappingMapper.selectOne(any(Wrapper.class))).thenReturn(mapping);
+        when(leagueAliasMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        EntityNormalizeResultDto result = service.resolve(
+                new EntityNormalizeRequestDto("STUB", "NAME:league", "演示联赛")
+        );
+
+        assertThat(result.entityId()).isEqualTo(12L);
+        assertThat(result.outcome()).isEqualTo(EntityNormalizeOutcomeEnum.CANDIDATE_CREATED);
+        assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.PENDING);
+        assertThat(result.method()).isEqualTo(
+                LeagueNormalizationServiceImpl.METHOD_NAME_CANDIDATE_REUSE
+        );
+        verify(leagueMapper, never()).selectList(null);
+        verify(leagueMapper, never()).insert(any(League.class));
+    }
+
+    @Test
+    void rejectedExternalMappingIsNeverRestoredAutomatically() {
+        ProviderLeagueMapping mapping = new ProviderLeagueMapping();
+        mapping.setLeagueId(13L);
+        mapping.setMappingStatus(MappingStatusEnum.REJECTED);
+        when(providerLeagueMappingMapper.selectOne(any(Wrapper.class))).thenReturn(mapping);
+
+        EntityNormalizeResultDto result = service.resolve(
+                new EntityNormalizeRequestDto("STUB", "NAME:rejected", "未知联赛")
+        );
+
+        assertThat(result.outcome()).isEqualTo(EntityNormalizeOutcomeEnum.CANDIDATE_CREATED);
+        assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.REJECTED);
+        assertThat(result.method()).isEqualTo(LeagueNormalizationServiceImpl.METHOD_REJECTED_REUSE);
+        verify(leagueAliasMapper, never()).selectOne(any(Wrapper.class));
+        verify(providerLeagueMappingMapper, never()).updateById(mapping);
+    }
+
+    @Test
+    void confirmedAliasPromotesExistingPendingExternalMapping() {
+        ProviderLeagueMapping mapping = new ProviderLeagueMapping();
+        mapping.setLeagueId(14L);
+        mapping.setMappingStatus(MappingStatusEnum.PENDING);
+        LeagueAlias alias = new LeagueAlias();
+        alias.setLeagueId(15L);
+        when(providerLeagueMappingMapper.selectOne(any(Wrapper.class))).thenReturn(mapping);
+        when(leagueAliasMapper.selectOne(any(Wrapper.class))).thenReturn(alias);
+
+        EntityNormalizeResultDto result = service.resolve(
+                new EntityNormalizeRequestDto("STUB", "NAME:alias", "英超别名")
+        );
+
+        assertThat(result.entityId()).isEqualTo(15L);
+        assertThat(result.outcome()).isEqualTo(EntityNormalizeOutcomeEnum.RESOLVED);
+        assertThat(mapping.getLeagueId()).isEqualTo(15L);
+        assertThat(mapping.getMappingStatus()).isEqualTo(MappingStatusEnum.MANUAL_CONFIRMED);
+        verify(providerLeagueMappingMapper).updateById(mapping);
+    }
+
     @ParameterizedTest
     @CsvSource({
             "英超, 英 超",

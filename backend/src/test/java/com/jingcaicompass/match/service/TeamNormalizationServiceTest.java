@@ -65,6 +65,67 @@ class TeamNormalizationServiceTest {
         verify(teamMapper, never()).insert(any(Team.class));
     }
 
+    @Test
+    void pendingExternalMappingIsReusedWithoutCreatingAnotherTeam() {
+        ProviderTeamMapping mapping = new ProviderTeamMapping();
+        mapping.setTeamId(21L);
+        mapping.setMappingStatus(MappingStatusEnum.PENDING);
+        when(providerTeamMappingMapper.selectOne(any(Wrapper.class))).thenReturn(mapping);
+        when(teamAliasMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        EntityNormalizeResultDto result = service.resolve(
+                new EntityNormalizeRequestDto("STUB", "NAME:team", "演示主队")
+        );
+
+        assertThat(result.entityId()).isEqualTo(21L);
+        assertThat(result.outcome()).isEqualTo(EntityNormalizeOutcomeEnum.CANDIDATE_CREATED);
+        assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.PENDING);
+        assertThat(result.method()).isEqualTo(
+                TeamNormalizationServiceImpl.METHOD_NAME_CANDIDATE_REUSE
+        );
+        verify(teamMapper, never()).selectList(null);
+        verify(teamMapper, never()).insert(any(Team.class));
+    }
+
+    @Test
+    void rejectedExternalMappingIsNeverRestoredAutomatically() {
+        ProviderTeamMapping mapping = new ProviderTeamMapping();
+        mapping.setTeamId(22L);
+        mapping.setMappingStatus(MappingStatusEnum.REJECTED);
+        when(providerTeamMappingMapper.selectOne(any(Wrapper.class))).thenReturn(mapping);
+
+        EntityNormalizeResultDto result = service.resolve(
+                new EntityNormalizeRequestDto("STUB", "NAME:rejected", "未知球队")
+        );
+
+        assertThat(result.outcome()).isEqualTo(EntityNormalizeOutcomeEnum.CANDIDATE_CREATED);
+        assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.REJECTED);
+        assertThat(result.method()).isEqualTo(TeamNormalizationServiceImpl.METHOD_REJECTED_REUSE);
+        verify(teamAliasMapper, never()).selectOne(any(Wrapper.class));
+        verify(providerTeamMappingMapper, never()).updateById(mapping);
+    }
+
+    @Test
+    void confirmedAliasPromotesExistingPendingExternalMapping() {
+        ProviderTeamMapping mapping = new ProviderTeamMapping();
+        mapping.setTeamId(23L);
+        mapping.setMappingStatus(MappingStatusEnum.PENDING);
+        TeamAlias alias = new TeamAlias();
+        alias.setTeamId(24L);
+        when(providerTeamMappingMapper.selectOne(any(Wrapper.class))).thenReturn(mapping);
+        when(teamAliasMapper.selectOne(any(Wrapper.class))).thenReturn(alias);
+
+        EntityNormalizeResultDto result = service.resolve(
+                new EntityNormalizeRequestDto("STUB", "NAME:alias", "红魔")
+        );
+
+        assertThat(result.entityId()).isEqualTo(24L);
+        assertThat(result.outcome()).isEqualTo(EntityNormalizeOutcomeEnum.RESOLVED);
+        assertThat(mapping.getTeamId()).isEqualTo(24L);
+        assertThat(mapping.getMappingStatus()).isEqualTo(MappingStatusEnum.MANUAL_CONFIRMED);
+        verify(providerTeamMappingMapper).updateById(mapping);
+    }
+
     @ParameterizedTest
     @CsvSource({
             "曼联足球俱乐部, 曼联",

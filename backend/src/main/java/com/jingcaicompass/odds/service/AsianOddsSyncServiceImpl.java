@@ -11,11 +11,16 @@ import com.jingcaicompass.data.mapper.DataSyncRunMapper;
 import com.jingcaicompass.data.service.ProviderSyncTemplate;
 import com.jingcaicompass.match.dto.MatchMapRequestDto;
 import com.jingcaicompass.match.dto.MatchMapResultDto;
+import com.jingcaicompass.match.dto.EntityNormalizeRequestDto;
+import com.jingcaicompass.match.dto.EntityNormalizeResultDto;
 import com.jingcaicompass.match.entity.MatchEntity;
+import com.jingcaicompass.match.enums.EntityNormalizeOutcomeEnum;
 import com.jingcaicompass.match.enums.MatchMapOutcomeEnum;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.service.MatchMappingService;
+import com.jingcaicompass.match.service.TeamNormalizationService;
+import com.jingcaicompass.match.support.ProviderEntityKeySupport;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.dto.AsianOddsMatchOddsDto;
 import com.jingcaicompass.odds.dto.AsianOddsQueryDto;
@@ -53,6 +58,7 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
     private final AsianOddsPayloadMapper payloadMapper;
     private final AsianOddsSnapshotWriter snapshotWriter;
     private final MatchMappingService matchMappingService;
+    private final TeamNormalizationService teamNormalizationService;
     private final MatchMapper matchMapper;
     private final AsianOddsSnapshotMapper asianOddsSnapshotMapper;
     private final DataSyncRunMapper dataSyncRunMapper;
@@ -65,6 +71,7 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
             AsianOddsPayloadMapper payloadMapper,
             AsianOddsSnapshotWriter snapshotWriter,
             MatchMappingService matchMappingService,
+            TeamNormalizationService teamNormalizationService,
             MatchMapper matchMapper,
             AsianOddsSnapshotMapper asianOddsSnapshotMapper,
             DataSyncRunMapper dataSyncRunMapper,
@@ -76,6 +83,7 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
         this.payloadMapper = payloadMapper;
         this.snapshotWriter = snapshotWriter;
         this.matchMappingService = matchMappingService;
+        this.teamNormalizationService = teamNormalizationService;
         this.matchMapper = matchMapper;
         this.asianOddsSnapshotMapper = asianOddsSnapshotMapper;
         this.dataSyncRunMapper = dataSyncRunMapper;
@@ -134,12 +142,21 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
 
                     for (AsianOddsMatchOddsDto matchOdds : matches) {
                         try {
+                            // 4) 跳过滚球，优先复用已确认比赛映射
                             if (matchOdds.live()) {
                                 skippedLive.incrementAndGet();
                                 success++;
                                 continue;
                             }
-                            MatchMapResultDto mapped = matchMappingService.resolve(toMapRequest(matchOdds));
+                            MatchMapResultDto mapped = matchMappingService.findConfirmed(
+                                    asianOddsProvider.providerCode(),
+                                    matchOdds.providerMatchId()
+                            );
+                            if (mapped == null) {
+                                mapped = matchMappingService.resolve(toMapRequest(matchOdds));
+                            }
+
+                            // 5) 未确认映射或盘口不完整时只计数，不写快照
                             if (!isConfirmed(mapped)) {
                                 skippedUnmapped.incrementAndGet();
                                 success++;
@@ -185,6 +202,7 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
                 }
         );
 
+        // 6) 汇总新增快照、覆盖比赛数和本次额度消耗
         int covered = countCoveredMatches(dayMatches);
         int quotaCostUsed = usedQuota + (outcome.syncRun() == null || outcome.syncRun().getQuotaCost() == null
                 ? 0
@@ -230,20 +248,40 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
 
     private MatchMapRequestDto toMapRequest(AsianOddsMatchOddsDto matchOdds) {
         Instant kickoff = matchOdds.kickoffTime() == null ? null : matchOdds.kickoffTime().toInstant();
+        String externalHomeTeamId = ProviderEntityKeySupport.nameKey(matchOdds.homeTeamName());
+        String externalAwayTeamId = ProviderEntityKeySupport.nameKey(matchOdds.awayTeamName());
+        Long homeTeamId = resolveTeamId(externalHomeTeamId, matchOdds.homeTeamName());
+        Long awayTeamId = resolveTeamId(externalAwayTeamId, matchOdds.awayTeamName());
         return new MatchMapRequestDto(
                 asianOddsProvider.providerCode(),
                 matchOdds.providerMatchId(),
                 null,
+                externalHomeTeamId,
+                externalAwayTeamId,
                 null,
-                null,
-                null,
-                null,
-                null,
+                homeTeamId,
+                awayTeamId,
                 null,
                 matchOdds.homeTeamName(),
                 matchOdds.awayTeamName(),
                 kickoff
         );
+    }
+
+    private Long resolveTeamId(String externalTeamId, String displayName) {
+        EntityNormalizeResultDto result = teamNormalizationService.resolve(new EntityNormalizeRequestDto(
+                asianOddsProvider.providerCode(),
+                externalTeamId,
+                displayName
+        ));
+        if (result == null
+                || result.entityId() == null
+                || result.outcome() != EntityNormalizeOutcomeEnum.RESOLVED
+                || result.mappingStatus() == MappingStatusEnum.PENDING
+                || result.mappingStatus() == MappingStatusEnum.REJECTED) {
+            return null;
+        }
+        return result.entityId();
     }
 
     private static boolean isConfirmed(MatchMapResultDto mapped) {

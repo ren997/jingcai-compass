@@ -61,3 +61,7 @@ app:
       enabled: ${ASIAN_ODDS_TASK_ENABLED:false}
       fixed-delay: ${ASIAN_ODDS_FIXED_DELAY:20m}
       initial-delay: ${ASIAN_ODDS_INITIAL_DELAY:45s}
+    data-pipeline:
+      enabled: ${DATA_PIPELINE_TASK_ENABLED:false}
+      fixed-delay: ${DATA_PIPELINE_FIXED_DELAY:20m}
+      initial-delay: ${DATA_PIPELINE_INITIAL_DELAY:45s}

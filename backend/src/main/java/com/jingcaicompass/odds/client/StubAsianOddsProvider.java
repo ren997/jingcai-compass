@@ -46,6 +46,8 @@ public class StubAsianOddsProvider implements AsianOddsProvider {
                 "stub/asianodds/odds-missing-line.json", AsianOddsMatchOddsDto.class));
         odds.addAll(StubFixtureLoader.readList(
                 "stub/asianodds/odds-alias-conflict.json", AsianOddsMatchOddsDto.class));
+        odds.addAll(StubFixtureLoader.readList(
+                "stub/asianodds/odds-pipeline-scenarios.json", AsianOddsMatchOddsDto.class));
         this.matchOdds = List.copyOf(odds);
     }
 

@@ -67,18 +67,9 @@ public class MatchMappingServiceImpl implements MatchMappingService {
         String externalMatchId = request.externalMatchId().trim();
 
         // 1) 已确认外部比赛映射优先复用
-        MatchSourceMapping confirmed = findConfirmed(providerCode, externalMatchId);
+        MatchMapResultDto confirmed = findConfirmed(providerCode, externalMatchId);
         if (confirmed != null) {
-            return new MatchMapResultDto(
-                    confirmed.getId(),
-                    confirmed.getMatchId(),
-                    MatchMapOutcomeEnum.REUSED,
-                    confirmed.getMappingStatus(),
-                    confirmed.getMappingConfidence(),
-                    confirmed.getMappingExplanation(),
-                    METHOD_EXTERNAL_ID_REUSE,
-                    toCandidateDtos(confirmed.getMappingCandidates())
-            );
+            return confirmed;
         }
 
         // 2) 时间窗内拉内部比赛并打分
@@ -145,6 +136,27 @@ public class MatchMappingServiceImpl implements MatchMappingService {
     }
 
     @Override
+    public MatchMapResultDto findConfirmed(String providerCode, String externalMatchId) {
+        if (!StringUtils.hasText(providerCode) || !StringUtils.hasText(externalMatchId)) {
+            return null;
+        }
+        MatchSourceMapping confirmed = findConfirmedEntity(providerCode.trim(), externalMatchId.trim());
+        if (confirmed == null) {
+            return null;
+        }
+        return new MatchMapResultDto(
+                confirmed.getId(),
+                confirmed.getMatchId(),
+                MatchMapOutcomeEnum.REUSED,
+                confirmed.getMappingStatus(),
+                confirmed.getMappingConfidence(),
+                confirmed.getMappingExplanation(),
+                METHOD_EXTERNAL_ID_REUSE,
+                toCandidateDtos(confirmed.getMappingCandidates())
+        );
+    }
+
+    @Override
     public List<MatchSourceMapping> listPending(String providerCode) {
         LambdaQueryWrapper<MatchSourceMapping> query = new LambdaQueryWrapper<MatchSourceMapping>()
                 .eq(MatchSourceMapping::getMappingStatus, MappingStatusEnum.PENDING)
@@ -155,7 +167,7 @@ public class MatchMappingServiceImpl implements MatchMappingService {
         return matchSourceMappingMapper.selectList(query);
     }
 
-    private MatchSourceMapping findConfirmed(String providerCode, String externalMatchId) {
+    private MatchSourceMapping findConfirmedEntity(String providerCode, String externalMatchId) {
         return matchSourceMappingMapper.selectOne(new LambdaQueryWrapper<MatchSourceMapping>()
                 .eq(MatchSourceMapping::getProviderCode, providerCode)
                 .eq(MatchSourceMapping::getExternalMatchId, externalMatchId)

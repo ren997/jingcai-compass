@@ -2,6 +2,7 @@ package com.jingcaicompass.odds.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -26,6 +27,7 @@ import com.jingcaicompass.match.enums.MatchMapOutcomeEnum;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.service.MatchMappingService;
+import com.jingcaicompass.match.service.TeamNormalizationService;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.dto.AsianOddsSyncRequestDto;
 import com.jingcaicompass.odds.dto.AsianOddsSyncResultDto;
@@ -59,6 +61,9 @@ class AsianOddsSyncServiceTest {
     private MatchMappingService matchMappingService;
 
     @Mock
+    private TeamNormalizationService teamNormalizationService;
+
+    @Mock
     private MatchMapper matchMapper;
 
     @Mock
@@ -88,6 +93,7 @@ class AsianOddsSyncServiceTest {
                 new AsianOddsPayloadMapper(objectMapper),
                 snapshotWriter,
                 matchMappingService,
+                teamNormalizationService,
                 matchMapper,
                 asianOddsSnapshotMapper,
                 dataSyncRunMapper,
@@ -113,6 +119,7 @@ class AsianOddsSyncServiceTest {
                 new AsianOddsPayloadMapper(objectMapper),
                 snapshotWriter,
                 matchMappingService,
+                teamNormalizationService,
                 matchMapper,
                 asianOddsSnapshotMapper,
                 dataSyncRunMapper,
@@ -145,21 +152,19 @@ class AsianOddsSyncServiceTest {
         when(dataSyncRunMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
         when(asianOddsSnapshotMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
 
-        when(matchMappingService.resolve(any())).thenAnswer(invocation -> {
-            var request = invocation.getArgument(0, com.jingcaicompass.match.dto.MatchMapRequestDto.class);
-            if ("asian-stub-001".equals(request.externalMatchId())) {
-                return new MatchMapResultDto(
+        when(matchMappingService.findConfirmed("STUB", "asian-stub-001")).thenReturn(
+                new MatchMapResultDto(
                         1L,
                         100L,
                         MatchMapOutcomeEnum.REUSED,
-                        MappingStatusEnum.AUTO_CONFIRMED,
+                        MappingStatusEnum.MANUAL_CONFIRMED,
                         new BigDecimal("1.0000"),
-                        "REUSED",
+                        "MANUAL",
                         "EXTERNAL_ID_REUSE",
                         List.of()
-                );
-            }
-            return new MatchMapResultDto(
+                )
+        );
+        when(matchMappingService.resolve(any())).thenReturn(new MatchMapResultDto(
                     2L,
                     101L,
                     MatchMapOutcomeEnum.PENDING,
@@ -168,8 +173,7 @@ class AsianOddsSyncServiceTest {
                     "PENDING",
                     "SCORE_PENDING",
                     List.of()
-            );
-        });
+        ));
 
         when(snapshotWriter.writeLines(eq(100L), eq("STUB"), any(), any())).thenReturn(
                 new AsianOddsSnapshotWriter.WriteResult(new ProviderParseResult(1, 0, null), 1, 0)
@@ -278,5 +282,8 @@ class AsianOddsSyncServiceTest {
         assertThat(result.coveredMatchCount()).isEqualTo(1);
         assertThat(result.coverageRate()).isEqualByComparingTo("1.0000");
         verify(snapshotWriter).writeLines(eq(100L), eq("STUB"), any(), eq("f".repeat(64)));
+        verify(matchMappingService, never()).resolve(argThat(
+                request -> "asian-stub-001".equals(request.externalMatchId())
+        ));
     }
 }

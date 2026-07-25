@@ -46,3 +46,8 @@ app:
       enabled: false
       fixed-delay: 20m
       initial-delay: 45s
+    # 开启整链路时，sporttery-pool/asian-odds 两个独立任务必须保持关闭。
+    data-pipeline:
+      enabled: false
+      fixed-delay: 20m
+      initial-delay: 45s

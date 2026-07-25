@@ -7,6 +7,8 @@ import com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.autoconfigure.validation.ValidationAutoConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -46,7 +48,10 @@ class ApplicationConfigurationPropertiesTest {
                     "app.tasks.sporttery-pool.initial-delay=30s",
                     "app.tasks.asian-odds.enabled=false",
                     "app.tasks.asian-odds.fixed-delay=20m",
-                    "app.tasks.asian-odds.initial-delay=45s"
+                    "app.tasks.asian-odds.initial-delay=45s",
+                    "app.tasks.data-pipeline.enabled=false",
+                    "app.tasks.data-pipeline.fixed-delay=20m",
+                    "app.tasks.data-pipeline.initial-delay=45s"
             );
 
     @Test
@@ -74,6 +79,9 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(tasks.sportteryPool().fixedDelay()).isEqualTo(Duration.ofMinutes(15));
             assertThat(tasks.asianOdds().enabled()).isFalse();
             assertThat(tasks.asianOdds().fixedDelay()).isEqualTo(Duration.ofMinutes(20));
+            assertThat(tasks.dataPipeline().enabled()).isFalse();
+            assertThat(tasks.dataPipeline().fixedDelay()).isEqualTo(Duration.ofMinutes(20));
+            assertThat(tasks.dataPipeline().initialDelay()).isEqualTo(Duration.ofSeconds(45));
 
             PaginationProperties pagination = context.getBean(PaginationProperties.class);
             assertThat(pagination.maxPageSize()).isEqualTo(100);
@@ -125,6 +133,34 @@ class ApplicationConfigurationPropertiesTest {
                     assertThat(context.getStartupFailure())
                             .rootCause()
                             .hasMessageContaining("app.pagination.max-page-size");
+                });
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"sporttery-pool", "asian-odds"})
+    void rejectsPipelineCombinedWithIndividualTasks(String individualTask) {
+        contextRunner
+                .withPropertyValues(
+                        "app.tasks.data-pipeline.enabled=true",
+                        "app.tasks." + individualTask + ".enabled=true"
+                )
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.tasks.data-pipeline.enabled");
+                });
+    }
+
+    @Test
+    void rejectsPipelineDelayBelowOneSecond() {
+        contextRunner
+                .withPropertyValues("app.tasks.data-pipeline.fixed-delay=0s")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.tasks.data-pipeline.fixed-delay");
                 });
     }
 

@@ -5,8 +5,8 @@
 - 文档版本：v0.3
 - 最后更新：2026-07-25
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：无（可开始 `T006`）
-- 下一任务：`T006 PostgreSQL 空库迁移集成验证`
+- 当前活动任务：`T006 PostgreSQL 空库迁移集成验证`
+- 下一任务：`T207 双源同步编排闭环`
 - 最近完成增量：`T206 亚盘快照同步`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
@@ -356,7 +356,7 @@ T305 + T405 + T505 + T602 + T604 -> T605
 
 ### T006 PostgreSQL 空库迁移集成验证
 
-- 状态：`TODO`
+- 状态：`IN_PROGRESS`
 - 优先级：P0
 - 依赖：T002；承接 T003 跳过后的 PostgreSQL 集成验证缺口
 - 交付物：
@@ -386,6 +386,8 @@ T305 + T405 + T505 + T602 + T604 -> T605
   - 集成测试明确拒绝共享云端和开发数据库。
   - 后续每个 migration 都进入同一条空库验证链路。
 - 恢复入口：先确认可用的托管 CI Runner 或远程临时 PostgreSQL，再选择具体实现，不重新启用共享云数据库测试。
+- 执行记录：
+  - 2026-07-25：开始执行；使用 GitHub Actions 托管 Runner、Java 21、Maven Failsafe 和 Testcontainers PostgreSQL 16；保留本地快速测试无容器，预计验证 `mvn -f backend/pom.xml -Pintegration verify`、`npm run backend:test` 与 `git diff --check`。
 
 ## 6. M1 Provider 基础与数据源验证
 

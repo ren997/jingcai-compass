@@ -1,4 +1,4 @@
-package com.jingcaicompass.autoconfigure;
+package com.jingcaicompass.system.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;

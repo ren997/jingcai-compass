@@ -16,8 +16,12 @@ class MatchMappingEnumsTest {
                 .isEqualTo(MappingStatusEnum.AUTO_CONFIRMED);
         assertThat(MappingStatusEnum.fromCode("MANUAL_CONFIRMED"))
                 .isEqualTo(MappingStatusEnum.MANUAL_CONFIRMED);
+        assertThat(NormalizationPendingReasonEnum.fromCode("HOME_TEAM_PENDING"))
+                .isEqualTo(NormalizationPendingReasonEnum.HOME_TEAM_PENDING);
         assertThat(OddsSnapshotTypeEnum.fromCode("PRE_KICKOFF"))
                 .isEqualTo(OddsSnapshotTypeEnum.PRE_KICKOFF);
         assertThat(OddsSnapshotTypeEnum.FIRST_SEEN.getDesc()).isEqualTo("首次可见");
+        assertThat(NormalizationPendingReasonEnum.AWAY_TEAM_PENDING.getDesc())
+                .isEqualTo("客队待确认");
     }
 }

@@ -13,6 +13,12 @@ public final class ProviderEntityKeySupport {
     private ProviderEntityKeySupport() {
     }
 
+    /**
+     * 将 Provider 展示名称转换为不包含原文的稳定来源键。
+     *
+     * @param displayName Provider 原始展示名称
+     * @return 以 {@code NAME:} 开头的 SHA-256 来源键
+     */
     public static String nameKey(String displayName) {
         String normalized = NameNormalizationSupport.normalizedKey(displayName);
         if (!StringUtils.hasText(normalized)) {

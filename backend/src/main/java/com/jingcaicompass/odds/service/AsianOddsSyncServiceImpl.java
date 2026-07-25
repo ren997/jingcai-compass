@@ -142,6 +142,7 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
 
                     for (AsianOddsMatchOddsDto matchOdds : matches) {
                         try {
+                            // 4) 跳过滚球，优先复用已确认比赛映射
                             if (matchOdds.live()) {
                                 skippedLive.incrementAndGet();
                                 success++;
@@ -154,6 +155,8 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
                             if (mapped == null) {
                                 mapped = matchMappingService.resolve(toMapRequest(matchOdds));
                             }
+
+                            // 5) 未确认映射或盘口不完整时只计数，不写快照
                             if (!isConfirmed(mapped)) {
                                 skippedUnmapped.incrementAndGet();
                                 success++;
@@ -199,6 +202,7 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
                 }
         );
 
+        // 6) 汇总新增快照、覆盖比赛数和本次额度消耗
         int covered = countCoveredMatches(dayMatches);
         int quotaCostUsed = usedQuota + (outcome.syncRun() == null || outcome.syncRun().getQuotaCost() == null
                 ? 0

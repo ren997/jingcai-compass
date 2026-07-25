@@ -36,8 +36,16 @@ public class MatchNormalizationWorker {
         this.teamNormalizationService = teamNormalizationService;
     }
 
+    /**
+     * 在独立事务中仅补齐指定比赛为空的标准实体 ID。
+     *
+     * @param matchId 内部比赛 ID
+     * @param providerCode 体彩 Provider 业务编码
+     * @return 本场是否更新、是否完成及待确认原因
+     */
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public ItemResult normalize(Long matchId, String providerCode) {
+        // 1) 校验来源并在当前独立事务中重新读取比赛
         if (matchId == null) {
             throw new IllegalArgumentException("matchId must not be null");
         }
@@ -53,6 +61,7 @@ public class MatchNormalizationWorker {
         EnumSet<NormalizationPendingReasonEnum> pendingReasons =
                 EnumSet.noneOf(NormalizationPendingReasonEnum.class);
 
+        // 2) 仅在联赛 ID 为空时解析，不覆盖已有人工或自动确认值
         if (match.getLeagueId() == null) {
             EntityNormalizeResultDto result = leagueNormalizationService.resolve(request(
                     providerCode,
@@ -66,6 +75,7 @@ public class MatchNormalizationWorker {
             }
         }
 
+        // 3) 仅在主队 ID 为空时解析
         if (match.getHomeTeamId() == null) {
             EntityNormalizeResultDto result = teamNormalizationService.resolve(request(
                     providerCode,
@@ -79,6 +89,7 @@ public class MatchNormalizationWorker {
             }
         }
 
+        // 4) 仅在客队 ID 为空时解析
         if (match.getAwayTeamId() == null) {
             EntityNormalizeResultDto result = teamNormalizationService.resolve(request(
                     providerCode,
@@ -92,10 +103,12 @@ public class MatchNormalizationWorker {
             }
         }
 
+        // 5) 本场有确认结果时一次性更新，任一异常触发本场整体回滚
         if (updated) {
             matchMapper.updateById(match);
         }
 
+        // 6) 根据最终字段生成完成状态与明确的待确认原因
         boolean normalized = match.getLeagueId() != null
                 && match.getHomeTeamId() != null
                 && match.getAwayTeamId() != null;
@@ -131,6 +144,14 @@ public class MatchNormalizationWorker {
                 && result.mappingStatus() != MappingStatusEnum.REJECTED;
     }
 
+    /**
+     * 单场标准化事务结果。
+     *
+     * @param matchId 内部比赛 ID
+     * @param updated 本次是否写入标准实体 ID
+     * @param normalized 三个标准实体 ID 是否均已确认
+     * @param pendingReasons 未完成时的待确认原因
+     */
     public record ItemResult(
             Long matchId,
             boolean updated,

@@ -70,8 +70,10 @@ public class DataPipelineServiceImpl implements DataPipelineService {
 
     @Override
     public DataPipelineResultDto run(LocalDate businessDate) {
+        // 1) 校验竞彩业务日，流水线不隐式使用系统日期
         Objects.requireNonNull(businessDate, "businessDate must not be null");
 
+        // 2) 先同步体彩；FAILED 时短路，已保存的同步运行记录仍保留
         SportteryPoolSyncResultDto sporttery;
         try {
             sporttery = sportteryPoolSyncService.sync(new SportteryPoolSyncRequestDto(businessDate));
@@ -107,8 +109,10 @@ public class DataPipelineServiceImpl implements DataPipelineService {
             );
         }
 
+        // 3) 对当日已写入比赛逐场执行独立事务标准化
         NormalizationBackfillResultDto normalization = normalizationBackfillService.backfill(businessDate);
 
+        // 4) 同步亚盘并完成比赛映射和快照写入；异常不回滚前两阶段
         AsianOddsSyncResultDto asianOdds;
         try {
             asianOdds = asianOddsSyncService.sync(new AsianOddsSyncRequestDto(businessDate));
@@ -140,6 +144,7 @@ public class DataPipelineServiceImpl implements DataPipelineService {
             );
         }
 
+        // 5) 汇总两个同步运行、标准化、映射和覆盖率形成单次报告
         ProviderSyncOutcome asianOutcome = asianOdds == null ? null : asianOdds.outcome();
         SyncStatusEnum asianStatus = asianOdds == null || (asianOutcome == null && !asianOdds.quotaBlocked())
                 ? SyncStatusEnum.FAILED

@@ -42,6 +42,7 @@ public class MatchNormalizationBackfillServiceImpl implements MatchNormalization
 
     @Override
     public NormalizationBackfillResultDto backfill(LocalDate businessDate) {
+        // 1) 校验业务日并按 ID 稳定读取当日已有比赛
         Objects.requireNonNull(businessDate, "businessDate must not be null");
         List<MatchEntity> matches = matchMapper.selectList(new LambdaQueryWrapper<MatchEntity>()
                 .eq(MatchEntity::getLotteryDate, businessDate)
@@ -50,6 +51,7 @@ public class MatchNormalizationBackfillServiceImpl implements MatchNormalization
             return NormalizationBackfillResultDto.empty(businessDate);
         }
 
+        // 2) 初始化完成、待确认、失败和实际更新计数
         int normalizedCount = 0;
         int pendingCount = 0;
         int failureCount = 0;
@@ -58,6 +60,7 @@ public class MatchNormalizationBackfillServiceImpl implements MatchNormalization
                 new EnumMap<>(NormalizationPendingReasonEnum.class);
         List<NormalizationFailureDto> failures = new ArrayList<>();
 
+        // 3) 每场通过 REQUIRES_NEW 独立处理，单场异常只进入失败摘要
         for (MatchEntity match : matches) {
             try {
                 MatchNormalizationWorker.ItemResult result =
@@ -92,6 +95,7 @@ public class MatchNormalizationBackfillServiceImpl implements MatchNormalization
             }
         }
 
+        // 4) 返回有限失败明细和完整分类计数
         return new NormalizationBackfillResultDto(
                 businessDate,
                 matches.size(),

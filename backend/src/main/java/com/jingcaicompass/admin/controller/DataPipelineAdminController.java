@@ -1,8 +1,8 @@
 package com.jingcaicompass.admin.controller;
 
 import com.jingcaicompass.match.dto.NormalizationBackfillRequestDto;
-import com.jingcaicompass.match.dto.NormalizationBackfillResultDto;
 import com.jingcaicompass.match.service.MatchNormalizationBackfillService;
+import com.jingcaicompass.match.vo.NormalizationBackfillResultVo;
 import com.jingcaicompass.system.api.ApiResponse;
 import jakarta.validation.Valid;
 import org.springframework.beans.factory.ObjectProvider;
@@ -28,10 +28,12 @@ public class DataPipelineAdminController {
 
     /** 只回填已有比赛，不拉取 Provider。 */
     @PostMapping("/backfill")
-    public ApiResponse<NormalizationBackfillResultDto> backfill(
+    public ApiResponse<NormalizationBackfillResultVo> backfill(
             @Valid @RequestBody NormalizationBackfillRequestDto request
     ) {
-        return ApiResponse.success(normalizationBackfillService().backfill(request.businessDate()));
+        return ApiResponse.success(NormalizationBackfillResultVo.from(
+                normalizationBackfillService().backfill(request.businessDate())
+        ));
     }
 
     private MatchNormalizationBackfillService normalizationBackfillService() {

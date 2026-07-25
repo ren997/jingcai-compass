@@ -30,9 +30,14 @@ public class DataPipelineSyncJob {
             initialDelayString = "${app.tasks.data-pipeline.initial-delay}"
     )
     public void syncTodayPipeline() {
+        // 1) 按上海时区确定当前竞彩业务日
         LocalDate businessDate = LocalDate.now(SHANGHAI);
         log.info("data pipeline job started businessDate={}", businessDate);
+
+        // 2) 调用唯一的业务日流水线入口
         var result = dataPipelineService.run(businessDate);
+
+        // 3) 输出运行 ID、各阶段计数和覆盖率，供任务监控追踪
         log.info(
                 "data pipeline job finished businessDate={} status={} sportteryRunId={} "
                         + "asianRunId={} matches={} normalized={} pending={} mappingsConfirmed={} "

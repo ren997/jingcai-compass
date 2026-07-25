@@ -1,0 +1,33 @@
+spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.security.servlet.UserDetailsServiceAutoConfiguration
+  flyway:
+    enabled: true
+    clean-disabled: true
+  data:
+    redis:
+      repositories:
+        enabled: false
+
+management:
+  health:
+    redis:
+      enabled: false
+
+app:
+  sporttery:
+    provider: stub
+  asian-odds:
+    provider: stub
+  tasks:
+    enabled: false
+    sporttery-pool:
+      enabled: false
+      fixed-delay: 15m
+      initial-delay: 30s
+    asian-odds:
+      enabled: false
+      fixed-delay: 20m
+      initial-delay: 45s

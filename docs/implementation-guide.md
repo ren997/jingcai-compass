@@ -2,8 +2,8 @@
 
 ## 1. 文档信息
 
-- 文档版本：v0.1
-- 文档日期：2026-07-22
+- 文档版本：v0.2
+- 文档日期：2026-07-25
 - 适用范围：从当前脚手架开始完成竞彩罗盘 MVP
 - 配套文档：`requirements-mvp.md`、`data-sources.md`、`technical-design.md`、`dev-tasks.md`
 
@@ -25,26 +25,23 @@
 
 ### 3.1 已有内容
 
-- Java 21 + Spring Boot 3.3.9 后端骨架。
-- Spring Web、Validation、Security、Redis、MyBatis-Plus、Flyway 和 PostgreSQL 依赖。
-- React 18 + Vite 6 + TypeScript 前端骨架。
-- 根目录 npm 开发命令和 commitlint/husky。
-- MVP、数据源和技术方案文档。
+- Java 21 + Spring Boot 3.3.9、MyBatis-Plus、Flyway、PostgreSQL、Redis、Security、Actuator 和 SpringDoc 基线。
+- local/test/prod 配置分层、统一响应/异常、traceId、分页和最小安全边界。
+- V1～V6 migration：Provider/raw、标准比赛、体彩/亚盘快照、别名、比赛映射解释和审计日志。
+- 体彩比赛池同步、联赛/球队标准化、双源比赛映射、人工复核和亚盘快照同步组件。
+- 中国体彩网/亚盘 Stub Provider、原始响应留存、同步运行、重试、额度和定时任务基线。
+- React 18 + Vite 6 + TypeScript、Ant Design、TanStack Query、React Router 和 Vitest 基线。
 - `GET /api/public/matches` 与每日比赛列表前端纵向切片。
-- `MatchQueryService` 接口、默认实现和 `SportteryProvider` 边界。
-- 可配置切换的中国体彩网公开前台 Provider 与 Stub Provider。
-- 公共配置支持环境变量覆盖，当前开发连接默认值按项目约定保存在 `application.yml`。
 
 ### 3.2 尚未完成
 
-- 没有 `application-test.yml` 和 `application-prod.yml`。
-- `application.yml` 尚未补齐任务、Actuator、SpringDoc、超时和重试配置。
-- 没有 Flyway migration。
-- 比赛池尚未持久化，没有 Mapper、Entity、原始响应和同步运行记录。
-- 尚未接入亚盘 Provider、体彩赛果 Provider 和定时同步任务。
-- 前端没有安装 Ant Design、TanStack Query 和测试依赖。
-- 当前只有比赛列表 API 契约，没有详情、预测、历史和统计契约。
-- 没有完整状态机、结算器和快照存储。
+- T003 因本机不安装 Docker 已跳过，尚缺 PostgreSQL 空库完整 migration 和应用上下文集成测试；由 T006 在 CI/远程临时环境补齐。
+- 体彩同步写库、标准化回填、比赛映射和亚盘快照组件尚未由 T207 串成可重复的端到端链路。
+- T106/T107 连续两周覆盖率、稳定性、额度和授权验证尚未完成。
+- 公共比赛列表仍直接查询 Provider，尚未切换为 PostgreSQL 事实查询。
+- 前端 Router/Query/Ant Design 已初始化，但统一 HTTP Client、布局、详情、历史和统计尚未完成。
+- 后台路径仍默认拒绝，管理员鉴权待 T601。
+- 预测、公开快照、赛果事实版本、结算和重算尚未实现。
 
 ### 3.3 开发前置原则
 
@@ -53,7 +50,7 @@
 - 每个阶段只打通一条纵向链路，不同时铺开全部页面。
 - 新增的第三方 API Key 只通过环境变量注入，不提交仓库。
 - 当前云端开发连接遵循项目已确认的直配方式；生产部署前必须迁移到部署平台密钥并轮换开发凭据。
-- 自动化测试不得连接共享云端数据库；T003 完成前通过测试配置排除外部基础设施，之后统一使用 Testcontainers。
+- 自动化测试不得连接共享云端数据库；普通单测继续排除外部基础设施，T006 使用 CI 或远程临时 PostgreSQL 运行 Testcontainers 集成测试。
 - 不修改已执行的 Flyway migration。
 - 锁定、结算和审计规则必须先写测试，再接 Controller。
 
@@ -219,7 +216,7 @@ system/security/SecurityConfig.java
 
 ### 5.5 测试数据库
 
-不要用 H2。新增 Testcontainers PostgreSQL 测试配置：
+不要用 H2。由 T006 新增 Testcontainers PostgreSQL 测试配置。开发机不安装 Docker，因此容器集成测试放在托管 CI Runner 或远程临时环境；普通本地单测不启动容器：
 
 ```text
 backend/src/test/java/com/jingcaicompass/support/PostgresTestContainerConfig.java
@@ -228,10 +225,11 @@ backend/src/test/resources/application-test.yml
 
 要求：
 
-- 测试容器启动 PostgreSQL 16。
+- CI 或远程测试容器启动 PostgreSQL 16。
 - 测试 profile 运行全部 Flyway migration。
 - 所有真实 Provider 和定时任务默认关闭。
 - `JingCaiCompassApplicationTests.contextLoads` 在没有本机数据库的环境也能通过。
+- 增加保护性断言，拒绝共享云数据库、开发数据库和非临时 JDBC URL。
 
 ### 5.6 M0 验证命令
 
@@ -265,10 +263,16 @@ backend/src/main/resources/db/migration/
 V1__init_provider_and_raw_data.sql
 V2__init_league_team_match_and_mapping.sql
 V3__init_sporttery_and_asian_odds_snapshots.sql
-V4__init_prediction_and_public_snapshot.sql
-V5__init_settlement_and_audit.sql
-V6__add_core_indexes.sql
+V4__init_league_and_team_aliases.sql
+V5__match_source_mapping_explanation.sql
+V6__init_audit_logs.sql
+V7__init_prediction_and_public_snapshot.sql
+V8__init_admin_accounts.sql
+V9__init_match_facts_and_settlements.sql
+V10__add_core_indexes.sql
 ```
+
+V1～V6 已执行，文件名和内容不得重命名、删除或修改。后续数据库变化只能从新的未使用版本继续。
 
 ### 6.1 V1 Provider 与原始数据
 
@@ -336,31 +340,60 @@ V6__add_core_indexes.sql
 
 快照表不设置 `updated_at`，业务代码只允许 INSERT。
 
-### 6.4 V4 预测与公开快照
+### 6.4 V4 联赛与球队别名
+
+已创建：
+
+- `league_aliases`
+- `team_aliases`
+
+别名表只保存人工确认的名称归一结果，不代替绑定 Provider 外部 ID 的 `provider_*_mappings`。
+
+### 6.5 V5 比赛映射解释
+
+已为 `match_source_mappings` 增加：
+
+- `mapping_explanation`
+- `mapping_candidates JSONB`
+
+用于保存自动匹配理由和人工复核候选，不保存凭据或未脱敏原始响应。
+
+### 6.6 V6 追加式审计
+
+已创建 `audit_logs`。后续任务复用现有审计表与服务；如字段不足，只能通过新的 migration 扩展，不得在结算 migration 重复建表。
+
+### 6.7 V7 预测与公开快照
 
 创建：
 
 - `predictions`
 - `prediction_snapshots`
 
-概率字段全部增加 0～1 检查约束。三项概率和由应用校验，并在允许的数据库能力范围内增加约束或生成校验测试。
+预测字段覆盖三项概率、让球倾向、预期总进球、置信等级、分析摘要、模型/特征版本、生成批次、发布/锁定时间和内容哈希。
+
+概率字段全部增加 0～1 检查约束。三项概率和由应用校验，并在 PostgreSQL 中增加可验证的约束或触发级保护。
 
 发布后核心字段禁止普通 UPDATE；需要重发时新增发布版本，而不是覆盖旧记录。
 
-### 6.5 V5 结算与审计
+### 6.8 V8 管理员账号
+
+创建管理员账号和认证所需字段，不开放普通用户注册。密码只保存强哈希，Token 密钥不进入数据库。
+
+### 6.9 V9 比赛事实与结算
 
 创建：
 
+- `match_result_facts`
 - `settlements`
-- `audit_logs`
 
 约束：
 
 - `(prediction_id, market_type)` 唯一。
-- 审计表只追加，不提供普通删除接口。
 - 结算结果保存计算规则版本和输入事实版本。
+- 官方赛果修正创建新事实版本，不覆盖旧事实。
+- 审计继续写入 V6 的 `audit_logs`。
 
-### 6.6 V6 索引
+### 6.10 V10 索引
 
 至少覆盖：
 
@@ -535,10 +568,10 @@ match/service/MatchMappingReviewService.java
 ### 9.1 首批枚举
 
 - `MatchStatusEnum`
-- `PredictionStatus`
-- `ConfidenceLevel`
-- `MarketType`
-- `SnapshotType`
+- `PredictionStatusEnum`
+- `ConfidenceLevelEnum`
+- `MarketTypeEnum`
+- `SnapshotTypeEnum`
 - `MappingStatus`
 - `SyncStatus`
 
@@ -720,11 +753,12 @@ src/app/AdminLayout.tsx
 ### 11.4 页面顺序
 
 1. 比赛列表。
-2. 比赛详情。
-3. 历史记录。
-4. 首页汇总。
+2. 比赛基础详情。
+3. 预测详情、透明信息和快照校验入口。
+4. 历史记录。
 5. 统计页。
-6. 最小后台映射复核和任务运行页。
+6. 首页汇总。
+7. 最小后台映射复核和任务运行页。
 
 先完成列表到详情的纵向链路，再做首页视觉包装。
 
@@ -740,6 +774,7 @@ src/app/AdminLayout.tsx
 
 ### 12.1 后台鉴权
 
+- 虽归档在 M6 运维章节，执行顺序中 T601 提前到 T303 之前，避免管理员发布 API 处于无鉴权或永久拒绝状态。
 - Spring Security + JWT。
 - MVP 仅管理员登录，不开放注册。
 - 公共接口只读匿名。
@@ -762,6 +797,7 @@ src/app/AdminLayout.tsx
 - 前端多阶段构建后由 Nginx 托管。
 - 生产 PostgreSQL 和 Redis 优先使用托管或独立实例。
 - 数据库迁移在单一受控实例执行，避免多副本同时迁移。
+- 生产快照使用不可覆盖或对象版本化存储，并提供匿名只读的外部校验位置。
 - 快照目录或对象存储必须持久化和备份。
 
 ### 12.4 M6 验证
@@ -769,6 +805,7 @@ src/app/AdminLayout.tsx
 - 从空环境按部署文档启动成功。
 - 备份恢复演练通过。
 - Provider 和结算任务异常触发告警。
+- 可从外部位置下载预测快照、复算哈希并核对对象版本。
 - Swagger、Actuator 和后台接口不向公网裸露。
 - 日志无密钥、密码、Authorization 和完整 Cookie。
 
@@ -823,11 +860,11 @@ feat(admin): 新增数据任务监控与映射复核
 
 ## 16. 现在应执行的第一项任务
 
-从 `dev-tasks.md` 的 `T002` 开始：
+从 `dev-tasks.md` 的 `T006` 开始：
 
-1. 补齐 Actuator、SpringDoc 和测试依赖。
-2. 补齐 Provider、任务、Flyway、Redis 和 API 文档配置。
-3. 新增不含默认密钥的 `application-prod.yml`。
-4. 验证配置可以通过环境变量覆盖。
+1. 选择不要求开发机安装 Docker 的 CI 或远程临时 PostgreSQL 执行载体。
+2. 建立独立 Maven integration profile 和测试配置。
+3. 从空库执行现有 V1～V6，并验证完整应用上下文。
+4. 确认普通本地单测仍不连接任何共享数据库。
 
-T002 完成后进入 T003，使用 Testcontainers PostgreSQL 修复 `contextLoads`，确保自动化测试不访问共享云端数据库。
+T006 完成后进入 T207，串通体彩同步、标准化、比赛映射和亚盘快照；随后才开始使用 V7 的 T301。

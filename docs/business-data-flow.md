@@ -1,9 +1,9 @@
 # 业务数据流转与表关系
 
-- 文档版本：v0.1
-- 最后更新：2026-07-24
+- 文档版本：v0.2
+- 最后更新：2026-07-25
 - 作用：用图说明当前已落地表之间的关系，以及体彩 / 亚盘数据如何落到标准实体
-- 权威表结构：`backend/src/main/resources/db/migration/V1`～`V4`
+- 权威表结构：`backend/src/main/resources/db/migration/V1`～`V6`
 - 相关设计：`technical-design.md`；任务进度：`dev-tasks.md`
 
 > 本文回答「数据怎么流、表怎么连」。预测发布、结算等尚未建表的能力只标为后续，不展开。
@@ -338,7 +338,7 @@ flowchart TD
 ## 10. 尚未建表 / 未串通的部分
 
 - 预测、快照、结算相关表：见 `technical-design.md` M3/M4，本文不画。
-- 体彩同步写库后**尚未强制**调用标准化回填 `league_id` 等（服务已就绪，接入在后续任务）。
+- 体彩同步写库后**尚未强制**调用标准化回填 `league_id` 等；T207 将串通同步、标准化、比赛映射和亚盘快照，并补历史回填入口。
 - 亚盘同步 Job + 已确认映射写 `asian_odds_snapshots`：T206 已落地（Stub Provider；THE_ODDS_API 业务适配后续）。
 - 映射人工确认/拒绝 HTTP API：T205 已落地（`/api/admin/provider/mappings/*`）；生产鉴权仍待 T601，当前 Security 对 admin 路径 denyAll。
 
@@ -349,3 +349,4 @@ flowchart TD
 | 2026-07-24 | 初版：基于 V1～V4 与 T202/T203 落地情况整理表关系与主链路图 |
 | 2026-07-24 | 补充 T204：MatchMappingService 打分/待复核与 V5 解释候选列 |
 | 2026-07-24 | 补充 T206：亚盘快照同步与 AH/totals 写入 |
+| 2026-07-25 | 规划校准：权威 migration 更新到 V1～V6，未串通的数据链路明确由 T207 收口 |

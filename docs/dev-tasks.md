@@ -5,9 +5,9 @@
 - 文档版本：v0.3
 - 最后更新：2026-07-25
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T006 PostgreSQL 空库迁移集成验证`
+- 当前活动任务：无（T006 已完成，待开始 T207）
 - 下一任务：`T207 双源同步编排闭环`
-- 最近完成增量：`T206 亚盘快照同步`
+- 最近完成增量：`T006 PostgreSQL 空库迁移集成验证`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -131,7 +131,7 @@ T305 + T405 + T505 + T602 + T604 -> T605
 
 | 里程碑 | 状态 | 说明 |
 | --- | --- | --- |
-| M0 工程基线 | `PARTIAL` | T000～T005 已完成；等待 T006 在非本地 Docker 环境补齐 PostgreSQL 空库集成验证 |
+| M0 工程基线 | `DONE` | T000～T006 已完成；GitHub Actions 已通过 PostgreSQL 16 空库迁移和完整数据库上下文验证 |
 | M1 Provider 基础 | `PARTIAL` | T101～T105 已完成；T106/T107 连续观测和授权结论尚未完成 |
 | M2 标准化与映射 | `PARTIAL` | T201～T206 组件已完成；等待 T207 串通同步、标准化、映射和盘口快照 |
 | M3 预测发布闭环 | `TODO` | 可使用 Stub 比赛数据开发 |
@@ -356,7 +356,7 @@ T305 + T405 + T505 + T602 + T604 -> T605
 
 ### T006 PostgreSQL 空库迁移集成验证
 
-- 状态：`IN_PROGRESS`
+- 状态：`DONE`
 - 优先级：P0
 - 依赖：T002；承接 T003 跳过后的 PostgreSQL 集成验证缺口
 - 交付物：
@@ -365,13 +365,13 @@ T305 + T405 + T505 + T602 + T604 -> T605
   - 完整 Flyway 空库迁移和应用上下文集成测试
   - CI 或远程临时 PostgreSQL 执行入口与验证记录
 - 执行步骤：
-  - [ ] 选择不要求开发机安装 Docker 的执行载体，优先使用托管 CI Runner；不可用时使用一次性远程 Docker/PostgreSQL。
-  - [ ] 将 Testcontainers PostgreSQL 依赖和集成测试放入独立 Maven profile，普通本地单测不启动容器。
-  - [ ] 创建 integration profile，强制使用 Stub Provider、关闭定时任务和真实 Redis 外联。
-  - [ ] 增加保护性断言，拒绝共享云数据库、开发数据库或非容器 JDBC URL。
-  - [ ] 从 PostgreSQL 空库执行 V1 到当前最新 migration，并恢复完整 Spring 应用上下文测试。
-  - [ ] 覆盖 JSONB、唯一/检查约束、时区精度、事务回滚和重复启动不重复迁移。
-  - [ ] 在 CI 或远程临时环境运行并保存命令、数据库版本和测试结果。
+  - [x] 选择不要求开发机安装 Docker 的执行载体，优先使用托管 CI Runner；不可用时使用一次性远程 Docker/PostgreSQL。
+  - [x] 将 Testcontainers PostgreSQL 依赖和集成测试放入独立 Maven profile，普通本地单测不启动容器。
+  - [x] 创建 integration profile，强制使用 Stub Provider、关闭定时任务和真实 Redis 外联。
+  - [x] 增加保护性断言，拒绝共享云数据库、开发数据库或非容器 JDBC URL。
+  - [x] 从 PostgreSQL 空库执行 V1 到当前最新 migration，并恢复完整 Spring 应用上下文测试。
+  - [x] 覆盖 JSONB、唯一/检查约束、时区精度、事务回滚和重复启动不重复迁移。
+  - [x] 在 CI 或远程临时环境运行并保存命令、数据库版本和测试结果。
 - 验证命令：
 
   ```bash
@@ -388,6 +388,8 @@ T305 + T405 + T505 + T602 + T604 -> T605
 - 恢复入口：先确认可用的托管 CI Runner 或远程临时 PostgreSQL，再选择具体实现，不重新启用共享云数据库测试。
 - 执行记录：
   - 2026-07-25：开始执行；使用 GitHub Actions 托管 Runner、Java 21、Maven Failsafe 和 Testcontainers PostgreSQL 16；保留本地快速测试无容器，预计验证 `mvn -f backend/pom.xml -Pintegration verify`、`npm run backend:test` 与 `git diff --check`。
+  - 2026-07-25：[GitHub Actions #30163071243](https://github.com/ren997/jingcai-compass/actions/runs/30163071243) 在提交 `69f2e6823637116bc7e69b3244479eef293ba0a4` 上通过；Java 21.0.11、Maven 3.9.16、`postgres:16-alpine`（PostgreSQL 16.14）。
+  - 2026-07-25：`mvn -f backend/pom.xml -Pintegration verify` 成功；129 个单元测试与 3 个 `PostgresApplicationIT` 全部通过。Flyway 从空库成功执行 V1～V6，再次 migrate 保持 v6 且无新增执行；真实 PostgreSQL 的 JSONB、唯一/CHECK 约束、`TIMESTAMPTZ`、事务回滚和容器 JDBC 保护断言通过。
 
 ## 6. M1 Provider 基础与数据源验证
 
@@ -1622,18 +1624,18 @@ T305 + T405 + T505 + T602 + T604 -> T605
 
 ## 14. 推荐的下一步
 
-当前无活动任务；下一主线任务为 `T006 PostgreSQL 空库迁移集成验证`。
+当前无活动任务；下一主线任务为 `T207 双源同步编排闭环`。
 
-T006 完成后先执行 T207，确认体彩同步、标准化、比赛映射和亚盘快照形成可重复的端到端链路，再进入预测表设计。
+先执行 T207，确认体彩同步、标准化、比赛映射和亚盘快照形成可重复的端到端链路，再进入预测表设计。
 
 T106/T107 应尽快启动自动每日采集；启动后标记为 `MONITORING`，可与主线并存。它们不阻塞 Stub 领域开发，但 T108 未达到 Go 标准时禁止生产部署。
 
 随后严格按以下顺序推进：
 
 ```text
-T006 -> T207 -> T301 -> T302 -> T601 -> T303
-                                      -> T304
-                                      -> T305
+T207 -> T301 -> T302 -> T601 -> T303
+                               -> T304
+                               -> T305
 
 T301 + T601 -> T401 -> T402
 T403 可在规则固定后提前完成
@@ -1665,3 +1667,4 @@ T304 + T402 + T403 -> T404 -> T405
 | 2026-07-24 | T205 | `TODO -> DONE` | 映射复核 API、条件更新状态机、V6 audit_logs；MappingReview 12、后端 121 测试通过 |
 | 2026-07-24 | T206 | `TODO -> DONE` | 亚盘快照同步、AH/totals 写入、额度门禁与 Job；AsianOddsSync 相关与后端全量测试通过 |
 | 2026-07-25 | 任务规划 v0.3 | 规划校准 | 保留现有代码和 V1～V6；新增 T006/T207/T506/T507，后续 migration 调整为 V7～V10，提前 T601 并拆分公共产品依赖 |
+| 2026-07-25 | T006 | `IN_PROGRESS -> DONE` | GitHub Actions 使用 PostgreSQL 16.14 空库执行 V1～V6；129 个单元测试和 3 个数据库集成测试通过；M0 完成 |

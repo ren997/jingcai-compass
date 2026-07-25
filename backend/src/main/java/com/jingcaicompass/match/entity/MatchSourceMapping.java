@@ -5,8 +5,8 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
+import com.jingcaicompass.system.infrastructure.persistence.PostgresJsonbTypeHandler;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -57,7 +57,7 @@ public class MatchSourceMapping {
     private String mappingExplanation;
 
     /** 打分后的候选列表 */
-    @TableField(typeHandler = JacksonTypeHandler.class, jdbcType = JdbcType.OTHER)
+    @TableField(typeHandler = PostgresJsonbTypeHandler.class, jdbcType = JdbcType.OTHER)
     private List<Map<String, Object>> mappingCandidates;
 
     /** 人工确认人 */

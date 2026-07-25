@@ -5,9 +5,9 @@ import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
-import com.baomidou.mybatisplus.extension.handlers.JacksonTypeHandler;
 import com.jingcaicompass.data.enums.ParseStatusEnum;
 import com.jingcaicompass.data.enums.ProviderDataTypeEnum;
+import com.jingcaicompass.system.infrastructure.persistence.PostgresJsonbTypeHandler;
 import java.time.Instant;
 import java.util.Map;
 import lombok.Data;
@@ -42,7 +42,7 @@ public class RawDataPayload {
     private Integer httpStatus;
 
     /** 原始 JSON 载荷 */
-    @TableField(typeHandler = JacksonTypeHandler.class, jdbcType = JdbcType.OTHER)
+    @TableField(typeHandler = PostgresJsonbTypeHandler.class, jdbcType = JdbcType.OTHER)
     private Map<String, Object> payload;
 
     /** SHA-256 十六进制摘要 */

@@ -43,6 +43,10 @@ import com.jingcaicompass.prediction.service.PredictionImportFileParser;
 import com.jingcaicompass.prediction.service.PredictionImportService;
 import com.jingcaicompass.prediction.service.PredictionLockService;
 import com.jingcaicompass.prediction.service.PredictionPublishService;
+import com.jingcaicompass.snapshot.job.SnapshotPublishJob;
+import com.jingcaicompass.snapshot.mapper.PredictionSnapshotMapper;
+import com.jingcaicompass.snapshot.service.PredictionSnapshotService;
+import com.jingcaicompass.snapshot.storage.SnapshotStorage;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import java.time.Duration;
@@ -51,6 +55,7 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -89,7 +94,10 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(MatchSourceMappingMapper.class, () -> mock(MatchSourceMappingMapper.class))
             .withBean(SportteryPoolSnapshotMapper.class, () -> mock(SportteryPoolSnapshotMapper.class))
             .withBean(AsianOddsSnapshotMapper.class, () -> mock(AsianOddsSnapshotMapper.class))
-            .withBean(PredictionMapper.class, () -> mock(PredictionMapper.class));
+            .withBean(PredictionMapper.class, () -> mock(PredictionMapper.class))
+            .withBean(PredictionSnapshotMapper.class, () -> mock(PredictionSnapshotMapper.class))
+            .withBean(SnapshotStorage.class, () -> mock(SnapshotStorage.class))
+            .withBean(JdbcTemplate.class, () -> mock(JdbcTemplate.class));
 
     @Test
     void doesNotRegisterPersistenceServicesWithoutDataSource() {
@@ -99,6 +107,7 @@ class PersistenceServicesAutoConfigurationTest {
             assertThat(context).doesNotHaveBean(PredictionImportService.class);
             assertThat(context).doesNotHaveBean(PredictionPublishService.class);
             assertThat(context).doesNotHaveBean(PredictionLockService.class);
+            assertThat(context).doesNotHaveBean(PredictionSnapshotService.class);
             assertThat(context).doesNotHaveBean(AdminAuthService.class);
         });
     }
@@ -115,11 +124,13 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(PredictionImportService.class);
                     assertThat(context).hasSingleBean(PredictionPublishService.class);
                     assertThat(context).hasSingleBean(PredictionLockService.class);
+                    assertThat(context).hasSingleBean(PredictionSnapshotService.class);
                     assertThat(context).hasSingleBean(AdminAuthService.class);
                     assertThat(context).hasSingleBean(AdminAccountTokenValidator.class);
                     assertThat(context).hasSingleBean(AdminAccountBootstrapRunner.class);
                     assertThat(context).doesNotHaveBean(DataPipelineSyncJob.class);
                     assertThat(context).doesNotHaveBean(PredictionLockJob.class);
+                    assertThat(context).doesNotHaveBean(SnapshotPublishJob.class);
                 });
     }
 
@@ -149,6 +160,21 @@ class PersistenceServicesAutoConfigurationTest {
                 .run(context -> {
                     assertThat(context).hasSingleBean(PredictionLockJob.class);
                     assertThat(context).doesNotHaveBean(DataPipelineSyncJob.class);
+                });
+    }
+
+    @Test
+    void registersEnabledSnapshotJobIndependently() {
+        contextRunner
+                .withBean(DataSource.class, () -> mock(DataSource.class))
+                .withPropertyValues(
+                        "app.tasks.enabled=true",
+                        "app.tasks.snapshot-publish.enabled=true"
+                )
+                .run(context -> {
+                    assertThat(context).hasSingleBean(SnapshotPublishJob.class);
+                    assertThat(context).doesNotHaveBean(DataPipelineSyncJob.class);
+                    assertThat(context).doesNotHaveBean(PredictionLockJob.class);
                 });
     }
 

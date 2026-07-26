@@ -41,6 +41,12 @@ class ProductionConfigurationTest {
         assertThat(application.getProperty("app.security.bootstrap.password"))
                 .isEqualTo("${ADMIN_BOOTSTRAP_PASSWORD:}");
         assertThat(application.getProperty("app.asian-odds.api-key")).isEqualTo("${ASIAN_ODDS_API_KEY:}");
+        assertThat(application.getProperty("app.snapshot.storage.type"))
+                .isEqualTo("${SNAPSHOT_STORAGE_TYPE:local}");
+        assertThat(application.getProperty("app.snapshot.storage.path"))
+                .isEqualTo("${SNAPSHOT_STORAGE_PATH:./runtime/snapshots}");
+        assertThat(application.getProperty("app.tasks.snapshot-publish.enabled"))
+                .isEqualTo("${SNAPSHOT_PUBLISH_TASK_ENABLED:false}");
     }
 
     @Test
@@ -72,5 +78,9 @@ class ProductionConfigurationTest {
                 .isEqualTo("redis.example.invalid");
         assertThat(production.getProperty("springdoc.api-docs.enabled"))
                 .isEqualTo("${SPRINGDOC_ENABLED:false}");
+        assertThat(production.getProperty("app.snapshot.storage.type"))
+                .isEqualTo("${SNAPSHOT_STORAGE_TYPE:local}");
+        assertThat(production.getProperty("app.tasks.snapshot-publish.fixed-delay"))
+                .isEqualTo("${SNAPSHOT_PUBLISH_FIXED_DELAY:5m}");
     }
 }

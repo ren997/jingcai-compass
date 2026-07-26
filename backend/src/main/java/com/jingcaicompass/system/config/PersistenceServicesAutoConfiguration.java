@@ -49,7 +49,14 @@ import com.jingcaicompass.odds.service.AsianOddsProvider;
 import com.jingcaicompass.odds.service.AsianOddsSnapshotWriter;
 import com.jingcaicompass.odds.service.AsianOddsSyncService;
 import com.jingcaicompass.odds.service.AsianOddsSyncServiceImpl;
+import com.jingcaicompass.prediction.mapper.PredictionMapper;
+import com.jingcaicompass.prediction.service.PredictionImportFileParser;
+import com.jingcaicompass.prediction.service.PredictionImportFileParserImpl;
+import com.jingcaicompass.prediction.service.PredictionImportService;
+import com.jingcaicompass.prediction.service.PredictionImportServiceImpl;
+import com.jingcaicompass.prediction.service.PredictionImportWriter;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
+import java.time.Clock;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -69,6 +76,42 @@ import org.springframework.context.annotation.Bean;
 })
 @ConditionalOnBean(DataSource.class)
 public class PersistenceServicesAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean
+    Clock predictionImportClock() {
+        return Clock.systemUTC();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PredictionImportFileParser.class)
+    PredictionImportFileParser predictionImportFileParser(ObjectMapper objectMapper) {
+        return new PredictionImportFileParserImpl(objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    PredictionImportWriter predictionImportWriter(PredictionMapper predictionMapper) {
+        return new PredictionImportWriter(predictionMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PredictionImportService.class)
+    PredictionImportService predictionImportService(
+            PredictionImportFileParser predictionImportFileParser,
+            MatchMapper matchMapper,
+            PredictionMapper predictionMapper,
+            PredictionImportWriter predictionImportWriter,
+            Clock predictionImportClock
+    ) {
+        return new PredictionImportServiceImpl(
+                predictionImportFileParser,
+                matchMapper,
+                predictionMapper,
+                predictionImportWriter,
+                predictionImportClock
+        );
+    }
 
     @Bean
     @ConditionalOnMissingBean(DataProviderService.class)

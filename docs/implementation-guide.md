@@ -268,8 +268,9 @@ V5__match_source_mapping_explanation.sql
 V6__init_audit_logs.sql
 V7__init_prediction_and_public_snapshot.sql
 V8__init_admin_accounts.sql
-V9__init_match_facts_and_settlements.sql
-V10__add_core_indexes.sql
+V9__protect_published_predictions.sql
+V10__init_match_facts_and_settlements.sql
+V11__add_core_indexes.sql
 ```
 
 V1～V6 已执行，文件名和内容不得重命名、删除或修改。后续数据库变化只能从新的未使用版本继续。
@@ -379,7 +380,11 @@ V1～V6 已执行，文件名和内容不得重命名、删除或修改。后续
 
 创建管理员账号和认证所需字段，不开放普通用户注册。密码只保存强哈希，Token 密钥不进入数据库。
 
-### 6.9 V9 比赛事实与结算
+### 6.9 V9 已发布预测保护
+
+通过数据库触发器限制预测生命周期：草稿只能发布，已发布内容不可原地修改且只能在数据库锁定时间到达后进入锁定状态，已锁定预测不得恢复其他状态。
+
+### 6.10 V10 比赛事实与结算
 
 创建：
 
@@ -393,7 +398,7 @@ V1～V6 已执行，文件名和内容不得重命名、删除或修改。后续
 - 官方赛果修正创建新事实版本，不覆盖旧事实。
 - 审计继续写入 V6 的 `audit_logs`。
 
-### 6.10 V10 索引
+### 6.11 V11 索引
 
 至少覆盖：
 

@@ -40,6 +40,7 @@ import com.jingcaicompass.odds.service.AsianOddsProvider;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.service.PredictionImportFileParser;
 import com.jingcaicompass.prediction.service.PredictionImportService;
+import com.jingcaicompass.prediction.service.PredictionPublishService;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import java.time.Duration;
@@ -92,6 +93,7 @@ class PersistenceServicesAutoConfigurationTest {
             assertThat(context).doesNotHaveBean(DataPipelineService.class);
             assertThat(context).doesNotHaveBean(DataProviderService.class);
             assertThat(context).doesNotHaveBean(PredictionImportService.class);
+            assertThat(context).doesNotHaveBean(PredictionPublishService.class);
             assertThat(context).doesNotHaveBean(AdminAuthService.class);
         });
     }
@@ -106,6 +108,7 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(AuditLogService.class);
                     assertThat(context).hasSingleBean(PredictionImportFileParser.class);
                     assertThat(context).hasSingleBean(PredictionImportService.class);
+                    assertThat(context).hasSingleBean(PredictionPublishService.class);
                     assertThat(context).hasSingleBean(AdminAuthService.class);
                     assertThat(context).hasSingleBean(AdminAccountTokenValidator.class);
                     assertThat(context).hasSingleBean(AdminAccountBootstrapRunner.class);

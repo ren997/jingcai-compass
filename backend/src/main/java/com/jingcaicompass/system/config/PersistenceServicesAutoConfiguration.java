@@ -58,11 +58,14 @@ import com.jingcaicompass.odds.service.AsianOddsSnapshotWriter;
 import com.jingcaicompass.odds.service.AsianOddsSyncService;
 import com.jingcaicompass.odds.service.AsianOddsSyncServiceImpl;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
+import com.jingcaicompass.prediction.service.PredictionContentHasher;
 import com.jingcaicompass.prediction.service.PredictionImportFileParser;
 import com.jingcaicompass.prediction.service.PredictionImportFileParserImpl;
 import com.jingcaicompass.prediction.service.PredictionImportService;
 import com.jingcaicompass.prediction.service.PredictionImportServiceImpl;
 import com.jingcaicompass.prediction.service.PredictionImportWriter;
+import com.jingcaicompass.prediction.service.PredictionPublishService;
+import com.jingcaicompass.prediction.service.PredictionPublishServiceImpl;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import java.time.Clock;
@@ -192,6 +195,30 @@ public class PersistenceServicesAutoConfiguration {
                 matchMapper,
                 predictionMapper,
                 predictionImportWriter,
+                predictionImportClock
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    PredictionContentHasher predictionContentHasher(ObjectMapper objectMapper) {
+        return new PredictionContentHasher(objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PredictionPublishService.class)
+    PredictionPublishService predictionPublishService(
+            PredictionMapper predictionMapper,
+            MatchMapper matchMapper,
+            PredictionContentHasher predictionContentHasher,
+            AuditLogService auditLogService,
+            Clock predictionImportClock
+    ) {
+        return new PredictionPublishServiceImpl(
+                predictionMapper,
+                matchMapper,
+                predictionContentHasher,
+                auditLogService,
                 predictionImportClock
         );
     }

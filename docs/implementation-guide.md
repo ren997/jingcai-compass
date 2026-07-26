@@ -2,8 +2,8 @@
 
 ## 1. 文档信息
 
-- 文档版本：v0.2
-- 文档日期：2026-07-25
+- 文档版本：v0.3
+- 文档日期：2026-07-26
 - 适用范围：从当前脚手架开始完成竞彩罗盘 MVP
 - 配套文档：`requirements-mvp.md`、`data-sources.md`、`technical-design.md`、`dev-tasks.md`
 
@@ -27,21 +27,20 @@
 
 - Java 21 + Spring Boot 3.3.9、MyBatis-Plus、Flyway、PostgreSQL、Redis、Security、Actuator 和 SpringDoc 基线。
 - local/test/prod 配置分层、统一响应/异常、traceId、分页和最小安全边界。
-- V1～V6 migration：Provider/raw、标准比赛、体彩/亚盘快照、别名、比赛映射解释和审计日志。
-- 体彩比赛池同步、联赛/球队标准化、双源比赛映射、人工复核和亚盘快照同步组件。
-- 中国体彩网/亚盘 Stub Provider、原始响应留存、同步运行、重试、额度和定时任务基线。
+- V1～V9 migration：Provider/raw、标准比赛、体彩/亚盘快照、别名、比赛映射解释、审计日志、预测/快照、管理员账号和已发布预测保护。
+- 体彩比赛池同步、联赛/球队标准化、双源比赛映射、人工复核、亚盘快照和可重复的数据流水线。
+- 中国体彩网/亚盘 Stub Provider、原始响应留存、同步运行、重试、额度和定时任务基线；CI 已通过 PostgreSQL 16 空库迁移和完整上下文验证。
+- 预测结构化导入、管理员 JWT 鉴权、发布、锁定和确定性公开快照闭环。
 - React 18 + Vite 6 + TypeScript、Ant Design、TanStack Query、React Router 和 Vitest 基线。
 - `GET /api/public/matches` 与每日比赛列表前端纵向切片。
 
 ### 3.2 尚未完成
 
-- T003 因本机不安装 Docker 已跳过，尚缺 PostgreSQL 空库完整 migration 和应用上下文集成测试；由 T006 在 CI/远程临时环境补齐。
-- 体彩同步写库、标准化回填、比赛映射和亚盘快照组件尚未由 T207 串成可重复的端到端链路。
 - T106/T107 连续两周覆盖率、稳定性、额度和授权验证尚未完成。
 - 公共比赛列表仍直接查询 Provider，尚未切换为 PostgreSQL 事实查询。
 - 前端 Router/Query/Ant Design 已初始化，但统一 HTTP Client、布局、详情、历史和统计尚未完成。
-- 后台路径仍默认拒绝，管理员鉴权待 T601。
-- 预测、公开快照、赛果事实版本、结算和重算尚未实现。
+- 后台同步/映射复核页面、预测与结算状态页面，以及数据源与业务告警尚未完成。
+- 赛果事实版本、自动结算和赛果修正重算尚未实现。
 
 ### 3.3 开发前置原则
 
@@ -211,12 +210,12 @@ system/security/SecurityConfig.java
 - 业务异常使用稳定错误码，不把异常堆栈返回前端。
 - traceId 进入响应头、响应体和日志 MDC。
 - MyBatis-Plus 开启分页插件，并限制最大页大小。
-- M0 安全配置只放行健康检查、Swagger 和后续公共只读路径，后台路径在 T601 完成前默认拒绝。
+- M0 安全配置仅为后续公共只读与后台鉴权保留边界；T601 已完成管理员 JWT 鉴权，后台路径要求已认证管理员。
 - Service 注释约定（权威全文见仓库根目录 `AGENTS.md`）：接口写简短契约；`*ServiceImpl` 与编排型 `service` 组件（如 Writer/PayloadMapper）写类职责说明，并在主流程用 `// 1) ...` 标注步骤。
 
 ### 5.5 测试数据库
 
-不要用 H2。由 T006 新增 Testcontainers PostgreSQL 测试配置。开发机不安装 Docker，因此容器集成测试放在托管 CI Runner 或远程临时环境；普通本地单测不启动容器：
+不要用 H2。T006 已建立 Testcontainers PostgreSQL 集成测试配置。开发机不安装 Docker，因此容器集成测试在托管 CI Runner 或远程临时环境运行；普通本地单测不启动容器：
 
 ```text
 backend/src/test/java/com/jingcaicompass/support/PostgresTestContainerConfig.java
@@ -273,7 +272,7 @@ V10__init_match_facts_and_settlements.sql
 V11__add_core_indexes.sql
 ```
 
-V1～V6 已执行，文件名和内容不得重命名、删除或修改。后续数据库变化只能从新的未使用版本继续。
+V1～V9 已执行，文件名和内容不得重命名、删除或修改。后续数据库变化只能从新的未使用版本继续。
 
 ### 6.1 V1 Provider 与原始数据
 
@@ -393,14 +392,16 @@ V1～V6 已执行，文件名和内容不得重命名、删除或修改。后续
 
 约束：
 
-- `(prediction_id, market_type)` 唯一。
-- 结算结果保存计算规则版本和输入事实版本。
-- 官方赛果修正创建新事实版本，不覆盖旧事实。
+- `match_result_facts` 是权威且版本化的赛果来源；`matches` 只能保存与事实同事务更新的当前查询投影。
+- `(match_id, fact_version)` 唯一，并保证每场仅有一个当前事实版本。
+- `(prediction_id, market_type, settlement_version)` 唯一，并保证每个预测和市场仅有一个当前有效结算；历史结算版本保留替代关系。
+- 结算结果保存计算规则版本和输入事实版本；无当前有效结算时，公开层派生展示 `PENDING`。
+- 官方赛果修正创建新事实和新结算版本，不覆盖旧事实或旧结算结果。
 - 审计继续写入 V6 的 `audit_logs`。
 
 ### 6.11 V11 索引
 
-至少覆盖：
+只在有对应 SQL、查询计划和测试依据时覆盖：
 
 - 比赛日期 + 开赛时间。
 - 比赛状态 + 开赛时间。
@@ -865,11 +866,11 @@ feat(admin): 新增数据任务监控与映射复核
 
 ## 16. 现在应执行的第一项任务
 
-从 `dev-tasks.md` 的 `T006` 开始：
+从 `dev-tasks.md` 的 `T401` 开始：
 
-1. 选择不要求开发机安装 Docker 的 CI 或远程临时 PostgreSQL 执行载体。
-2. 建立独立 Maven integration profile 和测试配置。
-3. 从空库执行现有 V1～V6，并验证完整应用上下文。
-4. 确认普通本地单测仍不连接任何共享数据库。
+1. 先确定版本化 `match_result_facts` 是唯一赛果来源，`matches` 仅保留当前查询投影。
+2. 明确结算历史版本与唯一当前有效结算的数据库约束，避免与赛果修正重算冲突。
+3. 新增 V10/V11，不修改已执行的 V1～V9 migration；以现有 CI PostgreSQL 16 集成验证空库迁移和约束。
+4. 完成后优先实现无数据库依赖的 T403 结算规则矩阵，再接入 T402 体彩赛果同步。
 
-T006 完成后进入 T207，串通体彩同步、标准化、比赛映射和亚盘快照；随后才开始使用 V7 的 T301。
+数据源连续观测可与主线并行，但开始计时前必须补齐负责人、外部凭据/节点、预算和决策日期。

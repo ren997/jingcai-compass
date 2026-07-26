@@ -14,12 +14,15 @@ public enum AuditTargetTypeEnum {
     MATCH_SOURCE_MAPPING("MATCH_SOURCE_MAPPING", "比赛来源映射"),
     ADMIN_ACCOUNT("ADMIN_ACCOUNT", "管理员账号"),
     SECURITY_REQUEST("SECURITY_REQUEST", "安全请求"),
-    PREDICTION("PREDICTION", "预测");
+    PREDICTION("PREDICTION", "预测"),
+    MATCH_RESULT_FACT("MATCH_RESULT_FACT", "比赛赛果事实"),
+    SETTLEMENT("SETTLEMENT", "结算");
 
     public static final String DESC =
             "审计目标: MATCH_SOURCE_MAPPING-比赛来源映射, "
                     + "ADMIN_ACCOUNT-管理员账号, SECURITY_REQUEST-安全请求, "
-                    + "PREDICTION-预测";
+                    + "PREDICTION-预测, MATCH_RESULT_FACT-比赛赛果事实, "
+                    + "SETTLEMENT-结算";
 
     private static final Map<String, AuditTargetTypeEnum> CODE_MAP = Stream.of(values())
             .collect(Collectors.toMap(AuditTargetTypeEnum::getCode, Function.identity()));

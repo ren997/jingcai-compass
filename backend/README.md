@@ -54,6 +54,7 @@ Credentials can also be supplied by environment variables instead of `applicatio
 - `REDIS_*`: Redis connection
 - `SPORTTERY_*`: Provider selection, base URL, timeout and retry settings
 - `SYNC_TASKS_ENABLED` and `SPORTTERY_POOL_*`: synchronization task switches and intervals
+- `PREDICTION_LOCK_*`: prediction lock switch, interval, initial delay and batch size
 - `MAX_PAGE_SIZE`: maximum records returned by a MyBatis-Plus page query (default `100`)
 - `SPRINGDOC_ENABLED`: OpenAPI/Swagger switch
 

@@ -51,7 +51,11 @@ class ApplicationConfigurationPropertiesTest {
                     "app.tasks.asian-odds.initial-delay=45s",
                     "app.tasks.data-pipeline.enabled=false",
                     "app.tasks.data-pipeline.fixed-delay=20m",
-                    "app.tasks.data-pipeline.initial-delay=45s"
+                    "app.tasks.data-pipeline.initial-delay=45s",
+                    "app.tasks.prediction-lock.enabled=false",
+                    "app.tasks.prediction-lock.fixed-delay=30s",
+                    "app.tasks.prediction-lock.initial-delay=15s",
+                    "app.tasks.prediction-lock.batch-size=100"
             );
 
     @Test
@@ -82,6 +86,10 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(tasks.dataPipeline().enabled()).isFalse();
             assertThat(tasks.dataPipeline().fixedDelay()).isEqualTo(Duration.ofMinutes(20));
             assertThat(tasks.dataPipeline().initialDelay()).isEqualTo(Duration.ofSeconds(45));
+            assertThat(tasks.predictionLock().enabled()).isFalse();
+            assertThat(tasks.predictionLock().fixedDelay()).isEqualTo(Duration.ofSeconds(30));
+            assertThat(tasks.predictionLock().initialDelay()).isEqualTo(Duration.ofSeconds(15));
+            assertThat(tasks.predictionLock().batchSize()).isEqualTo(100);
 
             PaginationProperties pagination = context.getBean(PaginationProperties.class);
             assertThat(pagination.maxPageSize()).isEqualTo(100);
@@ -162,6 +170,40 @@ class ApplicationConfigurationPropertiesTest {
                             .rootCause()
                             .hasMessageContaining("app.tasks.data-pipeline.fixed-delay");
                 });
+    }
+
+    @Test
+    void rejectsPredictionLockDelayBelowOneSecond() {
+        contextRunner
+                .withPropertyValues("app.tasks.prediction-lock.fixed-delay=0s")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.tasks.prediction-lock.fixed-delay");
+                });
+    }
+
+    @Test
+    void rejectsPredictionLockBatchSizeOutsideRange() {
+        contextRunner
+                .withPropertyValues("app.tasks.prediction-lock.batch-size=1001")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.tasks.prediction-lock.batch-size");
+                });
+    }
+
+    @Test
+    void allowsPredictionLockTogetherWithDataPipeline() {
+        contextRunner
+                .withPropertyValues(
+                        "app.tasks.data-pipeline.enabled=true",
+                        "app.tasks.prediction-lock.enabled=true"
+                )
+                .run(context -> assertThat(context).hasNotFailed());
     }
 
     @Configuration(proxyBeanMethods = false)

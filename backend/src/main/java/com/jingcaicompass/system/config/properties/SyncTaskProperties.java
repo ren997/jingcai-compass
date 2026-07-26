@@ -2,6 +2,8 @@ package com.jingcaicompass.system.config.properties;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -14,7 +16,8 @@ public record SyncTaskProperties(
         boolean enabled,
         @Valid @NotNull SportteryPoolTaskProperties sportteryPool,
         @Valid @NotNull AsianOddsTaskProperties asianOdds,
-        @Valid @NotNull DataPipelineTaskProperties dataPipeline
+        @Valid @NotNull DataPipelineTaskProperties dataPipeline,
+        @Valid @NotNull PredictionLockTaskProperties predictionLock
 ) {
 
     @AssertTrue(message = "app.tasks.data-pipeline.enabled cannot be combined with individual sync tasks")
@@ -73,6 +76,24 @@ public record SyncTaskProperties(
         }
 
         @AssertTrue(message = "app.tasks.data-pipeline.initial-delay must not be negative")
+        public boolean isInitialDelayValid() {
+            return initialDelay != null && !initialDelay.isNegative();
+        }
+    }
+
+    public record PredictionLockTaskProperties(
+            boolean enabled,
+            @NotNull Duration fixedDelay,
+            @NotNull Duration initialDelay,
+            @Min(1) @Max(1000) int batchSize
+    ) {
+
+        @AssertTrue(message = "app.tasks.prediction-lock.fixed-delay must be at least 1 second")
+        public boolean isFixedDelayValid() {
+            return fixedDelay != null && fixedDelay.compareTo(Duration.ofSeconds(1)) >= 0;
+        }
+
+        @AssertTrue(message = "app.tasks.prediction-lock.initial-delay must not be negative")
         public boolean isInitialDelayValid() {
             return initialDelay != null && !initialDelay.isNegative();
         }

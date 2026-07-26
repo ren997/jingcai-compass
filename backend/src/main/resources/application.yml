@@ -88,6 +88,11 @@ app:
       enabled: ${DATA_PIPELINE_TASK_ENABLED:false}
       fixed-delay: ${DATA_PIPELINE_FIXED_DELAY:20m}
       initial-delay: ${DATA_PIPELINE_INITIAL_DELAY:45s}
+    prediction-lock:
+      enabled: ${PREDICTION_LOCK_TASK_ENABLED:false}
+      fixed-delay: ${PREDICTION_LOCK_FIXED_DELAY:30s}
+      initial-delay: ${PREDICTION_LOCK_INITIAL_DELAY:15s}
+      batch-size: ${PREDICTION_LOCK_BATCH_SIZE:100}
 
 mybatis-plus:
   configuration:

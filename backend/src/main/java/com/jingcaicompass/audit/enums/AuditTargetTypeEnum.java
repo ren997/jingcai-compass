@@ -13,11 +13,13 @@ import lombok.Getter;
 public enum AuditTargetTypeEnum {
     MATCH_SOURCE_MAPPING("MATCH_SOURCE_MAPPING", "比赛来源映射"),
     ADMIN_ACCOUNT("ADMIN_ACCOUNT", "管理员账号"),
-    SECURITY_REQUEST("SECURITY_REQUEST", "安全请求");
+    SECURITY_REQUEST("SECURITY_REQUEST", "安全请求"),
+    PREDICTION("PREDICTION", "预测");
 
     public static final String DESC =
             "审计目标: MATCH_SOURCE_MAPPING-比赛来源映射, "
-                    + "ADMIN_ACCOUNT-管理员账号, SECURITY_REQUEST-安全请求";
+                    + "ADMIN_ACCOUNT-管理员账号, SECURITY_REQUEST-安全请求, "
+                    + "PREDICTION-预测";
 
     private static final Map<String, AuditTargetTypeEnum> CODE_MAP = Stream.of(values())
             .collect(Collectors.toMap(AuditTargetTypeEnum::getCode, Function.identity()));

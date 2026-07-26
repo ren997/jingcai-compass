@@ -41,6 +41,18 @@ springdoc:
     path: /swagger-ui.html
 
 app:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+      issuer: ${JWT_ISSUER:jingcai-compass}
+      audience: ${JWT_AUDIENCE:jingcai-compass-admin}
+      access-token-ttl: ${JWT_ACCESS_TOKEN_TTL:30m}
+    login:
+      max-failed-attempts: ${ADMIN_MAX_FAILED_ATTEMPTS:5}
+      lock-duration: ${ADMIN_LOCK_DURATION:15m}
+    bootstrap:
+      username: ${ADMIN_BOOTSTRAP_USERNAME:}
+      password: ${ADMIN_BOOTSTRAP_PASSWORD:}
   pagination:
     max-page-size: ${MAX_PAGE_SIZE:100}
   sporttery:

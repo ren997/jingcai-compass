@@ -1,4 +1,16 @@
 app:
+  security:
+    jwt:
+      secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      issuer: jingcai-compass
+      audience: jingcai-compass-admin
+      access-token-ttl: 30m
+    login:
+      max-failed-attempts: 5
+      lock-duration: 15m
+    bootstrap:
+      username: ""
+      password: ""
   sporttery:
     provider: stub
   asian-odds:

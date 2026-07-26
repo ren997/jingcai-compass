@@ -31,7 +31,15 @@ class ProductionConfigurationTest {
                 .hasMessageContaining("DB_PASSWORD");
         assertThatThrownBy(() -> resolver.getProperty("spring.data.redis.host"))
                 .hasMessageContaining("REDIS_HOST");
+        assertThatThrownBy(() -> resolver.getProperty("app.security.jwt.secret"))
+                .hasMessageContaining("JWT_SECRET");
         assertThat(application.getProperty("spring.profiles.active")).isEqualTo("local");
+        assertThat(application.getProperty("app.security.jwt.access-token-ttl"))
+                .isEqualTo("${JWT_ACCESS_TOKEN_TTL:30m}");
+        assertThat(application.getProperty("app.security.bootstrap.username"))
+                .isEqualTo("${ADMIN_BOOTSTRAP_USERNAME:}");
+        assertThat(application.getProperty("app.security.bootstrap.password"))
+                .isEqualTo("${ADMIN_BOOTSTRAP_PASSWORD:}");
         assertThat(application.getProperty("app.asian-odds.api-key")).isEqualTo("${ASIAN_ODDS_API_KEY:}");
     }
 

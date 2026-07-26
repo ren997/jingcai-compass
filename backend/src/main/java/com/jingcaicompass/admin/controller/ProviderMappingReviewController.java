@@ -10,6 +10,10 @@ import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
 import com.jingcaicompass.system.api.ApiResponse;
 import com.jingcaicompass.system.api.PageResult;
+import com.jingcaicompass.system.exception.BusinessException;
+import com.jingcaicompass.system.exception.ErrorCode;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -17,7 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 供应商比赛映射人工复核后台接口。
- * 生产环境在 T601 前由 Security 拒绝；服务层契约可独立测试。
+ * 操作者身份只从已校验的管理员 JWT 取得。
  */
 @RestController
 @RequestMapping("/api/admin/provider/mappings")
@@ -45,19 +49,39 @@ public class ProviderMappingReviewController {
 
     /** 确认：PENDING → MANUAL_CONFIRMED。 */
     @PostMapping("/confirm")
-    public ApiResponse<MappingReviewDetailVo> confirm(@RequestBody MappingReviewConfirmDto request) {
-        return ApiResponse.success(matchMappingReviewService.confirm(request));
+    public ApiResponse<MappingReviewDetailVo> confirm(
+            @RequestBody MappingReviewConfirmDto request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ApiResponse.success(matchMappingReviewService.confirm(request, requireUsername(jwt)));
     }
 
     /** 拒绝：PENDING → REJECTED。 */
     @PostMapping("/reject")
-    public ApiResponse<MappingReviewDetailVo> reject(@RequestBody MappingReviewRejectDto request) {
-        return ApiResponse.success(matchMappingReviewService.reject(request));
+    public ApiResponse<MappingReviewDetailVo> reject(
+            @RequestBody MappingReviewRejectDto request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ApiResponse.success(matchMappingReviewService.reject(request, requireUsername(jwt)));
     }
 
     /** 重新打开：REJECTED → PENDING。 */
     @PostMapping("/reopen")
-    public ApiResponse<MappingReviewDetailVo> reopen(@RequestBody MappingReviewReopenDto request) {
-        return ApiResponse.success(matchMappingReviewService.reopen(request));
+    public ApiResponse<MappingReviewDetailVo> reopen(
+            @RequestBody MappingReviewReopenDto request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ApiResponse.success(matchMappingReviewService.reopen(request, requireUsername(jwt)));
+    }
+
+    private String requireUsername(Jwt jwt) {
+        if (jwt == null) {
+            throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
+        }
+        String username = jwt.getClaimAsString("username");
+        if (username == null || username.isBlank()) {
+            throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
+        }
+        return username;
     }
 }

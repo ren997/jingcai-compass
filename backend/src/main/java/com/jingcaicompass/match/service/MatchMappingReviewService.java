@@ -18,12 +18,12 @@ public interface MatchMappingReviewService {
     /** 查询映射详情（含候选与内部比赛摘要）。 */
     MappingReviewDetailVo detail(MappingReviewDetailQueryDto query);
 
-    /** PENDING → MANUAL_CONFIRMED；条件更新防并发。 */
-    MappingReviewDetailVo confirm(MappingReviewConfirmDto request);
+    /** PENDING → MANUAL_CONFIRMED；操作者必须来自已认证主体。 */
+    MappingReviewDetailVo confirm(MappingReviewConfirmDto request, String operatorUsername);
 
-    /** PENDING → REJECTED；条件更新防并发。 */
-    MappingReviewDetailVo reject(MappingReviewRejectDto request);
+    /** PENDING → REJECTED；操作者必须来自已认证主体。 */
+    MappingReviewDetailVo reject(MappingReviewRejectDto request, String operatorUsername);
 
-    /** REJECTED → PENDING；条件更新防并发。 */
-    MappingReviewDetailVo reopen(MappingReviewReopenDto request);
+    /** REJECTED → PENDING；操作者必须来自已认证主体。 */
+    MappingReviewDetailVo reopen(MappingReviewReopenDto request, String operatorUsername);
 }

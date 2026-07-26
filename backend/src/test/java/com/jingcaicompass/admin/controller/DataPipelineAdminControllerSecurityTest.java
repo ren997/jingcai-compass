@@ -15,6 +15,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(DataPipelineAdminController.class)
@@ -27,14 +28,17 @@ class DataPipelineAdminControllerSecurityTest {
     @MockBean
     private MatchNormalizationBackfillService normalizationBackfillService;
 
+    @MockBean
+    private JwtDecoder jwtDecoder;
+
     @Test
-    void backfillRemainsDeniedBeforeAdministratorAuthentication() throws Exception {
+    void backfillRequiresAdministratorAuthentication() throws Exception {
         mockMvc.perform(post("/api/admin/provider/pipeline/backfill")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"businessDate":"2026-07-22"}
                                 """))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.code").value(ErrorCode.ACCESS_DENIED.code()));
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(ErrorCode.AUTH_UNAUTHORIZED.code()));
     }
 }

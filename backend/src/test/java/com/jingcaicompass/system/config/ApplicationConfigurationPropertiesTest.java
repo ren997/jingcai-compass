@@ -4,6 +4,8 @@ import com.jingcaicompass.match.client.SportteryProviderProperties;
 import com.jingcaicompass.match.client.SportteryProviderType;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum;
+import com.jingcaicompass.snapshot.enums.SnapshotStorageTypeEnum;
+import com.jingcaicompass.snapshot.storage.SnapshotStorageProperties;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
 import org.junit.jupiter.api.Test;
@@ -16,6 +18,7 @@ import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,6 +45,8 @@ class ApplicationConfigurationPropertiesTest {
                     "app.asian-odds.retry.delay=500ms",
                     "app.asian-odds.quota-warning-threshold=0",
                     "app.pagination.max-page-size=100",
+                    "app.snapshot.storage.type=local",
+                    "app.snapshot.storage.path=./runtime/test-snapshots",
                     "app.tasks.enabled=false",
                     "app.tasks.sporttery-pool.enabled=false",
                     "app.tasks.sporttery-pool.fixed-delay=15m",
@@ -55,7 +60,10 @@ class ApplicationConfigurationPropertiesTest {
                     "app.tasks.prediction-lock.enabled=false",
                     "app.tasks.prediction-lock.fixed-delay=30s",
                     "app.tasks.prediction-lock.initial-delay=15s",
-                    "app.tasks.prediction-lock.batch-size=100"
+                    "app.tasks.prediction-lock.batch-size=100",
+                    "app.tasks.snapshot-publish.enabled=false",
+                    "app.tasks.snapshot-publish.fixed-delay=5m",
+                    "app.tasks.snapshot-publish.initial-delay=60s"
             );
 
     @Test
@@ -90,6 +98,15 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(tasks.predictionLock().fixedDelay()).isEqualTo(Duration.ofSeconds(30));
             assertThat(tasks.predictionLock().initialDelay()).isEqualTo(Duration.ofSeconds(15));
             assertThat(tasks.predictionLock().batchSize()).isEqualTo(100);
+            assertThat(tasks.snapshotPublish().enabled()).isFalse();
+            assertThat(tasks.snapshotPublish().fixedDelay()).isEqualTo(Duration.ofMinutes(5));
+            assertThat(tasks.snapshotPublish().initialDelay()).isEqualTo(Duration.ofSeconds(60));
+
+            SnapshotStorageProperties storage =
+                    context.getBean(SnapshotStorageProperties.class);
+            assertThat(storage.type()).isEqualTo(SnapshotStorageTypeEnum.LOCAL);
+            assertThat(storage.path().normalize())
+                    .isEqualTo(Path.of("./runtime/test-snapshots").normalize());
 
             PaginationProperties pagination = context.getBean(PaginationProperties.class);
             assertThat(pagination.maxPageSize()).isEqualTo(100);
@@ -206,12 +223,36 @@ class ApplicationConfigurationPropertiesTest {
                 .run(context -> assertThat(context).hasNotFailed());
     }
 
+    @Test
+    void rejectsSnapshotPublishDelayBelowOneSecond() {
+        contextRunner
+                .withPropertyValues("app.tasks.snapshot-publish.fixed-delay=0s")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.tasks.snapshot-publish.fixed-delay");
+                });
+    }
+
+    @Test
+    void allowsSnapshotPublishTogetherWithOtherTasks() {
+        contextRunner
+                .withPropertyValues(
+                        "app.tasks.data-pipeline.enabled=true",
+                        "app.tasks.prediction-lock.enabled=true",
+                        "app.tasks.snapshot-publish.enabled=true"
+                )
+                .run(context -> assertThat(context).hasNotFailed());
+    }
+
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties({
             SportteryProviderProperties.class,
             AsianOddsProviderProperties.class,
             SyncTaskProperties.class,
-            PaginationProperties.class
+            PaginationProperties.class,
+            SnapshotStorageProperties.class
     })
     static class PropertiesConfiguration {
     }

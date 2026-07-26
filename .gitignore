@@ -25,6 +25,7 @@ frontend/dist/
 frontend/.vite/
 *.tsbuildinfo
 backend/target/
+runtime/
 *.iml
 .DS_Store
 .env

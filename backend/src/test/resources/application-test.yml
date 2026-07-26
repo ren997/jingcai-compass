@@ -1,4 +1,8 @@
 app:
+  snapshot:
+    storage:
+      type: local
+      path: ${java.io.tmpdir}/jingcai-compass-test-snapshots
   security:
     jwt:
       secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
@@ -34,3 +38,7 @@ app:
       fixed-delay: 30s
       initial-delay: 15s
       batch-size: 100
+    snapshot-publish:
+      enabled: false
+      fixed-delay: 5m
+      initial-delay: 60s

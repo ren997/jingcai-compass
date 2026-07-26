@@ -13,6 +13,10 @@ spring:
       password: <password>
 
 app:
+  snapshot:
+    storage:
+      type: local
+      path: ./runtime/snapshots
   security:
     # JWT_SECRET 必须是 Base64 编码的至少 32 字节随机值，禁止提交真实值。
     jwt:
@@ -70,3 +74,7 @@ app:
       fixed-delay: 30s
       initial-delay: 15s
       batch-size: 100
+    snapshot-publish:
+      enabled: false
+      fixed-delay: 5m
+      initial-delay: 60s

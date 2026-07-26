@@ -4,7 +4,9 @@ import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.jingcaicompass.prediction.dto.PredictionLockCandidateDto;
 import com.jingcaicompass.prediction.entity.Prediction;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Collection;
+import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -28,6 +30,22 @@ public interface PredictionMapper extends BaseMapper<Prediction> {
     Integer selectLatestPublishedVersion(
             @Param("matchId") Long matchId,
             @Param("modelVersion") String modelVersion
+    );
+
+    /** 查询竞彩业务日内每个比赛和模型的最高公开版本。 */
+    @Select("""
+            SELECT DISTINCT ON (p.match_id, p.model_version) p.*
+            FROM predictions p
+            INNER JOIN matches m ON m.id = p.match_id
+            WHERE m.lottery_date = #{snapshotDate}
+              AND p.prediction_status IN ('PUBLISHED', 'LOCKED')
+            ORDER BY p.match_id,
+                     p.model_version,
+                     p.prediction_version DESC,
+                     p.id DESC
+            """)
+    List<Prediction> selectCurrentPublishedByLotteryDate(
+            @Param("snapshotDate") LocalDate snapshotDate
     );
 
     /** 仅允许完整 DRAFT 原子进入 PUBLISHED。 */

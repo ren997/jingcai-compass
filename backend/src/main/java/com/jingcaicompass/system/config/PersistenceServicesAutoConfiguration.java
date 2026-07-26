@@ -71,6 +71,12 @@ import com.jingcaicompass.prediction.service.PredictionLockServiceImpl;
 import com.jingcaicompass.prediction.service.PredictionLockWorker;
 import com.jingcaicompass.prediction.service.PredictionPublishService;
 import com.jingcaicompass.prediction.service.PredictionPublishServiceImpl;
+import com.jingcaicompass.snapshot.job.SnapshotPublishJob;
+import com.jingcaicompass.snapshot.mapper.PredictionSnapshotMapper;
+import com.jingcaicompass.snapshot.service.PredictionSnapshotService;
+import com.jingcaicompass.snapshot.service.PredictionSnapshotServiceImpl;
+import com.jingcaicompass.snapshot.service.SnapshotManifestGenerator;
+import com.jingcaicompass.snapshot.storage.SnapshotStorage;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -81,6 +87,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 
@@ -226,6 +233,33 @@ public class PersistenceServicesAutoConfiguration {
                 predictionContentHasher,
                 auditLogService,
                 predictionImportClock
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    SnapshotManifestGenerator snapshotManifestGenerator(
+            ObjectMapper objectMapper,
+            PredictionContentHasher predictionContentHasher
+    ) {
+        return new SnapshotManifestGenerator(objectMapper, predictionContentHasher);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PredictionSnapshotService.class)
+    PredictionSnapshotService predictionSnapshotService(
+            PredictionMapper predictionMapper,
+            PredictionSnapshotMapper predictionSnapshotMapper,
+            SnapshotManifestGenerator snapshotManifestGenerator,
+            SnapshotStorage snapshotStorage,
+            JdbcTemplate jdbcTemplate
+    ) {
+        return new PredictionSnapshotServiceImpl(
+                predictionMapper,
+                predictionSnapshotMapper,
+                snapshotManifestGenerator,
+                snapshotStorage,
+                jdbcTemplate
         );
     }
 
@@ -494,5 +528,19 @@ public class PersistenceServicesAutoConfiguration {
     )
     PredictionLockJob predictionLockJob(PredictionLockService predictionLockService) {
         return new PredictionLockJob(predictionLockService);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(
+            prefix = "app.tasks",
+            name = {"enabled", "snapshot-publish.enabled"},
+            havingValue = "true"
+    )
+    SnapshotPublishJob snapshotPublishJob(
+            PredictionSnapshotService predictionSnapshotService,
+            Clock predictionImportClock
+    ) {
+        return new SnapshotPublishJob(predictionSnapshotService, predictionImportClock);
     }
 }

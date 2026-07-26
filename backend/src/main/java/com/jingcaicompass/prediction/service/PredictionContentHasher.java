@@ -23,7 +23,7 @@ import org.springframework.util.StringUtils;
 @Component
 public class PredictionContentHasher {
 
-    static final int HASH_SCHEMA_VERSION = 1;
+    public static final int HASH_SCHEMA_VERSION = 1;
     private static final int PROBABILITY_SCALE = 6;
     private static final int EXPECTED_GOALS_SCALE = 2;
     private static final BigDecimal MIN_PROBABILITY_SUM = new BigDecimal("0.999999");

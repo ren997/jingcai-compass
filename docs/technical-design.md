@@ -446,6 +446,8 @@ P0 必须支持：
 ### 12.3 公开快照
 
 - 每日生成规范化 JSON manifest。
+- manifest v1 的字段、选择、排序、时间和小数规范见
+  [`snapshot-manifest-v1.md`](snapshot-manifest-v1.md)。
 - manifest 内记录预测 ID、模型版本、发布时间、锁定时间和单条预测哈希。
 - 对 manifest 计算 SHA-256，并记录到 `prediction_snapshots`。
 - 文件通过 `SnapshotStorage` 保存；生产环境启用对象版本或不可覆盖策略。

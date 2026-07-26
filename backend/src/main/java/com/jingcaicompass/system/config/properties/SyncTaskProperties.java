@@ -17,7 +17,8 @@ public record SyncTaskProperties(
         @Valid @NotNull SportteryPoolTaskProperties sportteryPool,
         @Valid @NotNull AsianOddsTaskProperties asianOdds,
         @Valid @NotNull DataPipelineTaskProperties dataPipeline,
-        @Valid @NotNull PredictionLockTaskProperties predictionLock
+        @Valid @NotNull PredictionLockTaskProperties predictionLock,
+        @Valid @NotNull SnapshotPublishTaskProperties snapshotPublish
 ) {
 
     @AssertTrue(message = "app.tasks.data-pipeline.enabled cannot be combined with individual sync tasks")
@@ -94,6 +95,23 @@ public record SyncTaskProperties(
         }
 
         @AssertTrue(message = "app.tasks.prediction-lock.initial-delay must not be negative")
+        public boolean isInitialDelayValid() {
+            return initialDelay != null && !initialDelay.isNegative();
+        }
+    }
+
+    public record SnapshotPublishTaskProperties(
+            boolean enabled,
+            @NotNull Duration fixedDelay,
+            @NotNull Duration initialDelay
+    ) {
+
+        @AssertTrue(message = "app.tasks.snapshot-publish.fixed-delay must be at least 1 second")
+        public boolean isFixedDelayValid() {
+            return fixedDelay != null && fixedDelay.compareTo(Duration.ofSeconds(1)) >= 0;
+        }
+
+        @AssertTrue(message = "app.tasks.snapshot-publish.initial-delay must not be negative")
         public boolean isInitialDelayValid() {
             return initialDelay != null && !initialDelay.isNegative();
         }

@@ -32,6 +32,10 @@ springdoc:
     enabled: ${SPRINGDOC_ENABLED:false}
 
 app:
+  snapshot:
+    storage:
+      type: ${SNAPSHOT_STORAGE_TYPE:local}
+      path: ${SNAPSHOT_STORAGE_PATH:./runtime/snapshots}
   sporttery:
     provider: ${SPORTTERY_PROVIDER:china}
     base-url: ${SPORTTERY_BASE_URL:https://webapi.sporttery.cn}
@@ -70,3 +74,7 @@ app:
       fixed-delay: ${PREDICTION_LOCK_FIXED_DELAY:30s}
       initial-delay: ${PREDICTION_LOCK_INITIAL_DELAY:15s}
       batch-size: ${PREDICTION_LOCK_BATCH_SIZE:100}
+    snapshot-publish:
+      enabled: ${SNAPSHOT_PUBLISH_TASK_ENABLED:false}
+      fixed-delay: ${SNAPSHOT_PUBLISH_FIXED_DELAY:5m}
+      initial-delay: ${SNAPSHOT_PUBLISH_INITIAL_DELAY:60s}

@@ -34,17 +34,17 @@ public class NoOpMatchMappingReviewService implements MatchMappingReviewService 
     }
 
     @Override
-    public MappingReviewDetailVo confirm(MappingReviewConfirmDto request) {
+    public MappingReviewDetailVo confirm(MappingReviewConfirmDto request, String operatorUsername) {
         throw unsupported();
     }
 
     @Override
-    public MappingReviewDetailVo reject(MappingReviewRejectDto request) {
+    public MappingReviewDetailVo reject(MappingReviewRejectDto request, String operatorUsername) {
         throw unsupported();
     }
 
     @Override
-    public MappingReviewDetailVo reopen(MappingReviewReopenDto request) {
+    public MappingReviewDetailVo reopen(MappingReviewReopenDto request, String operatorUsername) {
         throw unsupported();
     }
 

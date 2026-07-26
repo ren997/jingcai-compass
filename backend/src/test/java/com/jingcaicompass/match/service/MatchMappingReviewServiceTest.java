@@ -119,7 +119,10 @@ class MatchMappingReviewServiceTest {
         when(matchMapper.selectById(30L)).thenReturn(match(30L));
         when(matchSourceMappingMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
 
-        MappingReviewDetailVo result = service.confirm(new MappingReviewConfirmDto(3L, null, "admin-1"));
+        MappingReviewDetailVo result = service.confirm(
+                new MappingReviewConfirmDto(3L, null),
+                "admin-1"
+        );
 
         assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.MANUAL_CONFIRMED);
         verify(auditLogService).append(
@@ -140,7 +143,10 @@ class MatchMappingReviewServiceTest {
         when(matchMapper.selectById(40L)).thenReturn(match(40L));
         when(matchSourceMappingMapper.update(isNull(), any(Wrapper.class))).thenReturn(0);
 
-        assertThatThrownBy(() -> service.confirm(new MappingReviewConfirmDto(4L, null, "admin-1")))
+        assertThatThrownBy(() -> service.confirm(
+                new MappingReviewConfirmDto(4L, null),
+                "admin-1"
+        ))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("confirm conflict");
         verify(auditLogService, never()).append(any(), any(), any(), any(), any(), any(), any());
@@ -156,7 +162,10 @@ class MatchMappingReviewServiceTest {
         when(matchSourceMappingMapper.selectById(5L)).thenReturn(pending, rejected);
         when(matchSourceMappingMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
 
-        MappingReviewDetailVo result = service.reject(new MappingReviewRejectDto(5L, "bad", "admin-2"));
+        MappingReviewDetailVo result = service.reject(
+                new MappingReviewRejectDto(5L, "bad"),
+                "admin-2"
+        );
 
         assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.REJECTED);
         verify(auditLogService).append(
@@ -182,7 +191,10 @@ class MatchMappingReviewServiceTest {
         when(matchSourceMappingMapper.selectById(6L)).thenReturn(rejected, reopened);
         when(matchSourceMappingMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
 
-        MappingReviewDetailVo result = service.reopen(new MappingReviewReopenDto(6L, "admin-3"));
+        MappingReviewDetailVo result = service.reopen(
+                new MappingReviewReopenDto(6L),
+                "admin-3"
+        );
 
         assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.PENDING);
         verify(auditLogService).append(
@@ -202,9 +214,24 @@ class MatchMappingReviewServiceTest {
         auto.setMappingStatus(MappingStatusEnum.AUTO_CONFIRMED);
         when(matchSourceMappingMapper.selectById(7L)).thenReturn(auto);
 
-        assertThatThrownBy(() -> service.confirm(new MappingReviewConfirmDto(7L, null, "admin-1")))
+        assertThatThrownBy(() -> service.confirm(
+                new MappingReviewConfirmDto(7L, null),
+                "admin-1"
+        ))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("expected PENDING");
+    }
+
+    @Test
+    void rejectsMissingAuthenticatedOperator() {
+        assertThatThrownBy(() -> service.confirm(
+                new MappingReviewConfirmDto(8L, null),
+                " "
+        ))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(com.jingcaicompass.system.exception.ErrorCode.AUTH_UNAUTHORIZED);
+        verify(matchSourceMappingMapper, never()).selectById(any());
     }
 
     private MatchSourceMapping pendingMapping(Long id, Long matchId) {

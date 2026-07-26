@@ -52,6 +52,16 @@
 - Finish by setting the task to `DONE`, `PARTIAL`, or `BLOCKED`, updating the next task and milestone status, and committing the task-board update together with the code.
 - Do not mark a task `DONE` when only a prototype or partial vertical slice exists.
 
+## Session Recovery and CI Delivery
+
+- A new Codex session must recover state from this file, `docs/dev-tasks.md`, Git status/history, the current branch, and the current pull request. Previous chat history is not a source of truth.
+- At the start of a resumed task, inspect `git status --short --branch`, recent commits, the task-board header, and the current task's execution record before editing. Preserve all existing worktree changes.
+- If acceptance requires Testcontainers, PostgreSQL-specific behavior, concurrency checks, a hosted runner, or any other GitHub Actions result, develop on a `codex/<task>-<topic>` branch and complete the Draft PR/CI/merge flow in `docs/dev-tasks.md`.
+- A task whose full acceptance can be verified locally may be developed locally without creating or pushing a branch unless the project owner requests publication.
+- Never replace an unavailable CI/Testcontainers check with a shared development or cloud database. Keep the task `PARTIAL` or `BLOCKED` and record the exact missing evidence.
+- Do not mark a CI-dependent task `DONE` until the required GitHub Actions run succeeds and its URL, commit SHA, environment versions, and test results are recorded.
+- After the implementation run succeeds, commit the final task-board update, wait for the resulting check again, mark the PR ready, merge it, switch back to `master`, and fast-forward from `origin/master`.
+
 ## Commit Messages
 
 - Use the format `<type>(<module>): <主题>`.

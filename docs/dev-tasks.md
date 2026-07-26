@@ -63,7 +63,88 @@
 6. 更新里程碑表、“当前活动任务”“下一任务”和文档底部的变更记录。
 7. 代码与本文件一起提交，提交信息遵循 `<type>(<module>): <中文主题>`。
 
-### 2.4 状态定义
+### 2.4 新会话恢复与 GitHub Actions 交付
+
+聊天上下文不作为项目事实来源。新会话进入仓库后，必须先读取根目录 `AGENTS.md`、本文件顶部状态和当前任务完整执行记录，再执行以下只读检查：
+
+```bash
+git status --short --branch
+git log -5 --oneline --decorate
+git remote -v
+gh --version
+gh auth status
+```
+
+- 以当前工作区、Git 提交、任务看板、PR 和 CI 记录恢复“已完成、当前任务、下一步和阻塞”；不要凭旧聊天内容推断。
+- 工作区有未提交改动时先确认其归属并保留，不得用 reset、checkout 或覆盖文件的方式清理。
+- 当前已经位于 `codex/*` 任务分支时继续该分支，不重复建分支；已有 PR 时先用 `gh pr view` 恢复 PR 和检查状态。
+- 本文件与 Git 不一致时先核对提交和 PR，再修正文档；不得为让状态看起来一致而丢弃代码。
+- `gh` 不存在时先安装 GitHub CLI；`gh auth status` 已成功时复用现有授权，不重复要求登录。只有状态失败时才运行 `gh auth login`，且不得把 Token 写入仓库、配置样例、命令日志或任务记录。
+
+按验收手段决定交付方式：
+
+- 任务依赖 Testcontainers、PostgreSQL 专有约束/并发、托管 Runner 或任务明确要求 `-Pintegration verify` 时，必须使用独立 `codex/<task>-<topic>` 分支、Draft PR 和 GitHub Actions。
+- 全部完成标准可由本机测试满足，且项目负责人未要求发布时，可以只在本地开发，不自动推送或创建 PR。
+- 本机没有 Docker 时只运行普通测试；禁止把共享开发库或云数据库作为 Testcontainers/CI 的替代品。
+
+需要 GitHub Actions 的新任务，在工作区干净且本地 `master` 没有未发布提交时按以下顺序开始：
+
+```bash
+git switch master
+git pull --ff-only origin master
+git switch -c codex/tNNN-short-topic
+```
+
+如果本地 `master` 已领先、落后或分叉，先核对提交归属；不得强制重置。实现完成后执行任务专项测试、普通测试和 `git diff --check`，只显式暂存本任务文件，然后提交、推送并创建 Draft PR：
+
+```bash
+git add <本任务文件>
+git commit -m "<type>(<module>): <中文主题>"
+git push -u origin codex/tNNN-short-topic
+gh pr create --draft --base master --head codex/tNNN-short-topic --fill
+```
+
+`.github/workflows/backend-integration.yml` 会在相关 PR、`master` push 或手动触发时使用 Java 21、Maven、Docker/Testcontainers 和 PostgreSQL 16 执行：
+
+```bash
+mvn -B -ntp -f backend/pom.xml -Pintegration verify
+```
+
+查看、手动触发和排查 Actions：
+
+```bash
+gh pr checks <PR编号> --watch --interval 10
+gh workflow run backend-integration.yml --ref codex/tNNN-short-topic
+gh run view <运行编号> --log-failed
+gh run download <运行编号> -n backend-test-reports
+```
+
+CI 失败时在同一任务分支修复、提交并推送，由 PR 自动重新验证；不得改用共享数据库绕过失败。Actions 被禁用、无 Runner 配额或外部设施持续不可用时，记录证据和解除条件，任务保持 `PARTIAL` 或改为 `BLOCKED`。
+
+首次实现 CI 成功后，在任务执行记录中写入：
+
+- 实现提交 SHA、PR 链接和 Actions 运行链接/编号。
+- Java、Maven、PostgreSQL 和固定容器镜像版本。
+- 普通测试、全部 PostgreSQL IT 及本任务新增 IT 数量。
+- 最新 Flyway 版本，以及该任务实际验证的约束、事务、幂等或并发行为。
+
+只有完成标准全部满足且上述证据齐全后才能把任务改为 `DONE`。提交最终任务看板会再次触发 CI，必须等待该检查成功后再合并：
+
+```bash
+git add docs/dev-tasks.md
+git commit -m "docs(plan): 完成TNNN任务名称"
+git push
+gh pr checks <PR编号> --watch --interval 10
+gh pr ready <PR编号>
+gh pr merge <PR编号> --merge
+git switch master
+git pull --ff-only origin master
+git status --short --branch
+```
+
+最终状态应为：PR 已合并、远端 `master` 包含任务提交、本地 `master` 与 `origin/master` 一致、工作区干净，任务看板指向正确的下一任务。
+
+### 2.5 状态定义
 
 - `TODO`：未开始。
 - `IN_PROGRESS`：当前正在执行；全项目只能有一个。
@@ -73,7 +154,7 @@
 - `SKIPPED`：项目负责人明确决定不执行；必须记录原因、已接受风险和后续替代验证方式。
 - `DONE`：代码、测试、文档和完成标准均已满足。
 
-### 2.5 文档职责
+### 2.6 文档职责
 
 - `requirements-mvp.md`：定义做什么、不做什么和业务验收口径。
 - `technical-design.md`：定义技术栈、架构边界、数据模型和不可违反的规则。
@@ -1786,3 +1867,4 @@ T304 + T402 + T403 -> T404 -> T405
 | 2026-07-26 | T303 / `1160883` | `IN_PROGRESS -> DONE` | 管理员预测发布、连续版本、并发幂等、规范化哈希和发布审计完成；225 个普通测试、12 个 PostgreSQL 16.14 集成测试通过 |
 | 2026-07-26 | T304 / `95aeaf8` | `IN_PROGRESS -> DONE` | V9 不可变触发器、PostgreSQL 到期抢占、独立事务、逐条审计和锁定指标完成；245 个普通测试、17 个 PostgreSQL 16.14 集成测试通过 |
 | 2026-07-26 | T305 / `5b301d7` | `IN_PROGRESS -> DONE` | 确定性公开快照、单条哈希复算、本地原子发布、advisory lock 和版本幂等完成；267 个普通测试、22 个 PostgreSQL 16.14 集成测试通过；M3 完成 |
+| 2026-07-26 | 新会话恢复与 CI 交付规范 | 文档完善 | 固化 Git/任务看板恢复入口、CI 分支判断、Draft PR、两轮 Actions、失败排查、证据记录、合并同步和授权复用流程 |

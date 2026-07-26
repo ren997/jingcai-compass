@@ -52,10 +52,10 @@ public class MatchEntity {
      */
     private MatchStatusEnum matchStatus;
 
-    /** 主队比分 */
+    /** 当前权威赛果投影的主队比分；历史事实以 MatchResultFact 为准。 */
     private Integer homeScore;
 
-    /** 客队比分 */
+    /** 当前权威赛果投影的客队比分；历史事实以 MatchResultFact 为准。 */
     private Integer awayScore;
 
     @TableField(fill = FieldFill.INSERT)

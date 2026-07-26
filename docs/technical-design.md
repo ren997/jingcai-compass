@@ -2,8 +2,8 @@
 
 ## 1. 文档信息
 
-- 文档版本：v0.4
-- 文档日期：2026-07-25
+- 文档版本：v0.5
+- 文档日期：2026-07-26
 - 适用范围：竞彩罗盘 MVP
 - 参考项目：同级仓库 `stableflow` 的模块化单体、Flyway、MyBatis-Plus、前后端分离和任务驱动实践
 - 数据库决策：使用 PostgreSQL 16
@@ -328,7 +328,8 @@ P0 第一批表建议：
 
 ### 9.2 比赛与盘口
 
-- `matches`：内部比赛、体彩编号、开赛时间、状态和最终比分。
+- `matches`：内部比赛、体彩编号、开赛时间和当前状态/比分查询投影；不保存可独立修改的历史赛果事实。
+- `match_result_facts`：不可变的官方赛果事实版本、来源原始响应、确认时间和替代关系；是赛果和结算的唯一权威来源。
 - `sporttery_pool_snapshots`：体彩比赛池、让球、SP 和销售状态快照。
 - `asian_odds_snapshots`：来源、博彩公司、盘口、主客赔率和时间戳。
 
@@ -336,7 +337,7 @@ P0 第一批表建议：
 
 - `predictions`：模型版本、概率、方向、发布时间、锁定时间和哈希。
 - `prediction_snapshots`：每日公开快照和快照哈希。
-- `settlements`：按预测和市场生成的结算结果。
+- `settlements`：按预测和市场生成的版本化结算结果，保存规则版本、输入事实版本和替代关系。
 - `audit_logs`：关键操作的追加式审计记录。
 
 ### 9.4 关键唯一约束
@@ -346,7 +347,8 @@ P0 第一批表建议：
 - `raw_data_payloads(provider_code, data_type, request_key, payload_hash)` 唯一。
 - `asian_odds_snapshots(match_id, provider_code, bookmaker_code, captured_at, handicap_line)` 唯一。
 - `predictions(match_id, model_version)` 唯一，是否允许同模型重发需由发布版本字段明确表达。
-- `settlements(prediction_id, market_type)` 唯一。
+- `match_result_facts(match_id, fact_version)` 唯一；每场仅一个当前事实版本（部分唯一约束）。
+- `settlements(prediction_id, market_type, settlement_version)` 唯一；每个预测和市场仅一个当前有效结算（部分唯一约束），历史版本保留。
 - `prediction_snapshots(snapshot_date, snapshot_version)` 唯一。
 
 所有幂等约束最终落在 PostgreSQL，不能只依赖 Java 判断或 Redis Key。
@@ -362,7 +364,19 @@ P0 第一批表建议：
 - `CANCELLED`
 - `ABANDONED`
 
-### 10.2 PredictionStatusEnum
+### 10.2 MatchResultFactStatusEnum
+
+- `PENDING`
+- `FINAL`
+- `VOID`
+
+规则：
+
+- `FINAL` 必须有合法的最终比分，才可进入胜平负或让球胜平负计算。
+- `VOID` 必须来自明确的官方作废结论；仅凭延期、取消或中止的比赛状态不得擅自生成作废结算。
+- 每次官方修正追加新的 `match_result_facts` 版本；`matches` 的当前投影只能与新事实在同一事务更新。
+
+### 10.3 PredictionStatusEnum
 
 - `DRAFT`
 - `PUBLISHED`
@@ -375,16 +389,16 @@ P0 第一批表建议：
 - 到达锁定时间后必须转为 `LOCKED`。
 - 锁定状态不因比赛延期自动解锁，异常情况只能追加说明并走审计流程。
 
-### 10.3 SettlementStatusEnum
+### 10.4 SettlementStatusEnum
 
 - `PENDING`
 - `HIT`
 - `MISS`
 - `VOID`
 
-延期是 `MatchStatusEnum`，在恢复并取得最终赛果前保持 `PENDING`。MVP 中亚洲盘是模型输入，不是自动结算市场，因此不使用走水、半赢或半输结算状态。
+延期是 `MatchStatusEnum`，在恢复并取得最终赛果前不生成当前有效结算，公开层派生展示为 `PENDING`。MVP 中亚洲盘是模型输入，不是自动结算市场，因此不使用走水、半赢或半输结算状态。
 
-### 10.4 MappingStatus
+### 10.5 MappingStatus
 
 - `PENDING`
 - `AUTO_CONFIRMED`
@@ -417,8 +431,8 @@ P0 第一批表建议：
 
 1. 只扫描未完赛、延期或待确认的体彩比赛。
 2. 保存原始赛果响应。
-3. 通过允许的状态流转更新比赛。
-4. 最终比分变化必须写审计并重新触发派生结算，不直接修改结算行。
+3. 追加权威赛果事实，并在同一事务更新 `matches` 当前查询投影。
+4. 最终比分变化必须写审计并重新触发派生结算，不直接修改历史事实或结算行。
 
 ## 12. 预测、锁定与快照
 
@@ -462,7 +476,7 @@ P0 必须支持：
 1. `SettlementJob` 查询已锁定、比赛已完赛且尚未结算的预测。
 2. 加载最终比分、体彩让球和对应市场规则。
 3. 纯函数式计算结算结果。
-4. 按 `(prediction_id, market_type)` 幂等插入结算。
+4. 按结算版本和“当前有效结算”部分唯一约束幂等生成结算；重复任务不生成第二个当前版本。
 5. 追加结算审计和统计刷新事件。
 
 要求：
@@ -752,7 +766,7 @@ DB_PASSWORD=<password>
 3. Docker/Nginx 部署。
 4. 连续运行和验收。
 
-每个里程碑都应在 `dev-tasks.md` 中拆成带状态、依赖、交付物和完成标准的任务编号。
+每个里程碑都应在 `dev-tasks.md` 中拆成带状态、依赖、交付物和完成标准的任务编号。真实数据连续观测任务还必须在启动前记录负责人、开始日、外部凭据/节点、预算上限和决策日。
 
 ## 22. 明确不在 MVP 引入
 
@@ -789,6 +803,6 @@ DB_PASSWORD=<password>
 ## 24. 执行文档
 
 - `implementation-guide.md`：定义从当前脚手架开始的文件、配置、migration、类、接口、测试和验收步骤。
-- `dev-tasks.md`：使用 T000～T605 维护任务状态、依赖、交付物和完成标准；实际顺序以任务依赖图为准。
+- `dev-tasks.md`：使用 T000～T607 维护任务状态、依赖、交付物和完成标准；实际顺序以任务依赖图为准。
 
-开发时先在任务表找到任务编号，再阅读落地手册的对应里程碑。当前从 T002 开始，不并行铺开所有业务页面。
+开发时先在任务表找到任务编号，再阅读落地手册的对应里程碑。当前下一主线以 `dev-tasks.md` 记录的 T401 为准，不并行铺开所有业务页面。

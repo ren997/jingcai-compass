@@ -5,9 +5,9 @@
 - 文档版本：v0.4
 - 最后更新：2026-07-26
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：无（`T401` 等待 PostgreSQL 16 CI 回归）
+- 当前活动任务：无
 - 下一任务：`T403 市场结算器`
-- 最近完成增量：`T305 公开预测快照`
+- 最近完成增量：`T401 比赛事实与结算 migration`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -218,7 +218,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 | M1 Provider 基础 | `PARTIAL` | T101～T105 已完成；T106/T107 连续观测和授权结论尚未完成 |
 | M2 标准化与映射 | `DONE` | T201～T207 已完成；双源闭环及枚举、注释、公开模型命名和包结构规范均已通过验证 |
 | M3 预测发布闭环 | `DONE` | T301～T305、T601 已完成；预测导入、发布、锁定和确定性公开快照闭环已通过验证 |
-| M4 赛果与结算 | `TODO` | 依赖锁定预测和最终赛果 |
+| M4 赛果与结算 | `PARTIAL` | T401 已完成；等待 T403 结算器、T402 赛果同步及后续自动结算闭环 |
 | M5 公共 API 与前端 | `PARTIAL` | 比赛列表纵向切片已完成，等待正式主线依赖 |
 | M6 后台、稳定性与上线 | `PARTIAL` | T601 管理员鉴权已完成；后台页面、可观测性、部署及真实数据源上线条件尚未完成 |
 
@@ -1178,7 +1178,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T401 比赛事实与结算 migration
 
-- 状态：`PARTIAL`
+- 状态：`DONE`
 - 优先级：P0
 - 依赖：T006、T205、T301、T601
 - 交付物：
@@ -1193,7 +1193,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 复用 V6 已存在的 `audit_logs`；扩展赛果同步、结算和替代的应用审计枚举，不重复建表或修改 V1～V9。
   - [x] 编写 V11，只为 T402 的当前事实查询、T404 的待结算查询和已知历史查询增加有实际 SQL 依据的核心索引。
   - [x] 创建 Entity、Mapper、`SettlementStatusEnum`、事实版本/结算版本枚举；T401 不实现产生审计记录的同步或结算流程。
-  - [ ] 在 PostgreSQL 16 CI 验证事实权威性、当前结算唯一性与历史版本共存、审计不可普通覆盖，以及使用足量测试数据的索引查询计划。
+  - [x] 在 PostgreSQL 16 CI 验证事实权威性、当前结算唯一性与历史版本共存、审计不可普通覆盖，以及使用足量测试数据的索引查询计划。
 - 验证命令：
 
   ```bash
@@ -1211,6 +1211,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-26：开始执行；范围为 V10/V11 赛果事实与结算版本化结构、数据库保护、实体/Mapper/枚举、审计枚举和 PostgreSQL 16 验证。不实现赛果同步、结算计算、自动结算、Controller、前端或修改 V1～V9。
   - 2026-07-26：实现完成待 CI。V10 在既有比分非空时以行数明确失败；赛果事实仅接受 `SPORTTERY_RESULT` 原始载荷，按版本追加并保护不可改删；结算仅持久化 `HIT`/`MISS`/`VOID`，`PENDING` 留给查询派生。V11 提供当前可结算事实、当前结算按事实反查和预测市场历史索引依据。
   - 2026-07-26：`mvn -B -ntp -f backend/pom.xml test` 通过（269）；`git diff --check` 通过。`npm run backend:test` 未执行（本机无 npm），已用其等价 Maven 命令替代。`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 已触发但本机无 Docker，8 个 Testcontainers 用例均在 PostgreSQL 容器启动前失败；需在 CI PostgreSQL 16 环境回归后将 T401 置为 `DONE`。
+  - 2026-07-26：实现提交 `279886bcdfb18d2e516a74c20b5a3913feaacc05` 已由 [PR #9](https://github.com/ren997/jingcai-compass/pull/9) 的 [GitHub Actions #30203999849](https://github.com/ren997/jingcai-compass/actions/runs/30203999849) 验证通过。Runner 使用 Eclipse Temurin Java 21.0.11、Maven 3.9.16、Testcontainers `postgres:16-alpine`（PostgreSQL 16.14）；269 个普通测试和 27 个 PostgreSQL IT 全部通过，其中 T401 新增 `SettlementMigrationApplicationIT` 的 5 个 IT。实际验证空库 Flyway 升级至 V11 且重复迁移为 0、旧比分 V9→V10 拒绝、赛果事实不可改删、同预测市场当前结算唯一与历史替代共存、赛果来源/比分/跨比赛约束、沿用 V6 的只追加审计流程，以及 5,000 条锁定预测数据上的当前事实/当前结算/历史索引 `EXPLAIN` 计划。
 
 ### T402 体彩赛果同步
 
@@ -1813,9 +1814,9 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ## 14. 推荐的下一步
 
-当前无活动任务；T305 已完成确定性 manifest、本地原子发布、快照版本幂等和 PostgreSQL 并发验证，M3 预测发布闭环完成。
+当前无活动任务；T401 已完成赛果事实与结算持久化基线及 PostgreSQL 16 CI 验证，M4 进入 `PARTIAL`。
 
-下一主线任务为 `T401 比赛事实与结算 migration`。
+下一主线任务为 `T403 市场结算器`。
 
 T106/T107 应尽快启动自动每日采集；开始计时前必须记录负责人、开始日、外部凭据/部署节点、预算上限和第 14 天决策日，启动后标记为 `MONITORING`，可与主线并存。它们不阻塞 Stub 领域开发，但 T108 未达到 Go 标准时禁止生产部署。
 
@@ -1868,3 +1869,4 @@ T304 + T402 + T403 -> T404 -> T405
 | 2026-07-26 | T304 / `95aeaf8` | `IN_PROGRESS -> DONE` | V9 不可变触发器、PostgreSQL 到期抢占、独立事务、逐条审计和锁定指标完成；245 个普通测试、17 个 PostgreSQL 16.14 集成测试通过 |
 | 2026-07-26 | T305 / `5b301d7` | `IN_PROGRESS -> DONE` | 确定性公开快照、单条哈希复算、本地原子发布、advisory lock 和版本幂等完成；267 个普通测试、22 个 PostgreSQL 16.14 集成测试通过；M3 完成 |
 | 2026-07-26 | 新会话恢复与 CI 交付规范 | 文档完善 | 固化 Git/任务看板恢复入口、CI 分支判断、Draft PR、两轮 Actions、失败排查、证据记录、合并同步和授权复用流程 |
+| 2026-07-26 | T401 / `279886b` | `PARTIAL -> DONE` | V10/V11、不可变版本化赛果事实、结算历史/当前唯一、核心索引及 Entity/Mapper/Enum 完成；[Actions #30203999849](https://github.com/ren997/jingcai-compass/actions/runs/30203999849) 在 PostgreSQL 16.14 通过 269 个普通测试和 27 个 IT，其中 T401 为 5 个 IT；M4 进入 `PARTIAL` |

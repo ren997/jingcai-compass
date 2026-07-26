@@ -13,6 +13,7 @@ import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.entity.SportteryPoolSnapshot;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
+import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -34,11 +35,14 @@ class SportteryPoolSyncMatchWriterTest {
     @Mock
     private SportteryPoolSnapshotMapper snapshotMapper;
 
+    @Mock
+    private MatchResultFactMapper matchResultFactMapper;
+
     private SportteryPoolMatchWriter writer;
 
     @BeforeEach
     void setUp() {
-        writer = new SportteryPoolMatchWriter(matchMapper, snapshotMapper);
+        writer = new SportteryPoolMatchWriter(matchMapper, snapshotMapper, matchResultFactMapper);
     }
 
     @Test
@@ -100,6 +104,26 @@ class SportteryPoolSyncMatchWriterTest {
         ArgumentCaptor<SportteryPoolSnapshot> captor = ArgumentCaptor.forClass(SportteryPoolSnapshot.class);
         verify(snapshotMapper).insert(captor.capture());
         assertThat(captor.getValue().getHadHomeSp()).isEqualByComparingTo("2.25");
+    }
+
+    @Test
+    void poolSyncDoesNotOverwriteProjectionWhenCurrentResultFactExists() {
+        MatchEntity existing = new MatchEntity();
+        existing.setId(34L);
+        existing.setMatchStatus(MatchStatusEnum.FINISHED);
+        existing.setHomeScore(2);
+        existing.setAwayScore(1);
+        when(matchMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(existing);
+        when(matchResultFactMapper.existsCurrentByMatchId(34L)).thenReturn(true);
+        when(snapshotMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+
+        writer.writeAll(List.of(sampleItem("周三001", "2.10", "Selling")), "f".repeat(64));
+
+        ArgumentCaptor<MatchEntity> matchCaptor = ArgumentCaptor.forClass(MatchEntity.class);
+        verify(matchMapper).updateById(matchCaptor.capture());
+        assertThat(matchCaptor.getValue().getMatchStatus()).isEqualTo(MatchStatusEnum.FINISHED);
+        assertThat(matchCaptor.getValue().getHomeScore()).isEqualTo(2);
+        assertThat(matchCaptor.getValue().getAwayScore()).isEqualTo(1);
     }
 
     @Test

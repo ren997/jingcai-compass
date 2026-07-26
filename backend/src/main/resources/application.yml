@@ -84,6 +84,11 @@ app:
       enabled: ${SPORTTERY_POOL_TASK_ENABLED:false}
       fixed-delay: ${SPORTTERY_POOL_FIXED_DELAY:15m}
       initial-delay: ${SPORTTERY_POOL_INITIAL_DELAY:30s}
+    match-result:
+      enabled: ${MATCH_RESULT_TASK_ENABLED:false}
+      fixed-delay: ${MATCH_RESULT_FIXED_DELAY:15m}
+      initial-delay: ${MATCH_RESULT_INITIAL_DELAY:60s}
+      lookback-days: ${MATCH_RESULT_LOOKBACK_DAYS:7}
     asian-odds:
       enabled: ${ASIAN_ODDS_TASK_ENABLED:false}
       fixed-delay: ${ASIAN_ODDS_FIXED_DELAY:20m}

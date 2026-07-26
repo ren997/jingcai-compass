@@ -51,6 +51,10 @@ class ApplicationConfigurationPropertiesTest {
                     "app.tasks.sporttery-pool.enabled=false",
                     "app.tasks.sporttery-pool.fixed-delay=15m",
                     "app.tasks.sporttery-pool.initial-delay=30s",
+                    "app.tasks.match-result.enabled=false",
+                    "app.tasks.match-result.fixed-delay=15m",
+                    "app.tasks.match-result.initial-delay=60s",
+                    "app.tasks.match-result.lookback-days=7",
                     "app.tasks.asian-odds.enabled=false",
                     "app.tasks.asian-odds.fixed-delay=20m",
                     "app.tasks.asian-odds.initial-delay=45s",
@@ -89,6 +93,10 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(tasks.enabled()).isFalse();
             assertThat(tasks.sportteryPool().enabled()).isFalse();
             assertThat(tasks.sportteryPool().fixedDelay()).isEqualTo(Duration.ofMinutes(15));
+            assertThat(tasks.matchResult().enabled()).isFalse();
+            assertThat(tasks.matchResult().fixedDelay()).isEqualTo(Duration.ofMinutes(15));
+            assertThat(tasks.matchResult().initialDelay()).isEqualTo(Duration.ofSeconds(60));
+            assertThat(tasks.matchResult().lookbackDays()).isEqualTo(7);
             assertThat(tasks.asianOdds().enabled()).isFalse();
             assertThat(tasks.asianOdds().fixedDelay()).isEqualTo(Duration.ofMinutes(20));
             assertThat(tasks.dataPipeline().enabled()).isFalse();
@@ -162,7 +170,7 @@ class ApplicationConfigurationPropertiesTest {
     }
 
     @ParameterizedTest
-    @ValueSource(strings = {"sporttery-pool", "asian-odds"})
+    @ValueSource(strings = {"sporttery-pool", "match-result", "asian-odds"})
     void rejectsPipelineCombinedWithIndividualTasks(String individualTask) {
         contextRunner
                 .withPropertyValues(

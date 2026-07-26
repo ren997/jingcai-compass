@@ -6,6 +6,7 @@ import com.jingcaicompass.match.dto.SportteryPoolSyncItemDto;
 import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.entity.SportteryPoolSnapshot;
 import com.jingcaicompass.match.mapper.MatchMapper;
+import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
@@ -26,10 +27,16 @@ public class SportteryPoolMatchWriter {
 
     private final MatchMapper matchMapper;
     private final SportteryPoolSnapshotMapper snapshotMapper;
+    private final MatchResultFactMapper matchResultFactMapper;
 
-    public SportteryPoolMatchWriter(MatchMapper matchMapper, SportteryPoolSnapshotMapper snapshotMapper) {
+    public SportteryPoolMatchWriter(
+            MatchMapper matchMapper,
+            SportteryPoolSnapshotMapper snapshotMapper,
+            MatchResultFactMapper matchResultFactMapper
+    ) {
         this.matchMapper = matchMapper;
         this.snapshotMapper = snapshotMapper;
+        this.matchResultFactMapper = matchResultFactMapper;
     }
 
     /**
@@ -99,7 +106,9 @@ public class SportteryPoolMatchWriter {
         entity.setHomeTeamName(item.homeTeamName());
         entity.setAwayTeamName(item.awayTeamName());
         entity.setKickoffTime(item.kickoffTime().toInstant());
-        entity.setMatchStatus(item.matchStatus());
+        if (entity.getId() == null || !matchResultFactMapper.existsCurrentByMatchId(entity.getId())) {
+            entity.setMatchStatus(item.matchStatus());
+        }
     }
 
     /** 让球/HAD/HHAD/销售状态与最新快照一致则跳过，否则插入新快照行。 */

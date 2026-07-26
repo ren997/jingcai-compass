@@ -24,9 +24,11 @@ import com.jingcaicompass.data.service.RawDataPayloadService;
 import com.jingcaicompass.data.service.RawDataPayloadServiceImpl;
 import com.jingcaicompass.data.mapper.DataSyncRunMapper;
 import com.jingcaicompass.match.job.SportteryPoolSyncJob;
+import com.jingcaicompass.match.job.MatchResultSyncJob;
 import com.jingcaicompass.match.mapper.LeagueAliasMapper;
 import com.jingcaicompass.match.mapper.LeagueMapper;
 import com.jingcaicompass.match.mapper.MatchMapper;
+import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
 import com.jingcaicompass.match.mapper.ProviderLeagueMappingMapper;
 import com.jingcaicompass.match.mapper.ProviderTeamMappingMapper;
@@ -36,6 +38,9 @@ import com.jingcaicompass.match.mapper.TeamMapper;
 import com.jingcaicompass.match.service.LeagueNormalizationService;
 import com.jingcaicompass.match.service.LeagueNormalizationServiceImpl;
 import com.jingcaicompass.match.service.MatchMappingReviewService;
+import com.jingcaicompass.match.service.MatchResultFactWriter;
+import com.jingcaicompass.match.service.MatchResultSyncService;
+import com.jingcaicompass.match.service.MatchResultSyncServiceImpl;
 import com.jingcaicompass.match.service.MatchMappingReviewServiceImpl;
 import com.jingcaicompass.match.service.MatchMappingService;
 import com.jingcaicompass.match.service.MatchMappingServiceImpl;
@@ -46,6 +51,7 @@ import com.jingcaicompass.match.service.SportteryPoolMatchWriter;
 import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
 import com.jingcaicompass.match.service.SportteryPoolSyncService;
 import com.jingcaicompass.match.service.SportteryPoolSyncServiceImpl;
+import com.jingcaicompass.match.service.SportteryMatchResultPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.match.service.TeamNormalizationService;
 import com.jingcaicompass.match.service.TeamNormalizationServiceImpl;
@@ -79,6 +85,7 @@ import com.jingcaicompass.snapshot.service.SnapshotManifestGenerator;
 import com.jingcaicompass.snapshot.storage.SnapshotStorage;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
+import com.jingcaicompass.system.config.properties.SyncTaskProperties;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import javax.sql.DataSource;
@@ -318,9 +325,14 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean
     SportteryPoolMatchWriter sportteryPoolMatchWriter(
             MatchMapper matchMapper,
-            SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper
+            SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
+            MatchResultFactMapper matchResultFactMapper
     ) {
-        return new SportteryPoolMatchWriter(matchMapper, sportteryPoolSnapshotMapper);
+        return new SportteryPoolMatchWriter(
+                matchMapper,
+                sportteryPoolSnapshotMapper,
+                matchResultFactMapper
+        );
     }
 
     @Bean
@@ -337,6 +349,40 @@ public class PersistenceServicesAutoConfiguration {
                 providerSyncTemplate,
                 sportteryPoolPayloadMapper,
                 sportteryPoolMatchWriter,
+                objectMapper
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    MatchResultFactWriter matchResultFactWriter(
+            MatchMapper matchMapper,
+            MatchResultFactMapper matchResultFactMapper,
+            AuditLogService auditLogService
+    ) {
+        return new MatchResultFactWriter(matchMapper, matchResultFactMapper, auditLogService);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    SportteryMatchResultPayloadMapper sportteryMatchResultPayloadMapper(ObjectMapper objectMapper) {
+        return new SportteryMatchResultPayloadMapper(objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MatchResultSyncService.class)
+    MatchResultSyncService matchResultSyncService(
+            SportteryProvider sportteryProvider,
+            ProviderSyncTemplate providerSyncTemplate,
+            SportteryMatchResultPayloadMapper sportteryMatchResultPayloadMapper,
+            MatchResultFactWriter matchResultFactWriter,
+            ObjectMapper objectMapper
+    ) {
+        return new MatchResultSyncServiceImpl(
+                sportteryProvider,
+                providerSyncTemplate,
+                sportteryMatchResultPayloadMapper,
+                matchResultFactWriter,
                 objectMapper
         );
     }
@@ -495,6 +541,20 @@ public class PersistenceServicesAutoConfiguration {
     )
     SportteryPoolSyncJob sportteryPoolSyncJob(SportteryPoolSyncService sportteryPoolSyncService) {
         return new SportteryPoolSyncJob(sportteryPoolSyncService);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(
+            prefix = "app.tasks",
+            name = {"enabled", "match-result.enabled"},
+            havingValue = "true"
+    )
+    MatchResultSyncJob matchResultSyncJob(
+            MatchResultSyncService matchResultSyncService,
+            SyncTaskProperties taskProperties
+    ) {
+        return new MatchResultSyncJob(matchResultSyncService, taskProperties);
     }
 
     @Bean

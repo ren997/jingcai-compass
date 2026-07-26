@@ -1,8 +1,12 @@
 package com.jingcaicompass.match.client;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.jingcaicompass.data.dto.ProviderFetchResult;
 import com.jingcaicompass.match.dto.SportteryMatchDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultDto;
+import com.jingcaicompass.match.dto.SportteryMatchResultPayloadDto;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.system.stub.StubFixtureLoader;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -31,8 +35,12 @@ public class StubSportteryProvider implements SportteryProvider {
     private final List<SportteryMatchResultDto> resultTemplates;
     private final String rawPoolTemplate;
     private final String rawEmptyPoolTemplate;
+    private final ObjectMapper objectMapper;
 
     public StubSportteryProvider() {
+        this.objectMapper = new ObjectMapper()
+                .findAndRegisterModules()
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
         List<SportteryMatchDto> pool = new ArrayList<>();
         pool.addAll(StubFixtureLoader.readList(
                 "stub/sporttery/pool-normal.json", SportteryMatchDto.class));
@@ -98,9 +106,9 @@ public class StubSportteryProvider implements SportteryProvider {
     }
 
     @Override
-    public List<SportteryMatchResultDto> fetchMatchResults(LocalDate startDate, LocalDate endDate) {
+    public ProviderFetchResult fetchMatchResultsRaw(LocalDate startDate, LocalDate endDate) {
         if (startDate == null || endDate == null || endDate.isBefore(startDate)) {
-            return List.of();
+            throw new IllegalArgumentException("result date range must be valid");
         }
         List<SportteryMatchResultDto> results = new ArrayList<>();
         for (LocalDate lotteryDate = startDate; !lotteryDate.isAfter(endDate); lotteryDate = lotteryDate.plusDays(1)) {
@@ -109,7 +117,19 @@ public class StubSportteryProvider implements SportteryProvider {
                 results.add(remapResult(template, lotteryDate, weekday));
             }
         }
-        return List.copyOf(results);
+        List<SportteryMatchResultDto> immutableResults = List.copyOf(results);
+        return new ProviderFetchResult(
+                startDate + ":" + endDate,
+                toResultPayloadJson(immutableResults),
+                200,
+                immutableResults.stream()
+                        .map(SportteryMatchResultDto::providerUpdatedAt)
+                        .map(OffsetDateTime::toInstant)
+                        .max(Instant::compareTo)
+                        .orElse(null),
+                0,
+                0
+        );
     }
 
     private SportteryMatchDto remapMatch(SportteryMatchDto template, LocalDate lotteryDate, String weekday) {
@@ -146,8 +166,17 @@ public class StubSportteryProvider implements SportteryProvider {
                 template.awayScore(),
                 template.matchStatus(),
                 template.amended(),
+                template.officialVoid(),
                 OffsetDateTime.of(updatedDate, updatedTime, offset)
         );
+    }
+
+    private String toResultPayloadJson(List<SportteryMatchResultDto> results) {
+        try {
+            return objectMapper.writeValueAsString(new SportteryMatchResultPayloadDto(results));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("无法序列化 Stub 体彩赛果", exception);
+        }
     }
 
     private int sequenceOf(SportteryMatchDto template) {

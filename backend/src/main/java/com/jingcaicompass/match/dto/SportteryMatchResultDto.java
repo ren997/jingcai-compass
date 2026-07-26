@@ -23,6 +23,8 @@ public record SportteryMatchResultDto(
         MatchStatusEnum matchStatus,
         /** 是否为官方修正后的赛果。 */
         boolean amended,
+        /** 是否有供应商明确给出的官方最终作废结论。 */
+        boolean officialVoid,
         /** 供应商侧更新时间。 */
         OffsetDateTime providerUpdatedAt
 ) {

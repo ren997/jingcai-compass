@@ -13,6 +13,7 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -246,7 +247,7 @@ class PredictionPublishApplicationIT {
                 """,
                 id,
                 lotteryMatchNo,
-                KICKOFF
+                OffsetDateTime.ofInstant(KICKOFF, ZoneOffset.UTC)
         );
     }
 
@@ -285,7 +286,7 @@ class PredictionPublishApplicationIT {
                 "a".repeat(64),
                 predictionVersion,
                 "T303 V" + predictionVersion + " 发布集成验证",
-                FIXED_NOW.minusSeconds(300)
+                OffsetDateTime.ofInstant(FIXED_NOW.minusSeconds(300), ZoneOffset.UTC)
         );
     }
 

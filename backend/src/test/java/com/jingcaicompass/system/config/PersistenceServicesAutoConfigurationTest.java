@@ -30,6 +30,9 @@ import com.jingcaicompass.odds.job.AsianOddsSyncJob;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.odds.service.AsianOddsPayloadMapper;
 import com.jingcaicompass.odds.service.AsianOddsProvider;
+import com.jingcaicompass.prediction.mapper.PredictionMapper;
+import com.jingcaicompass.prediction.service.PredictionImportFileParser;
+import com.jingcaicompass.prediction.service.PredictionImportService;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
@@ -63,13 +66,15 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(MatchMapper.class, () -> mock(MatchMapper.class))
             .withBean(MatchSourceMappingMapper.class, () -> mock(MatchSourceMappingMapper.class))
             .withBean(SportteryPoolSnapshotMapper.class, () -> mock(SportteryPoolSnapshotMapper.class))
-            .withBean(AsianOddsSnapshotMapper.class, () -> mock(AsianOddsSnapshotMapper.class));
+            .withBean(AsianOddsSnapshotMapper.class, () -> mock(AsianOddsSnapshotMapper.class))
+            .withBean(PredictionMapper.class, () -> mock(PredictionMapper.class));
 
     @Test
     void doesNotRegisterPersistenceServicesWithoutDataSource() {
         contextRunner.run(context -> {
             assertThat(context).doesNotHaveBean(DataPipelineService.class);
             assertThat(context).doesNotHaveBean(DataProviderService.class);
+            assertThat(context).doesNotHaveBean(PredictionImportService.class);
         });
     }
 
@@ -81,6 +86,8 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(DataPipelineService.class);
                     assertThat(context).hasSingleBean(MatchNormalizationBackfillService.class);
                     assertThat(context).hasSingleBean(AuditLogService.class);
+                    assertThat(context).hasSingleBean(PredictionImportFileParser.class);
+                    assertThat(context).hasSingleBean(PredictionImportService.class);
                     assertThat(context).doesNotHaveBean(DataPipelineSyncJob.class);
                 });
     }

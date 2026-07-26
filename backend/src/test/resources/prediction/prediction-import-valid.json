@@ -1,0 +1,31 @@
+{
+  "generationBatchId": "t302-offline-batch-001",
+  "predictions": [
+    {
+      "matchId": 3020001,
+      "modelVersion": "model-v1",
+      "featureVersion": "feature-v1",
+      "homeWinProb": 0.400000,
+      "drawProb": 0.300000,
+      "awayWinProb": 0.300000,
+      "handicapPick": "HOME_WIN",
+      "expectedTotalGoals": 2.50,
+      "confidenceLevel": "HIGH",
+      "analysisSummary": "主队近期攻守较稳定，客队仍有反击空间。",
+      "generatedAt": "2026-07-26T00:00:00Z"
+    },
+    {
+      "matchId": 3020002,
+      "modelVersion": "model-v1",
+      "featureVersion": "feature-v1",
+      "homeWinProb": 0.250000,
+      "drawProb": 0.350000,
+      "awayWinProb": 0.400000,
+      "handicapPick": "AWAY_WIN",
+      "expectedTotalGoals": 2.25,
+      "confidenceLevel": "MEDIUM",
+      "analysisSummary": "客队机会略高，但平局概率仍需关注。",
+      "generatedAt": "2026-07-26T00:05:00Z"
+    }
+  ]
+}

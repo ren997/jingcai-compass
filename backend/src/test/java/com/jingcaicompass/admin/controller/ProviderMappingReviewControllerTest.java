@@ -1,6 +1,8 @@
 package com.jingcaicompass.admin.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -29,6 +31,10 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.context.SecurityContext;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.test.web.servlet.MockMvc;
 
 @WebMvcTest(ProviderMappingReviewController.class)
@@ -78,7 +84,7 @@ class ProviderMappingReviewControllerTest {
 
     @Test
     void confirmReturnsDetail() throws Exception {
-        when(matchMappingReviewService.confirm(any())).thenReturn(new MappingReviewDetailVo(
+        when(matchMappingReviewService.confirm(any(), eq("admin-1"))).thenReturn(new MappingReviewDetailVo(
                 1L,
                 10L,
                 "THE_ODDS_API",
@@ -96,12 +102,35 @@ class ProviderMappingReviewControllerTest {
                 Instant.parse("2026-07-24T12:00:00Z")
         ));
 
-        mockMvc.perform(post("/api/admin/provider/mappings/confirm")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new MappingReviewConfirmDto(1L, null, "admin-1")))
-                        .header(TraceIdContext.HEADER_NAME, "review-confirm"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.mappingStatus").value("MANUAL_CONFIRMED"));
+        Jwt jwt = Jwt.withTokenValue("controller-test-token")
+                .header("alg", "HS256")
+                .subject("1")
+                .claim("username", "admin-1")
+                .claim("role", "ADMIN")
+                .build();
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(new JwtAuthenticationToken(jwt));
+        SecurityContextHolder.setContext(context);
+        try {
+            mockMvc.perform(post("/api/admin/provider/mappings/confirm")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {
+                                      "mappingId": 1,
+                                      "targetMatchId": null,
+                                      "operatorId": "spoofed-client"
+                                    }
+                                    """)
+                            .header(TraceIdContext.HEADER_NAME, "review-confirm"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.data.mappingStatus").value("MANUAL_CONFIRMED"));
+            verify(matchMappingReviewService).confirm(
+                    new MappingReviewConfirmDto(1L, null),
+                    "admin-1"
+            );
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
     }
 
     @Test

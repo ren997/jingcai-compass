@@ -14,6 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Import;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
@@ -35,6 +36,9 @@ class MatchControllerTest {
 
     @MockBean
     private MatchQueryService matchQueryService;
+
+    @MockBean
+    private JwtDecoder jwtDecoder;
 
     @Test
     void exposesPublicDailyMatchList() throws Exception {
@@ -95,12 +99,12 @@ class MatchControllerTest {
     }
 
     @Test
-    void rejectsAdministrativePathsBeforeAuthenticationIsImplemented() throws Exception {
+    void rejectsAdministrativePathsWithoutAuthentication() throws Exception {
         mockMvc.perform(get("/api/admin/jobs")
                         .header(TraceIdContext.HEADER_NAME, "admin-denied-test"))
-                .andExpect(status().isForbidden())
+                .andExpect(status().isUnauthorized())
                 .andExpect(header().string(TraceIdContext.HEADER_NAME, "admin-denied-test"))
-                .andExpect(jsonPath("$.code").value(ErrorCode.ACCESS_DENIED.code()))
+                .andExpect(jsonPath("$.code").value(ErrorCode.AUTH_UNAUTHORIZED.code()))
                 .andExpect(jsonPath("$.traceId").value("admin-denied-test"));
     }
 

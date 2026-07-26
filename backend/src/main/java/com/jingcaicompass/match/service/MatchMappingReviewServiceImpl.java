@@ -96,14 +96,12 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
 
     @Override
     @Transactional
-    public MappingReviewDetailVo confirm(MappingReviewConfirmDto request) {
+    public MappingReviewDetailVo confirm(MappingReviewConfirmDto request, String operatorUsername) {
         Objects.requireNonNull(request, "request must not be null");
         if (request.mappingId() == null) {
             throw new BusinessException(ErrorCode.INVALID_PARAMETER, "mappingId must not be null");
         }
-        if (!StringUtils.hasText(request.operatorId())) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "operatorId must not be blank");
-        }
+        String operator = requireOperator(operatorUsername);
 
         // 1) 读取当前 PENDING 行
         MatchSourceMapping current = requireMapping(request.mappingId());
@@ -129,7 +127,7 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                 .eq("mapping_status", MappingStatusEnum.PENDING.getCode())
                 .set("mapping_status", MappingStatusEnum.MANUAL_CONFIRMED.getCode())
                 .set("match_id", targetMatchId)
-                .set("confirmed_by", request.operatorId().trim())
+                .set("confirmed_by", operator)
                 .set("mapping_method", METHOD_MANUAL_REVIEW);
         int rows = matchSourceMappingMapper.update(null, update);
         if (rows == 0) {
@@ -139,7 +137,7 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
         MatchSourceMapping updated = requireMapping(current.getId());
         // 3) 追加审计
         auditLogService.append(
-                request.operatorId().trim(),
+                operator,
                 AuditTargetTypeEnum.MATCH_SOURCE_MAPPING,
                 String.valueOf(current.getId()),
                 AuditActionTypeEnum.CONFIRM,
@@ -152,14 +150,12 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
 
     @Override
     @Transactional
-    public MappingReviewDetailVo reject(MappingReviewRejectDto request) {
+    public MappingReviewDetailVo reject(MappingReviewRejectDto request, String operatorUsername) {
         Objects.requireNonNull(request, "request must not be null");
         if (request.mappingId() == null) {
             throw new BusinessException(ErrorCode.INVALID_PARAMETER, "mappingId must not be null");
         }
-        if (!StringUtils.hasText(request.operatorId())) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "operatorId must not be blank");
-        }
+        String operator = requireOperator(operatorUsername);
 
         MatchSourceMapping current = requireMapping(request.mappingId());
         if (current.getMappingStatus() != MappingStatusEnum.PENDING) {
@@ -178,7 +174,7 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                 .eq("id", current.getId())
                 .eq("mapping_status", MappingStatusEnum.PENDING.getCode())
                 .set("mapping_status", MappingStatusEnum.REJECTED.getCode())
-                .set("confirmed_by", request.operatorId().trim())
+                .set("confirmed_by", operator)
                 .set("mapping_method", METHOD_MANUAL_REVIEW)
                 .set("mapping_explanation", explanation);
         int rows = matchSourceMappingMapper.update(null, update);
@@ -188,7 +184,7 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
 
         MatchSourceMapping updated = requireMapping(current.getId());
         auditLogService.append(
-                request.operatorId().trim(),
+                operator,
                 AuditTargetTypeEnum.MATCH_SOURCE_MAPPING,
                 String.valueOf(current.getId()),
                 AuditActionTypeEnum.REJECT,
@@ -201,14 +197,12 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
 
     @Override
     @Transactional
-    public MappingReviewDetailVo reopen(MappingReviewReopenDto request) {
+    public MappingReviewDetailVo reopen(MappingReviewReopenDto request, String operatorUsername) {
         Objects.requireNonNull(request, "request must not be null");
         if (request.mappingId() == null) {
             throw new BusinessException(ErrorCode.INVALID_PARAMETER, "mappingId must not be null");
         }
-        if (!StringUtils.hasText(request.operatorId())) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "operatorId must not be blank");
-        }
+        String operator = requireOperator(operatorUsername);
 
         MatchSourceMapping current = requireMapping(request.mappingId());
         if (current.getMappingStatus() != MappingStatusEnum.REJECTED) {
@@ -232,7 +226,7 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
 
         MatchSourceMapping updated = requireMapping(current.getId());
         auditLogService.append(
-                request.operatorId().trim(),
+                operator,
                 AuditTargetTypeEnum.MATCH_SOURCE_MAPPING,
                 String.valueOf(current.getId()),
                 AuditActionTypeEnum.REOPEN,
@@ -241,6 +235,13 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                 snapshot(updated)
         );
         return toDetail(updated);
+    }
+
+    private String requireOperator(String operatorUsername) {
+        if (!StringUtils.hasText(operatorUsername)) {
+            throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
+        }
+        return operatorUsername.trim();
     }
 
     private MatchSourceMapping requireMapping(Long mappingId) {

@@ -1,6 +1,14 @@
 package com.jingcaicompass.system.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jingcaicompass.admin.mapper.AdminAccountMapper;
+import com.jingcaicompass.admin.service.AdminAccountBootstrapRunner;
+import com.jingcaicompass.admin.service.AdminAccountCredentialValidator;
+import com.jingcaicompass.admin.service.AdminAccountTokenValidator;
+import com.jingcaicompass.admin.service.AdminAuthService;
+import com.jingcaicompass.admin.service.AdminAuthServiceImpl;
+import com.jingcaicompass.admin.service.AdminJwtService;
+import com.jingcaicompass.admin.service.AdminLoginAttemptWriter;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
 import com.jingcaicompass.audit.service.AuditLogService;
 import com.jingcaicompass.audit.service.AuditLogServiceImpl;
@@ -56,6 +64,7 @@ import com.jingcaicompass.prediction.service.PredictionImportService;
 import com.jingcaicompass.prediction.service.PredictionImportServiceImpl;
 import com.jingcaicompass.prediction.service.PredictionImportWriter;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
+import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import java.time.Clock;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -63,6 +72,8 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
 
 /**
  * 在 DataSource 和 MyBatis-Plus 完成注册后装配持久化服务。
@@ -81,6 +92,78 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean
     Clock predictionImportClock() {
         return Clock.systemUTC();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    AdminAccountTokenValidator adminAccountTokenValidator(AdminAccountMapper adminAccountMapper) {
+        return new AdminAccountTokenValidator(adminAccountMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    AdminJwtService adminJwtService(
+            JwtEncoder jwtEncoder,
+            AdminSecurityProperties adminSecurityProperties,
+            Clock predictionImportClock
+    ) {
+        return new AdminJwtService(jwtEncoder, adminSecurityProperties, predictionImportClock);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    AdminLoginAttemptWriter adminLoginAttemptWriter(
+            AdminAccountMapper adminAccountMapper,
+            AuditLogService auditLogService,
+            AdminSecurityProperties adminSecurityProperties,
+            Clock predictionImportClock
+    ) {
+        return new AdminLoginAttemptWriter(
+                adminAccountMapper,
+                auditLogService,
+                adminSecurityProperties,
+                predictionImportClock
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(AdminAuthService.class)
+    AdminAuthService adminAuthService(
+            AdminAccountMapper adminAccountMapper,
+            AdminAccountCredentialValidator credentialValidator,
+            AdminLoginAttemptWriter loginAttemptWriter,
+            AdminJwtService jwtService,
+            PasswordEncoder passwordEncoder,
+            Clock predictionImportClock
+    ) {
+        return new AdminAuthServiceImpl(
+                adminAccountMapper,
+                credentialValidator,
+                loginAttemptWriter,
+                jwtService,
+                passwordEncoder,
+                predictionImportClock
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    AdminAccountBootstrapRunner adminAccountBootstrapRunner(
+            AdminAccountMapper adminAccountMapper,
+            AdminAccountCredentialValidator credentialValidator,
+            PasswordEncoder passwordEncoder,
+            AdminSecurityProperties adminSecurityProperties,
+            AuditLogService auditLogService,
+            Clock predictionImportClock
+    ) {
+        return new AdminAccountBootstrapRunner(
+                adminAccountMapper,
+                credentialValidator,
+                passwordEncoder,
+                adminSecurityProperties,
+                auditLogService,
+                predictionImportClock
+        );
     }
 
     @Bean

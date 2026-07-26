@@ -1,9 +1,16 @@
 package com.jingcaicompass.system.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jingcaicompass.admin.mapper.AdminAccountMapper;
+import com.jingcaicompass.admin.service.AdminAccountBootstrapRunner;
+import com.jingcaicompass.admin.service.AdminAccountCredentialValidator;
+import com.jingcaicompass.admin.service.AdminAccountTokenValidator;
+import com.jingcaicompass.admin.service.AdminAuthService;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
 import com.jingcaicompass.audit.service.AuditLogService;
 import com.jingcaicompass.data.job.DataPipelineSyncJob;
@@ -34,10 +41,15 @@ import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.service.PredictionImportFileParser;
 import com.jingcaicompass.prediction.service.PredictionImportService;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
+import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
+import java.time.Duration;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtEncoder;
 
 class PersistenceServicesAutoConfigurationTest {
 
@@ -52,7 +64,12 @@ class PersistenceServicesAutoConfigurationTest {
                     AsianOddsProviderProperties.class,
                     () -> mock(AsianOddsProviderProperties.class)
             )
+            .withBean(AdminSecurityProperties.class, PersistenceServicesAutoConfigurationTest::adminProperties)
+            .withBean(AdminAccountCredentialValidator.class, AdminAccountCredentialValidator::new)
+            .withBean(PasswordEncoder.class, () -> new BCryptPasswordEncoder(4))
+            .withBean(JwtEncoder.class, () -> mock(JwtEncoder.class))
             .withBean(PaginationProperties.class, () -> new PaginationProperties(100))
+            .withBean(AdminAccountMapper.class, PersistenceServicesAutoConfigurationTest::existingAdminMapper)
             .withBean(AuditLogMapper.class, () -> mock(AuditLogMapper.class))
             .withBean(DataProviderMapper.class, () -> mock(DataProviderMapper.class))
             .withBean(DataSyncRunMapper.class, () -> mock(DataSyncRunMapper.class))
@@ -75,6 +92,7 @@ class PersistenceServicesAutoConfigurationTest {
             assertThat(context).doesNotHaveBean(DataPipelineService.class);
             assertThat(context).doesNotHaveBean(DataProviderService.class);
             assertThat(context).doesNotHaveBean(PredictionImportService.class);
+            assertThat(context).doesNotHaveBean(AdminAuthService.class);
         });
     }
 
@@ -88,6 +106,9 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(AuditLogService.class);
                     assertThat(context).hasSingleBean(PredictionImportFileParser.class);
                     assertThat(context).hasSingleBean(PredictionImportService.class);
+                    assertThat(context).hasSingleBean(AdminAuthService.class);
+                    assertThat(context).hasSingleBean(AdminAccountTokenValidator.class);
+                    assertThat(context).hasSingleBean(AdminAccountBootstrapRunner.class);
                     assertThat(context).doesNotHaveBean(DataPipelineSyncJob.class);
                 });
     }
@@ -105,5 +126,24 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).doesNotHaveBean(SportteryPoolSyncJob.class);
                     assertThat(context).doesNotHaveBean(AsianOddsSyncJob.class);
                 });
+    }
+
+    private static AdminSecurityProperties adminProperties() {
+        return new AdminSecurityProperties(
+                new AdminSecurityProperties.JwtProperties(
+                        "unused",
+                        "issuer",
+                        "audience",
+                        Duration.ofMinutes(30)
+                ),
+                new AdminSecurityProperties.LoginProperties(5, Duration.ofMinutes(15)),
+                new AdminSecurityProperties.BootstrapProperties("", "")
+        );
+    }
+
+    private static AdminAccountMapper existingAdminMapper() {
+        AdminAccountMapper mapper = mock(AdminAccountMapper.class);
+        when(mapper.selectCount(any())).thenReturn(1L);
+        return mapper;
     }
 }

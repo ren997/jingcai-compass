@@ -13,6 +13,20 @@ spring:
       password: <password>
 
 app:
+  security:
+    # JWT_SECRET 必须是 Base64 编码的至少 32 字节随机值，禁止提交真实值。
+    jwt:
+      secret: <base64-jwt-secret>
+      issuer: jingcai-compass
+      audience: jingcai-compass-admin
+      access-token-ttl: 30m
+    login:
+      max-failed-attempts: 5
+      lock-duration: 15m
+    # 仅 admin_accounts 为空时创建第一位管理员；后续启动不会静默改密。
+    bootstrap:
+      username: <admin-username>
+      password: <admin-password-at-least-12-characters>
   pagination:
     max-page-size: 100
   # 离线联调可将 sporttery/asian-odds.provider 都设为 stub（classpath:stub/** fixtures）

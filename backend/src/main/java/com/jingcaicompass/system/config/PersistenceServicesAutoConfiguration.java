@@ -58,16 +58,22 @@ import com.jingcaicompass.odds.service.AsianOddsSnapshotWriter;
 import com.jingcaicompass.odds.service.AsianOddsSyncService;
 import com.jingcaicompass.odds.service.AsianOddsSyncServiceImpl;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
+import com.jingcaicompass.prediction.job.PredictionLockJob;
 import com.jingcaicompass.prediction.service.PredictionContentHasher;
 import com.jingcaicompass.prediction.service.PredictionImportFileParser;
 import com.jingcaicompass.prediction.service.PredictionImportFileParserImpl;
 import com.jingcaicompass.prediction.service.PredictionImportService;
 import com.jingcaicompass.prediction.service.PredictionImportServiceImpl;
 import com.jingcaicompass.prediction.service.PredictionImportWriter;
+import com.jingcaicompass.prediction.service.PredictionLockMetrics;
+import com.jingcaicompass.prediction.service.PredictionLockService;
+import com.jingcaicompass.prediction.service.PredictionLockServiceImpl;
+import com.jingcaicompass.prediction.service.PredictionLockWorker;
 import com.jingcaicompass.prediction.service.PredictionPublishService;
 import com.jingcaicompass.prediction.service.PredictionPublishServiceImpl;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
@@ -221,6 +227,30 @@ public class PersistenceServicesAutoConfiguration {
                 auditLogService,
                 predictionImportClock
         );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    PredictionLockMetrics predictionLockMetrics(MeterRegistry meterRegistry) {
+        return new PredictionLockMetrics(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    PredictionLockWorker predictionLockWorker(
+            PredictionMapper predictionMapper,
+            AuditLogService auditLogService
+    ) {
+        return new PredictionLockWorker(predictionMapper, auditLogService);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PredictionLockService.class)
+    PredictionLockService predictionLockService(
+            PredictionLockWorker predictionLockWorker,
+            PredictionLockMetrics predictionLockMetrics
+    ) {
+        return new PredictionLockServiceImpl(predictionLockWorker, predictionLockMetrics);
     }
 
     @Bean
@@ -453,5 +483,16 @@ public class PersistenceServicesAutoConfiguration {
     )
     DataPipelineSyncJob dataPipelineSyncJob(DataPipelineService dataPipelineService) {
         return new DataPipelineSyncJob(dataPipelineService);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(
+            prefix = "app.tasks",
+            name = {"enabled", "prediction-lock.enabled"},
+            havingValue = "true"
+    )
+    PredictionLockJob predictionLockJob(PredictionLockService predictionLockService) {
+        return new PredictionLockJob(predictionLockService);
     }
 }

@@ -29,3 +29,8 @@ app:
       enabled: false
       fixed-delay: 20m
       initial-delay: 45s
+    prediction-lock:
+      enabled: false
+      fixed-delay: 30s
+      initial-delay: 15s
+      batch-size: 100

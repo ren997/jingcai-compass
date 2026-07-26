@@ -1,8 +1,10 @@
 package com.jingcaicompass.prediction.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.jingcaicompass.prediction.dto.PredictionLockCandidateDto;
 import com.jingcaicompass.prediction.entity.Prediction;
 import java.time.Instant;
+import java.util.Collection;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -48,4 +50,43 @@ public interface PredictionMapper extends BaseMapper<Prediction> {
             @Param("lockTime") Instant lockTime,
             @Param("predictionHash") String predictionHash
     );
+
+    /** 使用数据库时间抢占下一条到期预测，跳过其他事务已经持有的记录。 */
+    @Select("""
+            <script>
+            SELECT id AS prediction_id,
+                   lock_time,
+                   CURRENT_TIMESTAMP AS database_time
+            FROM predictions
+            WHERE prediction_status = 'PUBLISHED'
+              AND lock_time &lt;= CURRENT_TIMESTAMP
+            <if test="excludedPredictionIds != null and !excludedPredictionIds.isEmpty()">
+              AND id NOT IN
+              <foreach collection="excludedPredictionIds"
+                       item="excludedId"
+                       open="("
+                       separator=","
+                       close=")">
+                #{excludedId}
+              </foreach>
+            </if>
+            ORDER BY lock_time, id
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+            </script>
+            """)
+    PredictionLockCandidateDto selectNextDueForUpdate(
+            @Param("excludedPredictionIds") Collection<Long> excludedPredictionIds
+    );
+
+    /** 仅允许已到 PostgreSQL 锁定时间的 PUBLISHED 原子进入 LOCKED。 */
+    @Update("""
+            UPDATE predictions
+            SET prediction_status = 'LOCKED',
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = #{predictionId}
+              AND prediction_status = 'PUBLISHED'
+              AND lock_time <= CURRENT_TIMESTAMP
+            """)
+    int lockPublishedPrediction(@Param("predictionId") Long predictionId);
 }

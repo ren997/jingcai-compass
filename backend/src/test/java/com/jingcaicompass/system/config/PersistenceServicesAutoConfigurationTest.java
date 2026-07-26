@@ -37,14 +37,17 @@ import com.jingcaicompass.odds.job.AsianOddsSyncJob;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.odds.service.AsianOddsPayloadMapper;
 import com.jingcaicompass.odds.service.AsianOddsProvider;
+import com.jingcaicompass.prediction.job.PredictionLockJob;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.service.PredictionImportFileParser;
 import com.jingcaicompass.prediction.service.PredictionImportService;
+import com.jingcaicompass.prediction.service.PredictionLockService;
 import com.jingcaicompass.prediction.service.PredictionPublishService;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import java.time.Duration;
 import javax.sql.DataSource;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -70,6 +73,7 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(PasswordEncoder.class, () -> new BCryptPasswordEncoder(4))
             .withBean(JwtEncoder.class, () -> mock(JwtEncoder.class))
             .withBean(PaginationProperties.class, () -> new PaginationProperties(100))
+            .withBean(SimpleMeterRegistry.class, SimpleMeterRegistry::new)
             .withBean(AdminAccountMapper.class, PersistenceServicesAutoConfigurationTest::existingAdminMapper)
             .withBean(AuditLogMapper.class, () -> mock(AuditLogMapper.class))
             .withBean(DataProviderMapper.class, () -> mock(DataProviderMapper.class))
@@ -94,6 +98,7 @@ class PersistenceServicesAutoConfigurationTest {
             assertThat(context).doesNotHaveBean(DataProviderService.class);
             assertThat(context).doesNotHaveBean(PredictionImportService.class);
             assertThat(context).doesNotHaveBean(PredictionPublishService.class);
+            assertThat(context).doesNotHaveBean(PredictionLockService.class);
             assertThat(context).doesNotHaveBean(AdminAuthService.class);
         });
     }
@@ -109,10 +114,12 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(PredictionImportFileParser.class);
                     assertThat(context).hasSingleBean(PredictionImportService.class);
                     assertThat(context).hasSingleBean(PredictionPublishService.class);
+                    assertThat(context).hasSingleBean(PredictionLockService.class);
                     assertThat(context).hasSingleBean(AdminAuthService.class);
                     assertThat(context).hasSingleBean(AdminAccountTokenValidator.class);
                     assertThat(context).hasSingleBean(AdminAccountBootstrapRunner.class);
                     assertThat(context).doesNotHaveBean(DataPipelineSyncJob.class);
+                    assertThat(context).doesNotHaveBean(PredictionLockJob.class);
                 });
     }
 
@@ -128,6 +135,20 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(DataPipelineSyncJob.class);
                     assertThat(context).doesNotHaveBean(SportteryPoolSyncJob.class);
                     assertThat(context).doesNotHaveBean(AsianOddsSyncJob.class);
+                });
+    }
+
+    @Test
+    void registersEnabledPredictionLockJobIndependently() {
+        contextRunner
+                .withBean(DataSource.class, () -> mock(DataSource.class))
+                .withPropertyValues(
+                        "app.tasks.enabled=true",
+                        "app.tasks.prediction-lock.enabled=true"
+                )
+                .run(context -> {
+                    assertThat(context).hasSingleBean(PredictionLockJob.class);
+                    assertThat(context).doesNotHaveBean(DataPipelineSyncJob.class);
                 });
     }
 

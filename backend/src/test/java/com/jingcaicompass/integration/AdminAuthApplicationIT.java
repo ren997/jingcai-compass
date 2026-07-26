@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jingcaicompass.admin.service.AdminAuthService;
+import com.jingcaicompass.admin.service.AdminAuthServiceImpl;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,9 +58,15 @@ class AdminAuthApplicationIT {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private AdminAuthService adminAuthService;
+
     @Test
     void completesAdministratorAuthenticationAndRevocationLifecycle() throws Exception {
-        // 1) 首次引导只落 BCrypt 12 哈希，不保存明文
+        // 1) PostgreSQL 上下文必须装配真实认证实现，禁止无数据库占位服务抢占
+        assertThat(adminAuthService).isInstanceOf(AdminAuthServiceImpl.class);
+
+        // 2) 首次引导只落 BCrypt 12 哈希，不保存明文
         String passwordHash = jdbcTemplate.queryForObject(
                 "SELECT password_hash FROM admin_accounts WHERE username = ?",
                 String.class,
@@ -68,7 +76,7 @@ class AdminAuthApplicationIT {
                 .isNotEqualTo(PASSWORD)
                 .startsWith("$2a$12$");
 
-        // 2) 登录后可访问后台，退出立即撤销旧 Token
+        // 3) 登录后可访问后台，退出立即撤销旧 Token
         String firstToken = login(PASSWORD);
         mockMvc.perform(post("/api/admin/provider/mappings/list")
                         .header("Authorization", "Bearer " + firstToken)
@@ -87,7 +95,7 @@ class AdminAuthApplicationIT {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_UNAUTHORIZED"));
 
-        // 3) 新登录取得新版本 Token；连续五次错误密码触发 15 分钟锁定
+        // 4) 新登录取得新版本 Token；连续五次错误密码触发 15 分钟锁定
         String secondToken = login(PASSWORD);
         assertThat(secondToken).isNotEqualTo(firstToken);
         for (int attempt = 1; attempt <= 5; attempt++) {
@@ -117,7 +125,7 @@ class AdminAuthApplicationIT {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_INVALID_CREDENTIALS"));
 
-        // 4) 成功、失败、退出和旧 Token 拒绝均留下追加式审计
+        // 5) 成功、失败、退出和旧 Token 拒绝均留下追加式审计
         Integer auditCount = jdbcTemplate.queryForObject(
                 """
                 SELECT COUNT(*)

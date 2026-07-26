@@ -7,6 +7,7 @@ import com.jingcaicompass.system.api.ApiResponse;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
 import jakarta.validation.Valid;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,16 +20,18 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/auth")
 public class AdminAuthController {
 
-    private final AdminAuthService adminAuthService;
+    private final ObjectProvider<AdminAuthService> adminAuthServiceProvider;
 
-    public AdminAuthController(AdminAuthService adminAuthService) {
-        this.adminAuthService = adminAuthService;
+    public AdminAuthController(ObjectProvider<AdminAuthService> adminAuthServiceProvider) {
+        this.adminAuthServiceProvider = adminAuthServiceProvider;
     }
 
     /** 校验账号密码并返回短期 Bearer Token。 */
     @PostMapping("/login")
     public ApiResponse<AdminLoginVo> login(@Valid @RequestBody AdminLoginDto request) {
-        return ApiResponse.success(adminAuthService.login(request));
+        return ApiResponse.success(requireAuthService(
+                ErrorCode.AUTH_INVALID_CREDENTIALS
+        ).login(request));
     }
 
     /** 递增账号 Token 版本，使该账号全部旧 JWT 立即失效。 */
@@ -43,7 +46,16 @@ public class AdminAuthController {
         } catch (NumberFormatException exception) {
             throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
         }
-        adminAuthService.logout(adminId, jwt.getClaimAsString("username"));
+        requireAuthService(ErrorCode.AUTH_UNAUTHORIZED)
+                .logout(adminId, jwt.getClaimAsString("username"));
         return ApiResponse.success(null);
+    }
+
+    private AdminAuthService requireAuthService(ErrorCode unavailableError) {
+        AdminAuthService service = adminAuthServiceProvider.getIfAvailable();
+        if (service == null) {
+            throw new BusinessException(unavailableError);
+        }
+        return service;
     }
 }

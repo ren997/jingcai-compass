@@ -161,6 +161,18 @@ class ChinaSportteryProviderTest {
         assertThat(result.payloadJson()).contains("matchInfoList");
     }
 
+    @Test
+    void refusesUnverifiedRealMatchResultEndpointInsteadOfReturningEmptySuccess() {
+        ChinaSportteryProvider provider = providerWithBody("{}");
+
+        assertThatThrownBy(() -> provider.fetchMatchResultsRaw(
+                LocalDate.of(2026, 7, 22),
+                LocalDate.of(2026, 7, 22)
+        )).isInstanceOf(SportteryDataAccessException.class)
+                .satisfies(exception -> assertThat(((SportteryDataAccessException) exception).category())
+                        .isEqualTo(ProviderErrorCategory.UPSTREAM_FAILURE));
+    }
+
     private ChinaSportteryProvider providerWithBody(String body) {
         RestClient.Builder restClientBuilder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(restClientBuilder).build();

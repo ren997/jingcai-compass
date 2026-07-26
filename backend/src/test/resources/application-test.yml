@@ -25,6 +25,11 @@ app:
       enabled: false
       fixed-delay: 15m
       initial-delay: 30s
+    match-result:
+      enabled: false
+      fixed-delay: 15m
+      initial-delay: 60s
+      lookback-days: 7
     asian-odds:
       enabled: false
       fixed-delay: 20m

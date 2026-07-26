@@ -20,6 +20,7 @@ import com.jingcaicompass.data.mapper.RawDataPayloadMapper;
 import com.jingcaicompass.data.service.DataPipelineService;
 import com.jingcaicompass.data.service.DataProviderService;
 import com.jingcaicompass.match.job.SportteryPoolSyncJob;
+import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.match.mapper.LeagueAliasMapper;
 import com.jingcaicompass.match.mapper.LeagueMapper;
 import com.jingcaicompass.match.mapper.MatchMapper;
@@ -30,6 +31,7 @@ import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import com.jingcaicompass.match.mapper.TeamAliasMapper;
 import com.jingcaicompass.match.mapper.TeamMapper;
 import com.jingcaicompass.match.service.MatchNormalizationBackfillService;
+import com.jingcaicompass.match.service.MatchResultSyncService;
 import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
@@ -91,6 +93,7 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(TeamAliasMapper.class, () -> mock(TeamAliasMapper.class))
             .withBean(ProviderTeamMappingMapper.class, () -> mock(ProviderTeamMappingMapper.class))
             .withBean(MatchMapper.class, () -> mock(MatchMapper.class))
+            .withBean(MatchResultFactMapper.class, () -> mock(MatchResultFactMapper.class))
             .withBean(MatchSourceMappingMapper.class, () -> mock(MatchSourceMappingMapper.class))
             .withBean(SportteryPoolSnapshotMapper.class, () -> mock(SportteryPoolSnapshotMapper.class))
             .withBean(AsianOddsSnapshotMapper.class, () -> mock(AsianOddsSnapshotMapper.class))
@@ -119,6 +122,7 @@ class PersistenceServicesAutoConfigurationTest {
                 .run(context -> {
                     assertThat(context).hasSingleBean(DataPipelineService.class);
                     assertThat(context).hasSingleBean(MatchNormalizationBackfillService.class);
+                    assertThat(context).hasSingleBean(MatchResultSyncService.class);
                     assertThat(context).hasSingleBean(AuditLogService.class);
                     assertThat(context).hasSingleBean(PredictionImportFileParser.class);
                     assertThat(context).hasSingleBean(PredictionImportService.class);

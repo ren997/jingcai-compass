@@ -1,9 +1,13 @@
 package com.jingcaicompass.match.client;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jingcaicompass.match.dto.SportteryMatchResultDto;
+import com.jingcaicompass.match.dto.SportteryMatchResultPayloadDto;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -33,17 +37,22 @@ class StubSportteryProviderTest {
     }
 
     @Test
-    void returnsStableResultsIncludingAmendedPostponedAndCancelled() {
+    void returnsStableRawResultsIncludingAmendedPostponedAndCancelled() throws Exception {
         LocalDate lotteryDate = LocalDate.of(2026, 7, 22);
 
-        var first = provider.fetchMatchResults(lotteryDate, lotteryDate);
-        var second = provider.fetchMatchResults(lotteryDate, lotteryDate);
+        var first = provider.fetchMatchResultsRaw(lotteryDate, lotteryDate);
+        var second = provider.fetchMatchResultsRaw(lotteryDate, lotteryDate);
+        List<SportteryMatchResultDto> results = new ObjectMapper()
+                .findAndRegisterModules()
+                .readValue(first.payloadJson(), SportteryMatchResultPayloadDto.class)
+                .results();
 
         assertThat(first).isEqualTo(second);
-        assertThat(first)
+        assertThat(first.requestKey()).isEqualTo("2026-07-22:2026-07-22");
+        assertThat(results)
                 .filteredOn(result -> result.matchStatus() == MatchStatusEnum.FINISHED && !result.amended())
                 .hasSize(2);
-        assertThat(first)
+        assertThat(results)
                 .filteredOn(result -> result.amended())
                 .singleElement()
                 .satisfies(result -> {
@@ -51,10 +60,10 @@ class StubSportteryProviderTest {
                     assertThat(result.homeScore()).isEqualTo(1);
                     assertThat(result.awayScore()).isEqualTo(1);
                 });
-        assertThat(first)
+        assertThat(results)
                 .filteredOn(result -> result.matchStatus() == MatchStatusEnum.POSTPONED)
                 .hasSize(1);
-        assertThat(first)
+        assertThat(results)
                 .filteredOn(result -> result.matchStatus() == MatchStatusEnum.CANCELLED)
                 .hasSize(1);
     }

@@ -15,6 +15,7 @@ import java.time.Duration;
 public record SyncTaskProperties(
         boolean enabled,
         @Valid @NotNull SportteryPoolTaskProperties sportteryPool,
+        @Valid @NotNull MatchResultTaskProperties matchResult,
         @Valid @NotNull AsianOddsTaskProperties asianOdds,
         @Valid @NotNull DataPipelineTaskProperties dataPipeline,
         @Valid @NotNull PredictionLockTaskProperties predictionLock,
@@ -26,8 +27,10 @@ public record SyncTaskProperties(
         return dataPipeline == null
                 || !dataPipeline.enabled()
                 || (sportteryPool != null
+                && matchResult != null
                 && asianOdds != null
                 && !sportteryPool.enabled()
+                && !matchResult.enabled()
                 && !asianOdds.enabled());
     }
 
@@ -43,6 +46,24 @@ public record SyncTaskProperties(
         }
 
         @AssertTrue(message = "app.tasks.sporttery-pool.initial-delay must not be negative")
+        public boolean isInitialDelayValid() {
+            return initialDelay != null && !initialDelay.isNegative();
+        }
+    }
+
+    public record MatchResultTaskProperties(
+            boolean enabled,
+            @NotNull Duration fixedDelay,
+            @NotNull Duration initialDelay,
+            @Min(1) @Max(365) int lookbackDays
+    ) {
+
+        @AssertTrue(message = "app.tasks.match-result.fixed-delay must be at least 1 second")
+        public boolean isFixedDelayValid() {
+            return fixedDelay != null && fixedDelay.compareTo(Duration.ofSeconds(1)) >= 0;
+        }
+
+        @AssertTrue(message = "app.tasks.match-result.initial-delay must not be negative")
         public boolean isInitialDelayValid() {
             return initialDelay != null && !initialDelay.isNegative();
         }

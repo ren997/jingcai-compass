@@ -3,6 +3,7 @@ package com.jingcaicompass.settlement.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.jingcaicompass.settlement.entity.Settlement;
 import com.jingcaicompass.settlement.enums.MarketTypeEnum;
+import java.util.Collection;
 import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -80,4 +81,17 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
               AND is_current = TRUE
             """)
     int markNotCurrent(@Param("settlementId") Long settlementId);
+
+    /** 按预测批量读取全部市场结算版本，供公开历史重建。 */
+    @Select("""
+            <script>
+            SELECT * FROM settlements
+            WHERE prediction_id IN
+            <foreach collection="predictionIds" item="predictionId" open="(" separator="," close=")">
+                #{predictionId}
+            </foreach>
+            ORDER BY prediction_id, market_type, settlement_version
+            </script>
+            """)
+    List<Settlement> selectHistoryByPredictionIds(@Param("predictionIds") Collection<Long> predictionIds);
 }

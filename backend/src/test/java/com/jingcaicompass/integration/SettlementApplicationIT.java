@@ -3,6 +3,7 @@ package com.jingcaicompass.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.jingcaicompass.settlement.service.SettlementService;
+import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.Timestamp;
@@ -252,7 +253,7 @@ class SettlementApplicationIT {
                 """,
                 matchId,
                 "T404-SNAPSHOT-" + nextKey(),
-                officialHandicap,
+                new BigDecimal(officialHandicap),
                 Timestamp.from(capturedAt),
                 String.format("%064x", nextKey())
         );

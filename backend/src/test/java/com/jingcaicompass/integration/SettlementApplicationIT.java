@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.jingcaicompass.settlement.service.SettlementService;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -232,10 +233,10 @@ class SettlementApplicationIT {
                 matchId,
                 "T404-batch-" + suffix + "-" + key,
                 "a".repeat(64),
-                lockTime.minusSeconds(120),
+                Timestamp.from(lockTime.minusSeconds(120)),
                 status,
-                lockTime.minusSeconds(60),
-                lockTime,
+                Timestamp.from(lockTime.minusSeconds(60)),
+                Timestamp.from(lockTime),
                 "b".repeat(64)
         );
     }
@@ -252,7 +253,7 @@ class SettlementApplicationIT {
                 matchId,
                 "T404-SNAPSHOT-" + nextKey(),
                 officialHandicap,
-                capturedAt,
+                Timestamp.from(capturedAt),
                 String.format("%064x", nextKey())
         );
     }

@@ -57,7 +57,8 @@ class MatchResultSyncJobTest {
                 new SyncTaskProperties.AsianOddsTaskProperties(false, Duration.ofMinutes(20), Duration.ofSeconds(45)),
                 new SyncTaskProperties.DataPipelineTaskProperties(false, Duration.ofMinutes(20), Duration.ofSeconds(45)),
                 new SyncTaskProperties.PredictionLockTaskProperties(false, Duration.ofSeconds(30), Duration.ofSeconds(15), 100),
-                new SyncTaskProperties.SnapshotPublishTaskProperties(false, Duration.ofMinutes(5), Duration.ofSeconds(60))
+                new SyncTaskProperties.SnapshotPublishTaskProperties(false, Duration.ofMinutes(5), Duration.ofSeconds(60)),
+                new SyncTaskProperties.SettlementTaskProperties(false, Duration.ofMinutes(5), Duration.ofSeconds(75), 100)
         );
     }
 }

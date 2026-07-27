@@ -65,3 +65,8 @@ app:
       enabled: false
       fixed-delay: 5m
       initial-delay: 60s
+    settlement:
+      enabled: false
+      fixed-delay: 5m
+      initial-delay: 75s
+      batch-size: 100

@@ -1,7 +1,7 @@
 -- Public history and statistics query indexes / 公开历史与统计查询索引
 
 CREATE INDEX idx_matches_history_lottery_league_kickoff
-    ON matches (lottery_date DESC, league_id, kickoff_time DESC, id DESC);
+    ON matches (league_id, lottery_date DESC, kickoff_time DESC, id DESC);
 
 CREATE INDEX idx_predictions_history_public_model_match
     ON predictions (prediction_status, model_version, match_id, publish_time DESC, id DESC)

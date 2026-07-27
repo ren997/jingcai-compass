@@ -160,7 +160,8 @@ class HistoryStatisticsApplicationIT {
         long leagueId = insertLeague("T507 索引联赛");
         insertRevisedFinalFixture(leagueId);
         insertPendingFixture(leagueId);
-        IndexFixture indexFixture = insertIndexDataset(leagueId);
+        insertIndexDataset(leagueId);
+        insertIndexNoiseDataset(insertLeague("T507 索引噪声联赛"));
 
         var firstPage = historyQueryService.list(new HistoryListQueryDto(
                 LocalDate.of(2026, 7, 1),
@@ -204,18 +205,23 @@ class HistoryStatisticsApplicationIT {
         jdbcTemplate.execute("ANALYZE settlements");
         String matchPlan = explain("""
                 SELECT id FROM matches
-                WHERE lottery_date = DATE '2026-07-27' AND league_id = %d
-                ORDER BY kickoff_time DESC, id DESC
+                WHERE league_id = %d
+                  AND lottery_date BETWEEN DATE '2026-07-01' AND DATE '2026-07-30'
+                ORDER BY lottery_date DESC, kickoff_time DESC, id DESC
+                LIMIT 20
                 """.formatted(leagueId));
         String predictionPlan = explain("""
                 SELECT id FROM predictions
-                WHERE prediction_status = 'LOCKED' AND model_version = 't507-index' AND match_id = %d
-                """.formatted(indexFixture.matchId()));
+                WHERE prediction_status = 'LOCKED' AND model_version = 't507-index'
+                ORDER BY match_id, publish_time DESC, id DESC
+                LIMIT 20
+                """);
         String settlementPlan = explain("""
                 SELECT prediction_id FROM settlements
                 WHERE market_type = 'HAD' AND settlement_status = 'MISS' AND is_current
-                  AND prediction_id = %d
-                """.formatted(indexFixture.predictionId()));
+                ORDER BY prediction_id
+                LIMIT 20
+                """);
         assertThat(matchPlan).contains("idx_matches_history_lottery_league_kickoff");
         assertThat(predictionPlan).contains("idx_predictions_history_public_model_match");
         assertThat(settlementPlan).contains("idx_settlements_current_market_status_prediction");
@@ -391,7 +397,7 @@ class HistoryStatisticsApplicationIT {
         );
     }
 
-    private IndexFixture insertIndexDataset(long leagueId) {
+    private void insertIndexDataset(long leagueId) {
         long key = nextKey();
         jdbcTemplate.update(
                 """
@@ -459,17 +465,77 @@ class HistoryStatisticsApplicationIT {
                 INNER JOIN match_result_facts fact ON fact.match_id = prediction.match_id AND fact.is_current
                 WHERE prediction.model_version = 't507-index'
                 """);
-        Long matchId = jdbcTemplate.queryForObject(
-                "SELECT MIN(id) FROM matches WHERE lottery_match_no LIKE ?",
-                Long.class,
-                "T507-index-" + key + "-%"
+    }
+
+    private void insertIndexNoiseDataset(long leagueId) {
+        long key = nextKey();
+        String prefix = "T507-noise-" + key;
+        jdbcTemplate.update(
+                """
+                INSERT INTO matches (
+                    lottery_match_no, lottery_date, league_id, league_name, home_team_name,
+                    away_team_name, kickoff_time, match_status
+                )
+                SELECT ? || '-' || series, DATE '2026-07-01' + (series % 30), ?, 'T507 噪声联赛', '主队', '客队',
+                       TIMESTAMPTZ '2026-07-27 12:00:00+00' + series * INTERVAL '1 second', 'SCHEDULED'
+                FROM generate_series(1, 1200) AS series
+                """,
+                prefix,
+                leagueId
         );
-        Long predictionId = jdbcTemplate.queryForObject(
-                "SELECT id FROM predictions WHERE match_id = ? AND model_version = 't507-index'",
-                Long.class,
-                matchId
+        jdbcTemplate.update(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, home_win_prob, draw_prob, away_win_prob, handicap_pick,
+                    expected_total_goals, confidence_level, analysis_summary, generated_at,
+                    prediction_status, publish_time, lock_time, prediction_hash
+                )
+                SELECT m.id, 't507-noise', 't507-feature', 'T507-noise-batch-' || m.id,
+                       LPAD(m.id::TEXT, 64, 'd'), 1, 0.500000, 0.250000, 0.250000, 'HOME_WIN',
+                       2.50, 'MEDIUM', 'T507 噪声预测', CURRENT_TIMESTAMP, 'LOCKED',
+                       CURRENT_TIMESTAMP - INTERVAL '2 minutes', CURRENT_TIMESTAMP - INTERVAL '1 minute',
+                       LPAD(m.id::TEXT, 64, 'e')
+                FROM matches m
+                WHERE m.lottery_match_no LIKE ?
+                """,
+                prefix + "-%"
         );
-        return new IndexFixture(matchId, predictionId);
+        jdbcTemplate.update(
+                """
+                INSERT INTO raw_data_payloads (
+                    provider_code, data_type, request_key, requested_at, payload, payload_hash, parse_status
+                )
+                SELECT 'T507_NOISE', 'SPORTTERY_RESULT', 'T507-noise-result-' || m.id,
+                       CURRENT_TIMESTAMP, '{}'::jsonb, LPAD(m.id::TEXT, 64, 'f'), 'SUCCESS'
+                FROM matches m
+                WHERE m.lottery_match_no LIKE ?
+                """,
+                prefix + "-%"
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO match_result_facts (
+                    match_id, fact_version, fact_status, match_status, home_score, away_score,
+                    raw_data_payload_id, provider_updated_at, is_current
+                )
+                SELECT m.id, 1, 'FINAL', 'FINISHED', 1, 0, raw.id, CURRENT_TIMESTAMP, TRUE
+                FROM matches m
+                INNER JOIN raw_data_payloads raw ON raw.request_key = 'T507-noise-result-' || m.id
+                WHERE m.lottery_match_no LIKE ?
+                """,
+                prefix + "-%"
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO settlements (
+                    prediction_id, market_type, settlement_version, settlement_status, match_fact_id, rule_version, is_current
+                )
+                SELECT prediction.id, 'HAD', 1, 'HIT', fact.id, 't403-v1', TRUE
+                FROM predictions prediction
+                INNER JOIN match_result_facts fact ON fact.match_id = prediction.match_id AND fact.is_current
+                WHERE prediction.model_version = 't507-noise'
+                """);
     }
 
     private String explain(String query) {
@@ -483,6 +549,4 @@ class HistoryStatisticsApplicationIT {
     private record RevisionFixture(long predictionId) {
     }
 
-    private record IndexFixture(long matchId, long predictionId) {
-    }
 }

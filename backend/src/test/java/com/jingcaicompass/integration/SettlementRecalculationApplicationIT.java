@@ -99,9 +99,9 @@ class SettlementRecalculationApplicationIT {
         assertThat(second.candidatePredictionCount()).isZero();
         assertThat(currentSettlements(fixture.predictionId())).containsExactly("HAD:MISS:2", "HHAD:MISS:2");
         assertThat(settlementHistory(fixture.predictionId())).containsExactly(
-                "HAD:1:false:1:" + fixture.firstFactId(),
+                "HAD:1:false:null:" + fixture.firstFactId(),
                 "HAD:2:true:1:" + correctedFactId,
-                "HHAD:1:false:1:" + fixture.firstFactId(),
+                "HHAD:1:false:null:" + fixture.firstFactId(),
                 "HHAD:2:true:1:" + correctedFactId
         );
         assertThat(singleLong("""
@@ -129,9 +129,9 @@ class SettlementRecalculationApplicationIT {
         assertThat(result.recalculatedMarketCount()).isEqualTo(2);
         assertThat(currentSettlements(fixture.predictionId())).containsExactly("HAD:VOID:2", "HHAD:VOID:2");
         assertThat(settlementHistory(fixture.predictionId())).containsExactly(
-                "HAD:1:false:1:" + fixture.firstFactId(),
+                "HAD:1:false:null:" + fixture.firstFactId(),
                 "HAD:2:true:1:" + voidFactId,
-                "HHAD:1:false:1:" + fixture.firstFactId(),
+                "HHAD:1:false:null:" + fixture.firstFactId(),
                 "HHAD:2:true:1:" + voidFactId
         );
     }

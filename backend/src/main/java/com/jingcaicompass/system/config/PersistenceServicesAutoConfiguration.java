@@ -82,6 +82,9 @@ import com.jingcaicompass.settlement.mapper.SettlementMapper;
 import com.jingcaicompass.settlement.service.MarketSettlementCalculatorRouter;
 import com.jingcaicompass.settlement.service.SettlementService;
 import com.jingcaicompass.settlement.service.SettlementServiceImpl;
+import com.jingcaicompass.settlement.service.SettlementRecalculationService;
+import com.jingcaicompass.settlement.service.SettlementRecalculationServiceImpl;
+import com.jingcaicompass.settlement.service.SettlementRecalculationWriter;
 import com.jingcaicompass.settlement.service.SettlementWriter;
 import com.jingcaicompass.snapshot.job.SnapshotPublishJob;
 import com.jingcaicompass.snapshot.mapper.PredictionSnapshotMapper;
@@ -425,6 +428,37 @@ public class PersistenceServicesAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    SettlementRecalculationWriter settlementRecalculationWriter(
+            PredictionMapper predictionMapper,
+            MatchMapper matchMapper,
+            MatchResultFactMapper matchResultFactMapper,
+            SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
+            SettlementMapper settlementMapper,
+            MarketSettlementCalculatorRouter calculatorRouter,
+            AuditLogService auditLogService
+    ) {
+        return new SettlementRecalculationWriter(
+                predictionMapper,
+                matchMapper,
+                matchResultFactMapper,
+                sportteryPoolSnapshotMapper,
+                settlementMapper,
+                calculatorRouter,
+                auditLogService
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(SettlementRecalculationService.class)
+    SettlementRecalculationService settlementRecalculationService(
+            SettlementMapper settlementMapper,
+            SettlementRecalculationWriter settlementRecalculationWriter
+    ) {
+        return new SettlementRecalculationServiceImpl(settlementMapper, settlementRecalculationWriter);
+    }
+
+    @Bean
     @ConditionalOnMissingBean(LeagueNormalizationService.class)
     LeagueNormalizationService leagueNormalizationService(
             LeagueMapper leagueMapper,
@@ -642,7 +676,7 @@ public class PersistenceServicesAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(SettlementService.class)
+    @ConditionalOnBean({SettlementService.class, SettlementRecalculationService.class})
     @ConditionalOnMissingBean
     @ConditionalOnProperty(
             prefix = "app.tasks",
@@ -650,9 +684,10 @@ public class PersistenceServicesAutoConfiguration {
             havingValue = "true"
     )
     SettlementJob settlementJob(
+            SettlementRecalculationService settlementRecalculationService,
             SettlementService settlementService,
             SyncTaskProperties taskProperties
     ) {
-        return new SettlementJob(settlementService, taskProperties);
+        return new SettlementJob(settlementRecalculationService, settlementService, taskProperties);
     }
 }

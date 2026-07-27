@@ -51,6 +51,7 @@ import com.jingcaicompass.snapshot.service.PredictionSnapshotService;
 import com.jingcaicompass.snapshot.storage.SnapshotStorage;
 import com.jingcaicompass.settlement.mapper.SettlementMapper;
 import com.jingcaicompass.settlement.service.MarketSettlementCalculatorRouter;
+import com.jingcaicompass.settlement.service.SettlementRecalculationService;
 import com.jingcaicompass.settlement.service.SettlementService;
 import com.jingcaicompass.settlement.service.SportteryHandicapSettlementCalculator;
 import com.jingcaicompass.settlement.service.WinDrawLossSettlementCalculator;
@@ -144,6 +145,7 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(PredictionLockService.class);
                     assertThat(context).hasSingleBean(PredictionSnapshotService.class);
                     assertThat(context).hasSingleBean(SettlementService.class);
+                    assertThat(context).hasSingleBean(SettlementRecalculationService.class);
                     assertThat(context).hasSingleBean(AdminAuthService.class);
                     assertThat(context).hasSingleBean(AdminAccountTokenValidator.class);
                     assertThat(context).hasSingleBean(AdminAccountBootstrapRunner.class);

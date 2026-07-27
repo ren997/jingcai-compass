@@ -7,6 +7,7 @@ import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Update;
 
 /** 版本化结算结果持久化接口。 */
 @Mapper
@@ -52,4 +53,31 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
             LIMIT #{batchSize}
             """)
     List<Long> selectPendingLockedPredictionIds(@Param("batchSize") int batchSize);
+
+    /** 查询已锁定、当前结算仍引用被替代官方事实的预测 ID。 */
+    @Select("""
+            SELECT DISTINCT prediction.id
+            FROM predictions prediction
+            INNER JOIN match_result_facts fact
+                ON fact.match_id = prediction.match_id
+               AND fact.is_current = TRUE
+            INNER JOIN settlements settlement
+                ON settlement.prediction_id = prediction.id
+               AND settlement.is_current = TRUE
+               AND settlement.match_fact_id <> fact.id
+            WHERE prediction.prediction_status = 'LOCKED'
+              AND fact.fact_status IN ('FINAL', 'VOID')
+            ORDER BY prediction.id
+            LIMIT #{batchSize}
+            """)
+    List<Long> selectOutdatedLockedPredictionIds(@Param("batchSize") int batchSize);
+
+    /** 唯一允许的结算更新：将 current 标记降为 false。 */
+    @Update("""
+            UPDATE settlements
+            SET is_current = FALSE
+            WHERE id = #{settlementId}
+              AND is_current = TRUE
+            """)
+    int markNotCurrent(@Param("settlementId") Long settlementId);
 }

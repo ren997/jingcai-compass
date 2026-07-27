@@ -1,6 +1,7 @@
 package com.jingcaicompass.settlement.job;
 
 import com.jingcaicompass.settlement.service.SettlementService;
+import com.jingcaicompass.settlement.service.SettlementRecalculationService;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,13 +18,16 @@ public class SettlementJob {
 
     private static final Logger log = LoggerFactory.getLogger(SettlementJob.class);
 
+    private final SettlementRecalculationService recalculationService;
     private final SettlementService settlementService;
     private final SyncTaskProperties taskProperties;
 
     public SettlementJob(
+            SettlementRecalculationService recalculationService,
             SettlementService settlementService,
             SyncTaskProperties taskProperties
     ) {
+        this.recalculationService = recalculationService;
         this.settlementService = settlementService;
         this.taskProperties = taskProperties;
     }
@@ -35,11 +39,24 @@ public class SettlementJob {
     public void settlePendingPredictions() {
         int batchSize = taskProperties.settlement().batchSize();
 
-        // 1) 使用配置的有界批量扫描，避免 Job 长事务占用赛果写入。
+        // 1) 先替代被官方修正事实淘汰的结算版本，保留旧历史供追溯。
         log.info("settlement job started jobName=SettlementJob batchSize={}", batchSize);
+        var recalculationResult = recalculationService.recalculateOutdatedSettlements(batchSize);
+        log.info(
+                "settlement recalculation finished jobName=SettlementJob candidates={} recalculatedPredictions={} "
+                        + "recalculatedMarkets={} skipped={} failed={} manualReview={}",
+                recalculationResult.candidatePredictionCount(),
+                recalculationResult.recalculatedPredictionCount(),
+                recalculationResult.recalculatedMarketCount(),
+                recalculationResult.skippedPredictionCount(),
+                recalculationResult.failedPredictionCount(),
+                recalculationResult.manualReviewPredictionCount()
+        );
+
+        // 2) 再补齐尚未产生首版结算的预测，两个批次均受相同上限约束。
         var result = settlementService.settlePendingPredictions(batchSize);
 
-        // 2) 输出候选、成功、失败和需人工补齐输入的数量。
+        // 3) 输出普通待结算扫描的候选、成功、失败和需人工补齐输入数量。
         log.info(
                 "settlement job finished jobName=SettlementJob candidates={} settledPredictions={} "
                         + "settledMarkets={} skipped={} failed={} manualReview={}",

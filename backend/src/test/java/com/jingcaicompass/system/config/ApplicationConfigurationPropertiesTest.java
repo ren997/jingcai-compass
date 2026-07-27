@@ -67,7 +67,11 @@ class ApplicationConfigurationPropertiesTest {
                     "app.tasks.prediction-lock.batch-size=100",
                     "app.tasks.snapshot-publish.enabled=false",
                     "app.tasks.snapshot-publish.fixed-delay=5m",
-                    "app.tasks.snapshot-publish.initial-delay=60s"
+                    "app.tasks.snapshot-publish.initial-delay=60s",
+                    "app.tasks.settlement.enabled=false",
+                    "app.tasks.settlement.fixed-delay=5m",
+                    "app.tasks.settlement.initial-delay=75s",
+                    "app.tasks.settlement.batch-size=100"
             );
 
     @Test
@@ -109,6 +113,10 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(tasks.snapshotPublish().enabled()).isFalse();
             assertThat(tasks.snapshotPublish().fixedDelay()).isEqualTo(Duration.ofMinutes(5));
             assertThat(tasks.snapshotPublish().initialDelay()).isEqualTo(Duration.ofSeconds(60));
+            assertThat(tasks.settlement().enabled()).isFalse();
+            assertThat(tasks.settlement().fixedDelay()).isEqualTo(Duration.ofMinutes(5));
+            assertThat(tasks.settlement().initialDelay()).isEqualTo(Duration.ofSeconds(75));
+            assertThat(tasks.settlement().batchSize()).isEqualTo(100);
 
             SnapshotStorageProperties storage =
                     context.getBean(SnapshotStorageProperties.class);
@@ -252,6 +260,18 @@ class ApplicationConfigurationPropertiesTest {
                         "app.tasks.snapshot-publish.enabled=true"
                 )
                 .run(context -> assertThat(context).hasNotFailed());
+    }
+
+    @Test
+    void rejectsSettlementBatchSizeOutsideRange() {
+        contextRunner
+                .withPropertyValues("app.tasks.settlement.batch-size=0")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.tasks.settlement.batch-size");
+                });
     }
 
     @Configuration(proxyBeanMethods = false)

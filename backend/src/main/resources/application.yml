@@ -106,6 +106,11 @@ app:
       enabled: ${SNAPSHOT_PUBLISH_TASK_ENABLED:false}
       fixed-delay: ${SNAPSHOT_PUBLISH_FIXED_DELAY:5m}
       initial-delay: ${SNAPSHOT_PUBLISH_INITIAL_DELAY:60s}
+    settlement:
+      enabled: ${SETTLEMENT_TASK_ENABLED:false}
+      fixed-delay: ${SETTLEMENT_FIXED_DELAY:5m}
+      initial-delay: ${SETTLEMENT_INITIAL_DELAY:75s}
+      batch-size: ${SETTLEMENT_BATCH_SIZE:100}
 
 mybatis-plus:
   configuration:

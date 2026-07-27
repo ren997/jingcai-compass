@@ -47,6 +47,8 @@ class ProductionConfigurationTest {
                 .isEqualTo("${SNAPSHOT_STORAGE_PATH:./runtime/snapshots}");
         assertThat(application.getProperty("app.tasks.snapshot-publish.enabled"))
                 .isEqualTo("${SNAPSHOT_PUBLISH_TASK_ENABLED:false}");
+        assertThat(application.getProperty("app.tasks.settlement.enabled"))
+                .isEqualTo("${SETTLEMENT_TASK_ENABLED:false}");
     }
 
     @Test

@@ -77,6 +77,12 @@ import com.jingcaicompass.prediction.service.PredictionLockServiceImpl;
 import com.jingcaicompass.prediction.service.PredictionLockWorker;
 import com.jingcaicompass.prediction.service.PredictionPublishService;
 import com.jingcaicompass.prediction.service.PredictionPublishServiceImpl;
+import com.jingcaicompass.settlement.job.SettlementJob;
+import com.jingcaicompass.settlement.mapper.SettlementMapper;
+import com.jingcaicompass.settlement.service.MarketSettlementCalculatorRouter;
+import com.jingcaicompass.settlement.service.SettlementService;
+import com.jingcaicompass.settlement.service.SettlementServiceImpl;
+import com.jingcaicompass.settlement.service.SettlementWriter;
 import com.jingcaicompass.snapshot.job.SnapshotPublishJob;
 import com.jingcaicompass.snapshot.mapper.PredictionSnapshotMapper;
 import com.jingcaicompass.snapshot.service.PredictionSnapshotService;
@@ -388,6 +394,37 @@ public class PersistenceServicesAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    SettlementWriter settlementWriter(
+            PredictionMapper predictionMapper,
+            MatchMapper matchMapper,
+            MatchResultFactMapper matchResultFactMapper,
+            SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
+            SettlementMapper settlementMapper,
+            MarketSettlementCalculatorRouter calculatorRouter,
+            AuditLogService auditLogService
+    ) {
+        return new SettlementWriter(
+                predictionMapper,
+                matchMapper,
+                matchResultFactMapper,
+                sportteryPoolSnapshotMapper,
+                settlementMapper,
+                calculatorRouter,
+                auditLogService
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(SettlementService.class)
+    SettlementService settlementService(
+            SettlementMapper settlementMapper,
+            SettlementWriter settlementWriter
+    ) {
+        return new SettlementServiceImpl(settlementMapper, settlementWriter);
+    }
+
+    @Bean
     @ConditionalOnMissingBean(LeagueNormalizationService.class)
     LeagueNormalizationService leagueNormalizationService(
             LeagueMapper leagueMapper,
@@ -602,5 +639,20 @@ public class PersistenceServicesAutoConfiguration {
             Clock predictionImportClock
     ) {
         return new SnapshotPublishJob(predictionSnapshotService, predictionImportClock);
+    }
+
+    @Bean
+    @ConditionalOnBean(SettlementService.class)
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(
+            prefix = "app.tasks",
+            name = {"enabled", "settlement.enabled"},
+            havingValue = "true"
+    )
+    SettlementJob settlementJob(
+            SettlementService settlementService,
+            SyncTaskProperties taskProperties
+    ) {
+        return new SettlementJob(settlementService, taskProperties);
     }
 }

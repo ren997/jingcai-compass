@@ -49,9 +49,15 @@ import com.jingcaicompass.snapshot.job.SnapshotPublishJob;
 import com.jingcaicompass.snapshot.mapper.PredictionSnapshotMapper;
 import com.jingcaicompass.snapshot.service.PredictionSnapshotService;
 import com.jingcaicompass.snapshot.storage.SnapshotStorage;
+import com.jingcaicompass.settlement.mapper.SettlementMapper;
+import com.jingcaicompass.settlement.service.MarketSettlementCalculatorRouter;
+import com.jingcaicompass.settlement.service.SettlementService;
+import com.jingcaicompass.settlement.service.SportteryHandicapSettlementCalculator;
+import com.jingcaicompass.settlement.service.WinDrawLossSettlementCalculator;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import java.time.Duration;
+import java.util.List;
 import javax.sql.DataSource;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
@@ -99,6 +105,14 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(AsianOddsSnapshotMapper.class, () -> mock(AsianOddsSnapshotMapper.class))
             .withBean(PredictionMapper.class, () -> mock(PredictionMapper.class))
             .withBean(PredictionSnapshotMapper.class, () -> mock(PredictionSnapshotMapper.class))
+            .withBean(SettlementMapper.class, () -> mock(SettlementMapper.class))
+            .withBean(
+                    MarketSettlementCalculatorRouter.class,
+                    () -> new MarketSettlementCalculatorRouter(List.of(
+                            new WinDrawLossSettlementCalculator(),
+                            new SportteryHandicapSettlementCalculator()
+                    ))
+            )
             .withBean(SnapshotStorage.class, () -> mock(SnapshotStorage.class))
             .withBean(JdbcTemplate.class, () -> mock(JdbcTemplate.class));
 
@@ -129,6 +143,7 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(PredictionPublishService.class);
                     assertThat(context).hasSingleBean(PredictionLockService.class);
                     assertThat(context).hasSingleBean(PredictionSnapshotService.class);
+                    assertThat(context).hasSingleBean(SettlementService.class);
                     assertThat(context).hasSingleBean(AdminAuthService.class);
                     assertThat(context).hasSingleBean(AdminAccountTokenValidator.class);
                     assertThat(context).hasSingleBean(AdminAccountBootstrapRunner.class);

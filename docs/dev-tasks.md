@@ -5,9 +5,9 @@
 - 文档版本：v0.4
 - 最后更新：2026-07-27
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T404 自动结算任务`
-- 下一任务：`T404 自动结算任务`
-- 最近完成增量：`T402 体彩赛果同步`
+- 当前活动任务：无
+- 下一任务：`T405 赛果修正与结算重算`
+- 最近完成增量：`T404 自动结算任务`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -218,7 +218,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 | M1 Provider 基础 | `PARTIAL` | T101～T105 已完成；T106/T107 连续观测和授权结论尚未完成 |
 | M2 标准化与映射 | `DONE` | T201～T207 已完成；双源闭环及枚举、注释、公开模型命名和包结构规范均已通过验证 |
 | M3 预测发布闭环 | `DONE` | T301～T305、T601 已完成；预测导入、发布、锁定和确定性公开快照闭环已通过验证 |
-| M4 赛果与结算 | `PARTIAL` | T401/T402/T403 已完成；等待 T404 自动结算及后续修正重算闭环 |
+| M4 赛果与结算 | `PARTIAL` | T401～T404 已完成；等待 T405 赛果修正与结算重算闭环 |
 | M5 公共 API 与前端 | `PARTIAL` | 比赛列表纵向切片已完成，等待正式主线依赖 |
 | M6 后台、稳定性与上线 | `PARTIAL` | T601 管理员鉴权已完成；后台页面、可观测性、部署及真实数据源上线条件尚未完成 |
 
@@ -1277,7 +1277,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T404 自动结算任务
 
-- 状态：`IN_PROGRESS`
+- 状态：`DONE`
 - 优先级：P0
 - 依赖：T304、T402、T403
 - 交付物：
@@ -1306,6 +1306,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-27：开始执行；范围为结算候选查询、不可变结算写入、审计和默认关闭的定时 Job。计划执行 `*SettlementServiceTest,*SettlementJobTest`、完整普通测试、`git diff --check` 及 GitHub Actions PostgreSQL 16 集成验证；不修改 V1～V11 migration，不实现 T405 重算、Controller 或前端。
 - 验证记录：
   - 2026-07-27：`mvn -B -ntp -f backend/pom.xml -Dtest=*SettlementServiceTest,*SettlementJobTest test` 通过 10 项；全量 `mvn -B -ntp -f backend/pom.xml test` 通过 329 项；`git diff --check` 通过。本机无 Docker，未连接共享或云端开发数据库；`SettlementApplicationIT` 的 3 个 PostgreSQL 16 用例待 Draft PR 的 GitHub Actions/Testcontainers 验证。
+  - 2026-07-27：实现提交 `25bfd3b978a8d89be469b82548229866a1083136` 经 [PR #12](https://github.com/ren997/jingcai-compass/pull/12) 的 [GitHub Actions #30258263230](https://github.com/ren997/jingcai-compass/actions/runs/30258263230) 验证通过；后续 `a15c080`、`a9198a4`、`6bdb02a`、`1d53046` 仅修正装配与 PostgreSQL IT 建数/隔离。Runner 使用 Eclipse Temurin Java 21.0.11、Maven 3.9.16、Testcontainers `postgres:16-alpine`（PostgreSQL 16.14）；329 个普通测试和 32 个 PostgreSQL IT 均通过，其中 T404 新增 `SettlementApplicationIT` 的 3 个 IT。实际验证已锁定且当前 `FINAL`/`VOID` 事实才会结算、赛果事实与规则版本被写入结算、重复运行不新增当前结算、两市场结算和 `SETTLE` 审计同事务追加、缺少锁定前官方让球时保留待人工处理，以及未锁定/待确认事实不写结算。Flyway 空库迁移至 V11，重复迁移为 0；全程未连接共享或云端开发数据库。
 
 ### T405 赛果修正与结算重算
 
@@ -1826,9 +1827,9 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ## 14. 推荐的下一步
 
-当前无活动任务；T401 已完成赛果事实与结算持久化基线及 PostgreSQL 16 CI 验证，T402 已完成 Stub 驱动的赛果同步，T403 已完成纯函数市场结算规则，M4 保持 `PARTIAL`。
+当前无活动任务；T401 已完成赛果事实与结算持久化基线及 PostgreSQL 16 CI 验证，T402 已完成 Stub 驱动的赛果同步，T403 已完成纯函数市场结算规则，T404 已完成自动结算闭环，M4 保持 `PARTIAL`。
 
-下一主线任务为 `T404 自动结算任务`。
+下一主线任务为 `T405 赛果修正与结算重算`。
 
 T106/T107 应尽快启动自动每日采集；开始计时前必须记录负责人、开始日、外部凭据/部署节点、预算上限和第 14 天决策日，启动后标记为 `MONITORING`，可与主线并存。它们不阻塞 Stub 领域开发，但 T108 未达到 Go 标准时禁止生产部署。
 
@@ -1842,13 +1843,15 @@ T301 -> T302 -> T601 -> T303
 T301 + T601 -> T401
 T000 -> T403（已完成）
 已完成：T401 -> T403 -> T402
-下一步：T304 + T402 + T403 -> T404 -> T405
+已完成：T304 + T402 + T403 -> T404
+下一步：T405 赛果修正与结算重算
 ```
 
 ## 15. 变更记录
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-07-27 | T404 / `25bfd3b` | `IN_PROGRESS -> DONE` | 自动结算候选扫描、独立事务、HAD/HHAD 结算、不可变结算追加、审计和默认关闭 Job 完成；[Actions #30258263230](https://github.com/ren997/jingcai-compass/actions/runs/30258263230) 在 PostgreSQL 16.14 通过 329 个普通测试和 32 个 IT，其中 T404 为 3 个 IT；下一任务 T405 |
 | 2026-07-26 | T402 / `43d55e8` | `IN_PROGRESS -> DONE` | Stub raw 赛果同步、不可变版本化事实/当前投影、审计和 7 天补数 Job 完成；[Actions #30207146262](https://github.com/ren997/jingcai-compass/actions/runs/30207146262) 在 PostgreSQL 16.14 通过 318 个普通测试和 29 个 IT，其中 T402 为 2 个 IT；下一任务 T404 |
 | 2026-07-26 | T403 | `IN_PROGRESS -> DONE` | 新增 HAD/HHAD 纯函数结算器、状态资格规则和 28 项参数化测试；全量普通测试 297 项及差异格式检查通过，下一任务 T402 |
 | 2026-07-26 | 任务规划 v0.4 | 未开始任务重排 | 明确赛果事实源与结算版本模型；T403 提前；拆分 T602/T603，并新增 T606/T607；未修改任何 `DONE` 任务或既有 migration |

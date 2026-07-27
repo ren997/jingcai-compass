@@ -23,6 +23,10 @@ import com.jingcaicompass.data.service.ProviderSyncTemplate;
 import com.jingcaicompass.data.service.RawDataPayloadService;
 import com.jingcaicompass.data.service.RawDataPayloadServiceImpl;
 import com.jingcaicompass.data.mapper.DataSyncRunMapper;
+import com.jingcaicompass.history.mapper.HistoryQueryMapper;
+import com.jingcaicompass.history.service.HistoryQueryService;
+import com.jingcaicompass.history.service.HistoryQueryServiceImpl;
+import com.jingcaicompass.history.service.HistoryRecordAssembler;
 import com.jingcaicompass.match.job.SportteryPoolSyncJob;
 import com.jingcaicompass.match.job.MatchResultSyncJob;
 import com.jingcaicompass.match.mapper.LeagueAliasMapper;
@@ -95,6 +99,8 @@ import com.jingcaicompass.snapshot.storage.SnapshotStorage;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
+import com.jingcaicompass.statistics.service.StatisticsQueryService;
+import com.jingcaicompass.statistics.service.StatisticsQueryServiceImpl;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import javax.sql.DataSource;
@@ -124,6 +130,48 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean
     Clock predictionImportClock() {
         return Clock.systemUTC();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    HistoryRecordAssembler historyRecordAssembler(
+            PredictionMapper predictionMapper,
+            MatchMapper matchMapper,
+            MatchResultFactMapper matchResultFactMapper,
+            SettlementMapper settlementMapper,
+            AuditLogMapper auditLogMapper
+    ) {
+        return new HistoryRecordAssembler(
+                predictionMapper,
+                matchMapper,
+                matchResultFactMapper,
+                settlementMapper,
+                auditLogMapper
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(HistoryQueryService.class)
+    HistoryQueryService historyQueryService(
+            HistoryQueryMapper historyQueryMapper,
+            HistoryRecordAssembler historyRecordAssembler,
+            PaginationProperties paginationProperties
+    ) {
+        return new HistoryQueryServiceImpl(historyQueryMapper, historyRecordAssembler, paginationProperties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(StatisticsQueryService.class)
+    StatisticsQueryService statisticsQueryService(
+            HistoryQueryMapper historyQueryMapper,
+            HistoryRecordAssembler historyRecordAssembler,
+            Clock predictionImportClock
+    ) {
+        return new StatisticsQueryServiceImpl(
+                historyQueryMapper,
+                historyRecordAssembler,
+                predictionImportClock
+        );
     }
 
     @Bean

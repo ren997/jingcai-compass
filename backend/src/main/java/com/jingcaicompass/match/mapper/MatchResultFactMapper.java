@@ -2,6 +2,8 @@ package com.jingcaicompass.match.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.jingcaicompass.match.entity.MatchResultFact;
+import java.util.Collection;
+import java.util.List;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -38,4 +40,17 @@ public interface MatchResultFactMapper extends BaseMapper<MatchResultFact> {
               AND is_current = TRUE
             """)
     int markNotCurrent(@Param("factId") Long factId);
+
+    /** 按比赛批量读取全部事实版本，供公开历史重建。 */
+    @Select("""
+            <script>
+            SELECT * FROM match_result_facts
+            WHERE match_id IN
+            <foreach collection="matchIds" item="matchId" open="(" separator="," close=")">
+                #{matchId}
+            </foreach>
+            ORDER BY match_id, fact_version
+            </script>
+            """)
+    List<MatchResultFact> selectHistoryByMatchIds(@Param("matchIds") Collection<Long> matchIds);
 }

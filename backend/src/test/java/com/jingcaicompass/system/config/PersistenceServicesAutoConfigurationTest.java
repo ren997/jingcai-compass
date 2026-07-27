@@ -19,6 +19,8 @@ import com.jingcaicompass.data.mapper.DataSyncRunMapper;
 import com.jingcaicompass.data.mapper.RawDataPayloadMapper;
 import com.jingcaicompass.data.service.DataPipelineService;
 import com.jingcaicompass.data.service.DataProviderService;
+import com.jingcaicompass.history.mapper.HistoryQueryMapper;
+import com.jingcaicompass.history.service.HistoryQueryService;
 import com.jingcaicompass.match.job.SportteryPoolSyncJob;
 import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.match.mapper.LeagueAliasMapper;
@@ -55,6 +57,7 @@ import com.jingcaicompass.settlement.service.SettlementRecalculationService;
 import com.jingcaicompass.settlement.service.SettlementService;
 import com.jingcaicompass.settlement.service.SportteryHandicapSettlementCalculator;
 import com.jingcaicompass.settlement.service.WinDrawLossSettlementCalculator;
+import com.jingcaicompass.statistics.service.StatisticsQueryService;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import java.time.Duration;
@@ -107,6 +110,7 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(PredictionMapper.class, () -> mock(PredictionMapper.class))
             .withBean(PredictionSnapshotMapper.class, () -> mock(PredictionSnapshotMapper.class))
             .withBean(SettlementMapper.class, () -> mock(SettlementMapper.class))
+            .withBean(HistoryQueryMapper.class, () -> mock(HistoryQueryMapper.class))
             .withBean(
                     MarketSettlementCalculatorRouter.class,
                     () -> new MarketSettlementCalculatorRouter(List.of(
@@ -146,6 +150,8 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(PredictionSnapshotService.class);
                     assertThat(context).hasSingleBean(SettlementService.class);
                     assertThat(context).hasSingleBean(SettlementRecalculationService.class);
+                    assertThat(context).hasSingleBean(HistoryQueryService.class);
+                    assertThat(context).hasSingleBean(StatisticsQueryService.class);
                     assertThat(context).hasSingleBean(AdminAuthService.class);
                     assertThat(context).hasSingleBean(AdminAccountTokenValidator.class);
                     assertThat(context).hasSingleBean(AdminAccountBootstrapRunner.class);

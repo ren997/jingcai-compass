@@ -134,13 +134,6 @@ public class PersistenceServicesAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnBean({
-            PredictionMapper.class,
-            MatchMapper.class,
-            MatchResultFactMapper.class,
-            SettlementMapper.class,
-            AuditLogMapper.class
-    })
     HistoryRecordAssembler historyRecordAssembler(
             PredictionMapper predictionMapper,
             MatchMapper matchMapper,
@@ -159,7 +152,6 @@ public class PersistenceServicesAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(HistoryQueryService.class)
-    @ConditionalOnBean({HistoryQueryMapper.class, HistoryRecordAssembler.class})
     HistoryQueryService historyQueryService(
             HistoryQueryMapper historyQueryMapper,
             HistoryRecordAssembler historyRecordAssembler,
@@ -170,7 +162,6 @@ public class PersistenceServicesAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(StatisticsQueryService.class)
-    @ConditionalOnBean({HistoryQueryMapper.class, HistoryRecordAssembler.class})
     StatisticsQueryService statisticsQueryService(
             HistoryQueryMapper historyQueryMapper,
             HistoryRecordAssembler historyRecordAssembler,

@@ -394,7 +394,6 @@ public class PersistenceServicesAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({SettlementMapper.class, MarketSettlementCalculatorRouter.class})
     @ConditionalOnMissingBean
     SettlementWriter settlementWriter(
             PredictionMapper predictionMapper,
@@ -417,7 +416,6 @@ public class PersistenceServicesAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(SettlementMapper.class)
     @ConditionalOnMissingBean(SettlementService.class)
     SettlementService settlementService(
             SettlementMapper settlementMapper,

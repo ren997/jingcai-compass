@@ -4,9 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.jingcaicompass.history.dto.HistoryListQueryDto;
 import com.jingcaicompass.history.service.HistoryQueryService;
+import com.jingcaicompass.history.service.HistoryQueryServiceImpl;
 import com.jingcaicompass.settlement.enums.SettlementStatusEnum;
 import com.jingcaicompass.statistics.dto.StatisticsSummaryQueryDto;
 import com.jingcaicompass.statistics.service.StatisticsQueryService;
+import com.jingcaicompass.statistics.service.StatisticsQueryServiceImpl;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -65,6 +67,8 @@ class HistoryStatisticsApplicationIT {
 
     @BeforeEach
     void verifiesIsolatedPostgresContainer() throws Exception {
+        assertThat(historyQueryService).isInstanceOf(HistoryQueryServiceImpl.class);
+        assertThat(statisticsQueryService).isInstanceOf(StatisticsQueryServiceImpl.class);
         try (Connection connection = dataSource.getConnection()) {
             DatabaseMetaData metadata = connection.getMetaData();
             String expectedPrefix = "jdbc:postgresql://"

@@ -5,14 +5,9 @@ import com.jingcaicompass.history.vo.HistoryListItemVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
-import javax.sql.DataSource;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.stereotype.Service;
 
 /** 无数据库运行配置下的公开历史服务占位，保留统一错误语义。 */
-@Service
-@ConditionalOnMissingBean(DataSource.class)
-class UnavailableHistoryQueryService implements HistoryQueryService {
+public class UnavailableHistoryQueryService implements HistoryQueryService {
 
     @Override
     public PageResult<HistoryListItemVo> list(HistoryListQueryDto query) {

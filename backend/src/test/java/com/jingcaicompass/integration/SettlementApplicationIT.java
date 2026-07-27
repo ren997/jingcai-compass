@@ -69,6 +69,10 @@ class SettlementApplicationIT {
             assertThat(metadata.getDatabaseProductName()).isEqualTo("PostgreSQL");
             assertThat(metadata.getDatabaseMajorVersion()).isEqualTo(16);
         }
+        jdbcTemplate.execute("""
+                TRUNCATE TABLE audit_logs, settlements, match_result_facts, sporttery_pool_snapshots,
+                raw_data_payloads, predictions, matches RESTART IDENTITY CASCADE
+                """);
     }
 
     @Test

@@ -3,6 +3,7 @@ package com.jingcaicompass.match.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
@@ -98,13 +99,14 @@ class MatchMappingReviewServiceTest {
         match.setHomeTeamName("曼联");
         match.setAwayTeamName("切尔西");
         match.setKickoffTime(Instant.parse("2026-07-24T12:00:00Z"));
-        when(matchMapper.selectById(20L)).thenReturn(match);
+        when(matchMapper.selectBatchIds(anyCollection())).thenReturn(List.of(match));
 
         MappingReviewDetailVo detail = service.detail(new MappingReviewDetailQueryDto(2L));
 
         assertThat(detail.match().lotteryMatchNo()).isEqualTo("周三001");
         assertThat(detail.candidates()).hasSize(1);
         assertThat(detail.candidates().get(0).reasons()).contains("HOME_ID");
+        assertThat(detail.candidates().get(0).match().homeTeamName()).isEqualTo("曼联");
     }
 
     @Test
@@ -220,6 +222,25 @@ class MatchMappingReviewServiceTest {
         ))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("expected PENDING");
+    }
+
+    @Test
+    void confirmRejectsTargetOutsideCurrentAndPersistedCandidates() {
+        MatchSourceMapping pending = pendingMapping(9L, 90L);
+        pending.setMappingCandidates(List.of(Map.of(
+                "matchId", 91,
+                "score", "0.7000",
+                "reasons", List.of("TIME")
+        )));
+        when(matchSourceMappingMapper.selectById(9L)).thenReturn(pending);
+
+        assertThatThrownBy(() -> service.confirm(
+                new MappingReviewConfirmDto(9L, 999L),
+                "admin-1"
+        ))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("persisted candidate");
+        verify(matchMapper, never()).selectById(999L);
     }
 
     @Test

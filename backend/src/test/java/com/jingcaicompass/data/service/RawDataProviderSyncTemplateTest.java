@@ -40,11 +40,18 @@ class RawDataProviderSyncTemplateTest {
     @Mock
     private RawDataPayloadService rawDataPayloadService;
 
+    @Mock
+    private DataSyncRunPayloadLinkService dataSyncRunPayloadLinkService;
+
     private ProviderSyncTemplate template;
 
     @BeforeEach
     void setUp() {
-        template = new ProviderSyncTemplate(dataSyncRunService, rawDataPayloadService);
+        template = new ProviderSyncTemplate(
+                dataSyncRunService,
+                rawDataPayloadService,
+                dataSyncRunPayloadLinkService
+        );
     }
 
     @Test
@@ -67,9 +74,10 @@ class RawDataProviderSyncTemplateTest {
 
         assertThat(outcome.status()).isEqualTo(SyncStatusEnum.SUCCESS);
         assertThat(outcome.duplicatePayload()).isFalse();
-        InOrder order = inOrder(dataSyncRunService, rawDataPayloadService);
+        InOrder order = inOrder(dataSyncRunService, rawDataPayloadService, dataSyncRunPayloadLinkService);
         order.verify(dataSyncRunService).startRun("STUB", ProviderDataTypeEnum.SPORTTERY_POOL);
         order.verify(rawDataPayloadService).savePayload(any(RawDataPayloadSaveDto.class));
+        order.verify(dataSyncRunPayloadLinkService).link(1L, 10L);
         order.verify(rawDataPayloadService).markParseSuccess(10L);
         order.verify(dataSyncRunService).finishSuccess(eq(1L), any(SyncRunFinishDto.class));
     }
@@ -200,6 +208,7 @@ class RawDataProviderSyncTemplateTest {
 
         assertThat(outcome.duplicatePayload()).isTrue();
         assertThat(outcome.status()).isEqualTo(SyncStatusEnum.SUCCESS);
+        verify(dataSyncRunPayloadLinkService).link(5L, 50L);
     }
 
     private DataSyncRun run(Long id, SyncStatusEnum status) {

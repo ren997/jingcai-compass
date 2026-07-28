@@ -16,6 +16,7 @@ import com.jingcaicompass.audit.service.AuditLogService;
 import com.jingcaicompass.data.job.DataPipelineSyncJob;
 import com.jingcaicompass.data.mapper.DataProviderMapper;
 import com.jingcaicompass.data.mapper.DataSyncRunMapper;
+import com.jingcaicompass.data.mapper.DataSyncRunPayloadMapper;
 import com.jingcaicompass.data.mapper.RawDataPayloadMapper;
 import com.jingcaicompass.data.service.DataPipelineService;
 import com.jingcaicompass.data.service.DataProviderService;
@@ -97,6 +98,7 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(AuditLogMapper.class, () -> mock(AuditLogMapper.class))
             .withBean(DataProviderMapper.class, () -> mock(DataProviderMapper.class))
             .withBean(DataSyncRunMapper.class, () -> mock(DataSyncRunMapper.class))
+            .withBean(DataSyncRunPayloadMapper.class, () -> mock(DataSyncRunPayloadMapper.class))
             .withBean(RawDataPayloadMapper.class, () -> mock(RawDataPayloadMapper.class))
             .withBean(LeagueMapper.class, () -> mock(LeagueMapper.class))
             .withBean(LeagueAliasMapper.class, () -> mock(LeagueAliasMapper.class))

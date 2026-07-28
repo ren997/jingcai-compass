@@ -19,10 +19,13 @@ import com.jingcaicompass.data.service.DataProviderService;
 import com.jingcaicompass.data.service.DataProviderServiceImpl;
 import com.jingcaicompass.data.service.DataSyncRunService;
 import com.jingcaicompass.data.service.DataSyncRunServiceImpl;
+import com.jingcaicompass.data.service.DataSyncRunPayloadLinkService;
+import com.jingcaicompass.data.service.DataSyncRunPayloadLinkServiceImpl;
 import com.jingcaicompass.data.service.ProviderSyncTemplate;
 import com.jingcaicompass.data.service.RawDataPayloadService;
 import com.jingcaicompass.data.service.RawDataPayloadServiceImpl;
 import com.jingcaicompass.data.mapper.DataSyncRunMapper;
+import com.jingcaicompass.data.mapper.DataSyncRunPayloadMapper;
 import com.jingcaicompass.data.mapper.RawDataPayloadMapper;
 import com.jingcaicompass.history.mapper.HistoryQueryMapper;
 import com.jingcaicompass.history.service.HistoryQueryService;
@@ -426,12 +429,21 @@ public class PersistenceServicesAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean(DataSyncRunPayloadLinkService.class)
+    DataSyncRunPayloadLinkService dataSyncRunPayloadLinkService(
+            DataSyncRunPayloadMapper dataSyncRunPayloadMapper
+    ) {
+        return new DataSyncRunPayloadLinkServiceImpl(dataSyncRunPayloadMapper);
+    }
+
+    @Bean
     @ConditionalOnMissingBean
     ProviderSyncTemplate providerSyncTemplate(
             DataSyncRunService dataSyncRunService,
-            RawDataPayloadService rawDataPayloadService
+            RawDataPayloadService rawDataPayloadService,
+            DataSyncRunPayloadLinkService dataSyncRunPayloadLinkService
     ) {
-        return new ProviderSyncTemplate(dataSyncRunService, rawDataPayloadService);
+        return new ProviderSyncTemplate(dataSyncRunService, rawDataPayloadService, dataSyncRunPayloadLinkService);
     }
 
     @Bean

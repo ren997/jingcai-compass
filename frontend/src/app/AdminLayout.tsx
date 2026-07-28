@@ -31,6 +31,12 @@ export default function AdminLayout() {
           <NavLink to="/admin" end>
             概览
           </NavLink>
+          <NavLink to="/admin/sync-runs">
+            同步运行
+          </NavLink>
+          <NavLink to="/admin/mappings">
+            映射复核
+          </NavLink>
         </nav>
       </aside>
       <div className="admin-content">

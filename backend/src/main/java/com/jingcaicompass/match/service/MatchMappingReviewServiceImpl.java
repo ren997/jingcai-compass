@@ -24,9 +24,12 @@ import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -115,6 +118,9 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
         Long targetMatchId = request.targetMatchId() == null ? current.getMatchId() : request.targetMatchId();
         if (targetMatchId == null) {
             throw new BusinessException(ErrorCode.INVALID_PARAMETER, "targetMatchId must not be null");
+        }
+        if (!allowedTargetMatchIds(current).contains(targetMatchId)) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "targetMatchId must be current match or persisted candidate");
         }
         if (matchMapper.selectById(targetMatchId) == null) {
             throw new BusinessException(ErrorCode.INVALID_PARAMETER, "match not found: " + targetMatchId);
@@ -270,21 +276,15 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
     }
 
     private MappingReviewDetailVo toDetail(MatchSourceMapping mapping) {
-        MappingReviewDetailVo.MatchBriefVo brief = null;
-        if (mapping.getMatchId() != null) {
-            MatchEntity match = matchMapper.selectById(mapping.getMatchId());
-            if (match != null) {
-                brief = new MappingReviewDetailVo.MatchBriefVo(
-                        match.getId(),
-                        match.getLotteryMatchNo(),
-                        match.getLotteryDate(),
-                        match.getLeagueName(),
-                        match.getHomeTeamName(),
-                        match.getAwayTeamName(),
-                        match.getKickoffTime()
-                );
-            }
-        }
+        List<MatchMapCandidateDto> candidateDtos = toCandidateDtos(mapping.getMappingCandidates());
+        Map<Long, MatchEntity> matchesById = loadCandidateMatches(mapping.getMatchId(), candidateDtos);
+        MappingReviewDetailVo.MatchBriefVo brief = toMatchBrief(matchesById.get(mapping.getMatchId()));
+        List<MappingReviewDetailVo.CandidateVo> candidates = candidateDtos.stream()
+                .map(candidate -> new MappingReviewDetailVo.CandidateVo(
+                        candidate.matchId(), candidate.score(), candidate.reasons(),
+                        toMatchBrief(matchesById.get(candidate.matchId()))
+                ))
+                .toList();
         return new MappingReviewDetailVo(
                 mapping.getId(),
                 mapping.getMatchId(),
@@ -297,11 +297,58 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                 mapping.getMappingConfidence(),
                 mapping.getMappingMethod(),
                 mapping.getMappingExplanation(),
-                toCandidateDtos(mapping.getMappingCandidates()),
+                candidates,
                 mapping.getConfirmedBy(),
                 brief,
                 mapping.getUpdatedAt()
         );
+    }
+
+    private Map<Long, MatchEntity> loadCandidateMatches(
+            Long currentMatchId,
+            List<MatchMapCandidateDto> candidates
+    ) {
+        Set<Long> matchIds = new HashSet<>();
+        if (currentMatchId != null) {
+            matchIds.add(currentMatchId);
+        }
+        candidates.stream().map(MatchMapCandidateDto::matchId).filter(Objects::nonNull).forEach(matchIds::add);
+        if (matchIds.isEmpty()) {
+            return Map.of();
+        }
+        List<MatchEntity> matches = matchMapper.selectBatchIds(matchIds);
+        if (matches == null || matches.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, MatchEntity> result = new HashMap<>();
+        for (MatchEntity match : matches) {
+            if (match.getId() != null) {
+                result.put(match.getId(), match);
+            }
+        }
+        return result;
+    }
+
+    private static MappingReviewDetailVo.MatchBriefVo toMatchBrief(MatchEntity match) {
+        if (match == null) {
+            return null;
+        }
+        return new MappingReviewDetailVo.MatchBriefVo(
+                match.getId(), match.getLotteryMatchNo(), match.getLotteryDate(), match.getLeagueName(),
+                match.getHomeTeamName(), match.getAwayTeamName(), match.getKickoffTime()
+        );
+    }
+
+    private static Set<Long> allowedTargetMatchIds(MatchSourceMapping mapping) {
+        Set<Long> allowed = new HashSet<>();
+        if (mapping.getMatchId() != null) {
+            allowed.add(mapping.getMatchId());
+        }
+        toCandidateDtos(mapping.getMappingCandidates()).stream()
+                .map(MatchMapCandidateDto::matchId)
+                .filter(Objects::nonNull)
+                .forEach(allowed::add);
+        return allowed;
     }
 
     private static List<MatchMapCandidateDto> toCandidateDtos(List<Map<String, Object>> maps) {

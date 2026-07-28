@@ -38,7 +38,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V12 与数据库原生行为。
+ * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V13 与数据库原生行为。
  */
 @Testcontainers
 @ActiveProfiles("integration")
@@ -102,8 +102,8 @@ class PostgresApplicationIT {
                 .filter(info -> info.getVersion() != null)
                 .toArray(MigrationInfo[]::new);
 
-        assertThat(applied).hasSize(12);
-        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("12");
+        assertThat(applied).hasSize(13);
+        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("13");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
@@ -119,6 +119,7 @@ class PostgresApplicationIT {
                 "data_providers",
                 "raw_data_payloads",
                 "data_sync_runs",
+                "data_sync_run_payloads",
                 "leagues",
                 "teams",
                 "matches",

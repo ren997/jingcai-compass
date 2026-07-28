@@ -31,13 +31,16 @@ public class ProviderSyncTemplate {
 
     private final DataSyncRunService dataSyncRunService;
     private final RawDataPayloadService rawDataPayloadService;
+    private final DataSyncRunPayloadLinkService dataSyncRunPayloadLinkService;
 
     public ProviderSyncTemplate(
             DataSyncRunService dataSyncRunService,
-            RawDataPayloadService rawDataPayloadService
+            RawDataPayloadService rawDataPayloadService,
+            DataSyncRunPayloadLinkService dataSyncRunPayloadLinkService
     ) {
         this.dataSyncRunService = dataSyncRunService;
         this.rawDataPayloadService = rawDataPayloadService;
+        this.dataSyncRunPayloadLinkService = dataSyncRunPayloadLinkService;
     }
 
     /**
@@ -103,6 +106,8 @@ public class ProviderSyncTemplate {
                 )
         );
         RawDataPayload payload = saveResult.payload();
+        // 1) 无论是否命中去重，都将本次运行精确关联到该载荷
+        dataSyncRunPayloadLinkService.link(run.getId(), payload.getId());
 
         ProviderParseResult parseResult;
         try {

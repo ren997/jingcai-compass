@@ -223,6 +223,20 @@ describe('App routes', () => {
     ]));
   });
 
+  it('lazy loads public history and statistics routes from the shared navigation', async () => {
+    mockPublicMatches();
+    const historyView = renderApp('/history');
+
+    expect(await screen.findByRole('heading', { name: '公开预测历史' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '预测历史' })).toHaveAttribute('href', '/history');
+    expect(screen.getByRole('link', { name: '表现统计' })).toHaveAttribute('href', '/statistics');
+
+    historyView.unmount();
+    renderApp('/statistics');
+
+    expect(await screen.findByRole('heading', { name: '预测表现统计' })).toBeInTheDocument();
+  });
+
   it('persists filters in the URL and resets pagination before requesting the filtered page', async () => {
     const user = userEvent.setup();
     mockPublicMatches({ list: page([match], 2, 41) });

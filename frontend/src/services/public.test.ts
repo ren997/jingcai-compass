@@ -2,9 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchMatchDetail,
   fetchMatchList,
+  fetchHistoryList,
   fetchPredictionDetail,
+  fetchStatisticsSummary,
   predictionSnapshotDownloadUrl,
+  type HistoryListQuery,
   type MatchListQuery,
+  type StatisticsSummaryQuery,
   verifyPredictionSnapshot,
 } from './public';
 import {
@@ -12,6 +16,7 @@ import {
   matchListQueryKey,
   matchPredictionDetailQueryKey,
 } from '../features/matches/useMatchQueries';
+import { historyListQueryKey, statisticsSummaryQueryKey } from '../features/history/useHistoryQueries';
 
 function apiResponse(data: unknown, options: { code?: string; message?: string; status?: number; traceId?: string } = {}) {
   const status = options.status ?? 200;
@@ -118,5 +123,81 @@ describe('public match API service', () => {
     }));
     expect(matchPredictionDetailQueryKey(42)).toEqual(['public', 'predictions', 'detail', 42]);
     expect(predictionSnapshotDownloadUrl(501)).toBe('/api/public/predictions/snapshots/501/download');
+  });
+
+  it('posts T507 history and statistics contracts with stable query keys', async () => {
+    const historyQuery: HistoryListQuery = {
+      startDate: '2026-07-01',
+      endDate: '2026-07-28',
+      leagueId: 7,
+      modelVersion: 'model-v1',
+      lockedOnly: true,
+      settlementMarket: 'HHAD',
+      settlementStatuses: ['HIT', 'MISS'],
+      pageNo: 2,
+      pageSize: 20,
+    };
+    const statisticsQuery: StatisticsSummaryQuery = {
+      startDate: '2026-07-01',
+      endDate: '2026-07-28',
+      leagueId: 7,
+      modelVersion: 'model-v1',
+    };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(apiResponse({ records: [], pageNo: 2, pageSize: 20, total: 0 }))
+      .mockResolvedValueOnce(apiResponse({ asOfDate: '2026-07-28' }));
+
+    await expect(fetchHistoryList(historyQuery)).resolves.toMatchObject({ pageNo: 2, total: 0 });
+    await expect(fetchStatisticsSummary(statisticsQuery)).resolves.toMatchObject({ asOfDate: '2026-07-28' });
+
+    expect(fetch).toHaveBeenNthCalledWith(1, '/api/public/history/list', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify(historyQuery),
+    }));
+    expect(fetch).toHaveBeenNthCalledWith(2, '/api/public/statistics/summary', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify(statisticsQuery),
+    }));
+    expect(historyListQueryKey(historyQuery)).toEqual(['public', 'history', 'list', historyQuery]);
+    expect(statisticsSummaryQueryKey(statisticsQuery)).toEqual(['public', 'statistics', 'summary', statisticsQuery]);
+  });
+
+  it('preserves the history API trace ID when the request fails', async () => {
+    vi.mocked(fetch).mockResolvedValue(apiResponse(null, {
+      code: 'DATA_SOURCE_UNAVAILABLE',
+      message: '历史查询暂不可用',
+      status: 503,
+      traceId: 'history-trace-503',
+    }));
+
+    await expect(fetchHistoryList({
+      lockedOnly: false,
+      settlementMarket: 'HAD',
+      pageNo: 1,
+      pageSize: 20,
+    })).rejects.toMatchObject({
+      code: 'DATA_SOURCE_UNAVAILABLE',
+      traceId: 'history-trace-503',
+      message: '历史查询暂不可用（追踪号：history-trace-503）',
+    });
+  });
+
+  it('propagates caller cancellation through the history request', async () => {
+    vi.mocked(fetch).mockImplementation((_, init) => new Promise((_, reject) => {
+      (init?.signal as AbortSignal).addEventListener('abort', () => {
+        reject(new DOMException('aborted', 'AbortError'));
+      });
+    }) as Promise<Response>);
+    const controller = new AbortController();
+    const request = fetchHistoryList({
+      lockedOnly: false,
+      settlementMarket: 'HAD',
+      pageNo: 1,
+      pageSize: 20,
+    }, controller.signal);
+
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

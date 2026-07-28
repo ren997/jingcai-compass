@@ -40,6 +40,23 @@ export type ConfidenceLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type PublicSnapshotAvailability = 'AVAILABLE' | 'UNAVAILABLE';
 
+export const SETTLEMENT_MARKETS = ['HAD', 'HHAD'] as const;
+
+export type SettlementMarket = (typeof SETTLEMENT_MARKETS)[number];
+
+export const SETTLEMENT_STATUSES = ['PENDING', 'HIT', 'MISS', 'VOID'] as const;
+
+export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
+
+export type MatchResultFactStatus = 'PENDING' | 'FINAL' | 'VOID';
+
+export type ProbabilityMetricUnavailableReason = 'NO_FINAL_SAMPLE';
+
+export type RoiUnavailableReason =
+  | 'MISSING_FIXED_BETTING_RULE'
+  | 'MISSING_LOCKED_BETTING_MARKET'
+  | 'MISSING_LOCKED_ODDS_INPUT';
+
 export type PageResult<T> = {
   records: T[];
   pageNo: number;
@@ -185,6 +202,160 @@ export type PredictionDetailVo = {
   modelPredictions: PredictionModelDetailVo[];
 };
 
+/** T507 公开历史分页筛选。 */
+export type HistoryListQuery = {
+  startDate?: string;
+  endDate?: string;
+  leagueId?: number;
+  modelVersion?: string;
+  lockedOnly: boolean;
+  settlementMarket: SettlementMarket;
+  settlementStatuses?: SettlementStatus[];
+  pageNo: number;
+  pageSize: number;
+};
+
+export type HistoryMatchVo = {
+  matchId: number;
+  lotteryDate: string;
+  lotteryMatchNo: string;
+  leagueId: number | null;
+  leagueName: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  kickoffTime: string;
+};
+
+export type MatchResultFactHistoryVo = {
+  factId: number;
+  factVersion: number;
+  supersedesFactVersion: number | null;
+  factStatus: MatchResultFactStatus;
+  matchStatus: MatchStatus;
+  homeScore: number | null;
+  awayScore: number | null;
+  providerUpdatedAt: string | null;
+  current: boolean;
+  createdAt: string;
+};
+
+export type SettlementVersionVo = {
+  settlementId: number;
+  settlementVersion: number;
+  supersedesSettlementVersion: number | null;
+  settlementStatus: SettlementStatus;
+  matchFactId: number | null;
+  ruleVersion: string;
+  current: boolean;
+  createdAt: string;
+};
+
+export type MarketSettlementHistoryVo = {
+  marketType: SettlementMarket;
+  currentStatus: SettlementStatus;
+  currentSettlementPersisted: boolean;
+  recalculatedAfterFactCorrection: boolean;
+  versions: SettlementVersionVo[];
+};
+
+/** 一条公开预测及其完整赛果、结算版本链。 */
+export type HistoryListItemVo = {
+  predictionId: number;
+  predictionVersion: number;
+  modelVersion: string;
+  featureVersion: string;
+  predictionStatus: PredictionStatus;
+  homeWinProb: number;
+  drawProb: number;
+  awayWinProb: number;
+  handicapPick: HandicapPick;
+  expectedTotalGoals: number;
+  confidenceLevel: ConfidenceLevel;
+  analysisSummary: string;
+  predictionHash: string;
+  generatedAt: string;
+  publishTime: string | null;
+  lockTime: string | null;
+  match: HistoryMatchVo;
+  resultFacts: MatchResultFactHistoryVo[];
+  settlementMarkets: MarketSettlementHistoryVo[];
+  recalculatedAfterFactCorrection: boolean;
+};
+
+/** T507 统计筛选；省略日期时由服务端使用近 30 天默认口径。 */
+export type StatisticsSummaryQuery = {
+  startDate?: string;
+  endDate?: string;
+  leagueId?: number;
+  modelVersion?: string;
+};
+
+export type ProbabilityMetricsVo = {
+  sampleSize: number;
+  brierScore: number | null;
+  logLoss: number | null;
+  unavailableReasons: ProbabilityMetricUnavailableReason[];
+};
+
+export type MarketHitRateVo = {
+  marketType: SettlementMarket;
+  settledSampleSize: number;
+  hitCount: number;
+  missCount: number;
+  pendingCount: number;
+  voidCount: number;
+  hitRate: number | null;
+};
+
+export type RoiMetricsVo = {
+  available: boolean;
+  roi: number | null;
+  yield: number | null;
+  sampleSize: number;
+  unavailableReasons: RoiUnavailableReason[];
+};
+
+export type StatisticsMetricsVo = {
+  lockedPredictionCount: number;
+  finalFactCount: number;
+  pendingFactCount: number;
+  voidFactCount: number;
+  probabilityMetrics: ProbabilityMetricsVo;
+  had: MarketHitRateVo;
+  hhad: MarketHitRateVo;
+  roi: RoiMetricsVo;
+};
+
+export type StatisticsWindowVo = {
+  startDate: string;
+  endDate: string;
+  metrics: StatisticsMetricsVo;
+};
+
+export type LeagueStatisticsVo = {
+  leagueId: number | null;
+  leagueName: string | null;
+  metrics: StatisticsMetricsVo;
+};
+
+export type ModelVersionStatisticsVo = {
+  modelVersion: string;
+  metrics: StatisticsMetricsVo;
+};
+
+export type StatisticsSummaryVo = {
+  asOfDate: string;
+  appliedFilter: {
+    leagueId: number | null;
+    modelVersion: string | null;
+  };
+  requestedWindow: StatisticsWindowVo;
+  trailingSevenDays: StatisticsWindowVo;
+  trailingThirtyDays: StatisticsWindowVo;
+  byLeague: LeagueStatisticsVo[];
+  byModelVersion: ModelVersionStatisticsVo[];
+};
+
 /** 使用 T501 的服务端分页、筛选和排序白名单查询比赛。 */
 export function fetchMatchList(query: MatchListQuery, signal?: AbortSignal) {
   return requestApi<PageResult<MatchListItemVo>>('/api/public/matches/list', {
@@ -208,6 +379,24 @@ export function fetchPredictionDetail(matchId: number, signal?: AbortSignal) {
   return requestApi<PredictionDetailVo>('/api/public/predictions/detail', {
     method: 'POST',
     body: { matchId },
+    signal,
+  });
+}
+
+/** 分页读取公开预测、赛果和结算版本历史。 */
+export function fetchHistoryList(query: HistoryListQuery, signal?: AbortSignal) {
+  return requestApi<PageResult<HistoryListItemVo>>('/api/public/history/list', {
+    method: 'POST',
+    body: query,
+    signal,
+  });
+}
+
+/** 读取指定时间与非时间筛选下的公开表现统计。 */
+export function fetchStatisticsSummary(query: StatisticsSummaryQuery, signal?: AbortSignal) {
+  return requestApi<StatisticsSummaryVo>('/api/public/statistics/summary', {
+    method: 'POST',
+    body: query,
     signal,
   });
 }

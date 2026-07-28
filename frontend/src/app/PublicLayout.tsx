@@ -10,6 +10,8 @@ export default function PublicLayout() {
         </NavLink>
         <nav aria-label="公共导航">
           <NavLink to="/matches">每日比赛</NavLink>
+          <NavLink to="/history">预测历史</NavLink>
+          <NavLink to="/statistics">表现统计</NavLink>
         </nav>
       </header>
       <Outlet />

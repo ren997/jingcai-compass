@@ -105,6 +105,7 @@ class DataPipelineApplicationIT {
                 WHERE mapping_status = 'MANUAL_CONFIRMED'
                   AND mapping_method = 'ALIAS'
                 """)).isEqualTo(2);
+        assertThat(singleLong("SELECT COUNT(*) FROM data_sync_run_payloads")).isEqualTo(2);
         assertThat(singleLong("""
                 SELECT COUNT(*)
                 FROM provider_team_mappings
@@ -149,6 +150,9 @@ class DataPipelineApplicationIT {
         assertThat(afterSecond.sportterySnapshots()).isEqualTo(2);
         assertThat(afterSecond.asianOddsSnapshots()).isEqualTo(5);
         assertThat(afterSecond.rawPayloads()).isEqualTo(2);
+        assertThat(singleLong("SELECT COUNT(*) FROM data_sync_run_payloads")).isEqualTo(4);
+        assertThat(singleLong("SELECT COUNT(DISTINCT raw_data_payload_id) FROM data_sync_run_payloads"))
+                .isEqualTo(2);
 
         assertThat(singleLong("""
                 SELECT home_team_id

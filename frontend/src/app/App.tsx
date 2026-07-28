@@ -10,6 +10,10 @@ const HomePage = lazy(() => import('../features/home/HomePage'));
 const HistoryPage = lazy(() => import('../features/history/HistoryPage'));
 const StatisticsPage = lazy(() => import('../features/history/StatisticsPage'));
 const AdminHomePage = lazy(() => import('../pages/AdminHomePage'));
+const AdminSyncRunsPage = lazy(() => import('../features/admin/AdminSyncRunsPage'));
+const AdminSyncRunDetailPage = lazy(() => import('../features/admin/AdminSyncRunDetailPage'));
+const AdminMappingsPage = lazy(() => import('../features/admin/AdminMappingsPage'));
+const AdminMappingDetailPage = lazy(() => import('../features/admin/AdminMappingDetailPage'));
 const AdminLoginPage = lazy(() => import('../pages/AdminLoginPage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 
@@ -29,6 +33,10 @@ export default function App() {
         <Route element={<RequireAdmin />}>
           <Route path="admin" element={<AdminLayout />}>
             <Route index element={<AdminHomePage />} />
+            <Route path="sync-runs" element={<AdminSyncRunsPage />} />
+            <Route path="sync-runs/:syncRunId" element={<AdminSyncRunDetailPage />} />
+            <Route path="mappings" element={<AdminMappingsPage />} />
+            <Route path="mappings/:mappingId" element={<AdminMappingDetailPage />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFoundPage />} />

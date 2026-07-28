@@ -475,7 +475,7 @@ describe('App routes', () => {
     await user.type(screen.getByLabelText('密码'), 'correct-password');
     await user.click(screen.getByRole('button', { name: '登录后台' }));
 
-    expect(await screen.findByRole('heading', { name: '后台已就绪' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '后台运营入口' })).toBeInTheDocument();
     expect(window.location.pathname).toBe('/admin');
     expect(getAdminSession()?.username).toBe('operator');
   });

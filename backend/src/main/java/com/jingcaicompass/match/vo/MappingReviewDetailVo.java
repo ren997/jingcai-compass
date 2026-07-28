@@ -1,6 +1,5 @@
 package com.jingcaicompass.match.vo;
 
-import com.jingcaicompass.match.dto.MatchMapCandidateDto;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -37,7 +36,7 @@ public record MappingReviewDetailVo(
         BigDecimal mappingConfidence,
         String mappingMethod,
         String mappingExplanation,
-        List<MatchMapCandidateDto> candidates,
+        List<CandidateVo> candidates,
         String confirmedBy,
         MatchBriefVo match,
         Instant updatedAt
@@ -62,6 +61,17 @@ public record MappingReviewDetailVo(
             String homeTeamName,
             String awayTeamName,
             Instant kickoffTime
+    ) {
+    }
+
+    /**
+     * 可确认候选及其内部比赛资料；比赛被删除时摘要为空。
+     */
+    public record CandidateVo(
+            Long matchId,
+            BigDecimal score,
+            List<String> reasons,
+            MatchBriefVo match
     ) {
     }
 }

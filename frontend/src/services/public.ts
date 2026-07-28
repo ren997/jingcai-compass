@@ -1,3 +1,5 @@
+import { requestApi } from './http';
+
 export type MatchStatus =
   | 'SCHEDULED'
   | 'LOCKED'
@@ -5,6 +7,7 @@ export type MatchStatus =
   | 'POSTPONED'
   | 'CANCELLED';
 
+/** 公开比赛列表项。 */
 export type MatchSummaryVo = {
   matchId: string;
   lotteryDate: string;
@@ -18,24 +21,10 @@ export type MatchSummaryVo = {
   dataSource: string;
 };
 
-type ApiResponse<T> = {
-  code: string;
-  message: string;
-  data: T;
-  traceId: string;
-};
-
-export async function fetchDailyMatches(
-  lotteryDate: string,
-  signal?: AbortSignal,
-): Promise<MatchSummaryVo[]> {
-  const response = await fetch(
+/** 查询指定竞彩日期的公开比赛。 */
+export function fetchDailyMatches(lotteryDate: string, signal?: AbortSignal) {
+  return requestApi<MatchSummaryVo[]>(
     `/api/public/matches?lotteryDate=${encodeURIComponent(lotteryDate)}`,
     { signal },
   );
-  const body = (await response.json()) as ApiResponse<MatchSummaryVo[]>;
-  if (!response.ok || body.code !== 'SUCCESS') {
-    throw new Error(`${body.message}（追踪号：${body.traceId}）`);
-  }
-  return body.data;
 }

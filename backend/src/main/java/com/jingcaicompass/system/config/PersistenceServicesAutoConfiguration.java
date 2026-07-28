@@ -84,6 +84,8 @@ import com.jingcaicompass.prediction.service.PredictionLockServiceImpl;
 import com.jingcaicompass.prediction.service.PredictionLockWorker;
 import com.jingcaicompass.prediction.service.PredictionPublishService;
 import com.jingcaicompass.prediction.service.PredictionPublishServiceImpl;
+import com.jingcaicompass.prediction.service.PublicPredictionQueryService;
+import com.jingcaicompass.prediction.service.PublicPredictionQueryServiceImpl;
 import com.jingcaicompass.settlement.job.SettlementJob;
 import com.jingcaicompass.settlement.mapper.SettlementMapper;
 import com.jingcaicompass.settlement.service.MarketSettlementCalculatorRouter;
@@ -161,6 +163,24 @@ public class PersistenceServicesAutoConfiguration {
             PaginationProperties paginationProperties
     ) {
         return new HistoryQueryServiceImpl(historyQueryMapper, historyRecordAssembler, paginationProperties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(PublicPredictionQueryService.class)
+    PublicPredictionQueryService publicPredictionQueryService(
+            MatchMapper matchMapper,
+            PredictionMapper predictionMapper,
+            PredictionSnapshotMapper predictionSnapshotMapper,
+            SnapshotStorage snapshotStorage,
+            ObjectMapper objectMapper
+    ) {
+        return new PublicPredictionQueryServiceImpl(
+                matchMapper,
+                predictionMapper,
+                predictionSnapshotMapper,
+                snapshotStorage,
+                objectMapper
+        );
     }
 
     @Bean

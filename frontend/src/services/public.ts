@@ -1,4 +1,4 @@
-import { requestApi } from './http';
+import { requestApi, resolveApiUrl } from './http';
 
 export const MATCH_STATUSES = [
   'SCHEDULED',
@@ -31,6 +31,14 @@ export type MatchDataAvailability =
 export type OddsSnapshotType = 'FIRST_SEEN' | 'PRE_KICKOFF' | 'OTHER';
 
 export type MappingStatus = 'PENDING' | 'AUTO_CONFIRMED' | 'MANUAL_CONFIRMED' | 'REJECTED';
+
+export type PredictionStatus = 'PUBLISHED' | 'LOCKED';
+
+export type HandicapPick = 'HOME_WIN' | 'DRAW' | 'AWAY_WIN';
+
+export type ConfidenceLevel = 'LOW' | 'MEDIUM' | 'HIGH';
+
+export type PublicSnapshotAvailability = 'AVAILABLE' | 'UNAVAILABLE';
 
 export type PageResult<T> = {
   records: T[];
@@ -125,6 +133,58 @@ export type MatchDetailVo = {
   sourceMappings: MatchSourceMappingVo[];
 };
 
+/** 可公开校验和下载的预测快照元数据，不包含内部存储地址。 */
+export type PredictionSnapshotVo = {
+  snapshotId: number;
+  snapshotDate: string;
+  snapshotVersion: number;
+  snapshotHash: string;
+  contentType: string;
+  contentLength: number;
+  publishedAt: string;
+};
+
+export type PredictionSnapshotVerificationVo = {
+  snapshotId: number;
+  snapshotHash: string;
+  contentLength: number;
+  verified: boolean;
+};
+
+/** 单个已公开模型预测版本及其透明字段。 */
+export type PredictionVersionVo = {
+  predictionId: number;
+  predictionVersion: number;
+  replacesPredictionId: number | null;
+  predictionStatus: PredictionStatus;
+  featureVersion: string;
+  homeWinProb: number;
+  drawProb: number;
+  awayWinProb: number;
+  handicapPick: HandicapPick;
+  expectedTotalGoals: number;
+  confidenceLevel: ConfidenceLevel;
+  analysisSummary: string;
+  generatedAt: string;
+  publishTime: string;
+  lockTime: string;
+  predictionHash: string;
+  snapshotAvailability: PublicSnapshotAvailability;
+  snapshot: PredictionSnapshotVo | null;
+};
+
+export type PredictionModelDetailVo = {
+  modelVersion: string;
+  currentPrediction: PredictionVersionVo;
+  historicalPredictions: PredictionVersionVo[];
+};
+
+/** 单场比赛的全部当前公开模型预测和版本替代链。 */
+export type PredictionDetailVo = {
+  matchId: number;
+  modelPredictions: PredictionModelDetailVo[];
+};
+
 /** 使用 T501 的服务端分页、筛选和排序白名单查询比赛。 */
 export function fetchMatchList(query: MatchListQuery, signal?: AbortSignal) {
   return requestApi<PageResult<MatchListItemVo>>('/api/public/matches/list', {
@@ -141,4 +201,26 @@ export function fetchMatchDetail(matchId: number, signal?: AbortSignal) {
     body: { matchId },
     signal,
   });
+}
+
+/** 查询单场全部模型的当前公开预测及替代历史。 */
+export function fetchPredictionDetail(matchId: number, signal?: AbortSignal) {
+  return requestApi<PredictionDetailVo>('/api/public/predictions/detail', {
+    method: 'POST',
+    body: { matchId },
+    signal,
+  });
+}
+
+/** 校验已发布预测快照当前对象的哈希和长度。 */
+export function verifyPredictionSnapshot(snapshotId: number) {
+  return requestApi<PredictionSnapshotVerificationVo>(
+    `/api/public/predictions/snapshots/${snapshotId}/verify`,
+    { method: 'POST' },
+  );
+}
+
+/** 返回通过后端受控下载的公开快照地址，不泄露存储实现 URL。 */
+export function predictionSnapshotDownloadUrl(snapshotId: number) {
+  return resolveApiUrl(`/api/public/predictions/snapshots/${snapshotId}/download`);
 }

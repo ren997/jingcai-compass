@@ -486,7 +486,8 @@ h1 {
 }
 
 .asian-market-list,
-.mapping-list {
+.mapping-list,
+.prediction-model-list {
   display: grid;
   gap: 12px;
 }
@@ -532,6 +533,83 @@ h1 {
   margin: 3px 0;
   color: #526259;
   line-height: 1.5;
+}
+
+.prediction-model-card {
+  padding: 18px;
+  border: 1px solid #dbe4dc;
+  border-radius: 14px;
+  background: #fbfdfb;
+}
+
+.prediction-model-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  color: #526259;
+  font-size: 13px;
+}
+
+.prediction-model-card > header strong,
+.snapshot-panel strong {
+  color: #1d5839;
+}
+
+.prediction-metadata {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.prediction-summary {
+  margin: 0 0 16px;
+  color: #405348;
+  line-height: 1.65;
+}
+
+.snapshot-panel {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 10px;
+  color: #526259;
+  background: #f2f8f3;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.snapshot-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.verification-success {
+  color: #1c7047;
+}
+
+.verification-failure {
+  color: #9c3131;
+}
+
+.prediction-history {
+  margin-top: 14px;
+  color: #526259;
+  font-size: 13px;
+}
+
+.prediction-history summary {
+  cursor: pointer;
+  color: #1d5839;
+  font-weight: 650;
+}
+
+.prediction-history ul {
+  display: grid;
+  gap: 7px;
+  margin: 12px 0 0;
+  padding-left: 20px;
+  line-height: 1.55;
 }
 
 .login-page {
@@ -698,11 +776,22 @@ h1 {
   .metadata-list,
   .metadata-list.compact,
   .market-tables,
-  .asian-market-list {
+  .asian-market-list,
+  .prediction-metadata {
     grid-template-columns: 1fr;
   }
 
   .asian-market-card header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .prediction-model-card {
+    padding: 15px;
+  }
+
+  .prediction-model-card > header {
     align-items: flex-start;
     flex-direction: column;
     gap: 4px;

@@ -1,4 +1,12 @@
-import type { MatchDataAvailability, MatchStatus, OddsSnapshotType } from '../../services/public';
+import type {
+  ConfidenceLevel,
+  HandicapPick,
+  MatchDataAvailability,
+  MatchStatus,
+  OddsSnapshotType,
+  PredictionStatus,
+  PublicSnapshotAvailability,
+} from '../../services/public';
 
 export const statusLabels: Record<MatchStatus, string> = {
   SCHEDULED: '未开赛',
@@ -22,6 +30,28 @@ const snapshotTypeLabels: Record<OddsSnapshotType, string> = {
   FIRST_SEEN: '首次可见',
   PRE_KICKOFF: '封盘前',
   OTHER: '其他',
+};
+
+const predictionStatusLabels: Record<PredictionStatus, string> = {
+  PUBLISHED: '已发布',
+  LOCKED: '已锁定',
+};
+
+const handicapPickLabels: Record<HandicapPick, string> = {
+  HOME_WIN: '让球主胜',
+  DRAW: '让球平局',
+  AWAY_WIN: '让球客胜',
+};
+
+const confidenceLabels: Record<ConfidenceLevel, string> = {
+  LOW: '低',
+  MEDIUM: '中',
+  HIGH: '高',
+};
+
+const publicSnapshotAvailabilityLabels: Record<PublicSnapshotAvailability, string> = {
+  AVAILABLE: '快照可校验',
+  UNAVAILABLE: '暂无可验证快照',
 };
 
 export function formatTimestamp(value: string | null | undefined) {
@@ -49,12 +79,32 @@ export function formatNumber(value: number | null | undefined) {
   return value === null || value === undefined ? '—' : String(value);
 }
 
+export function formatProbability(value: number) {
+  return `${(value * 100).toFixed(1)}%`;
+}
+
 export function availabilityLabel(value: MatchDataAvailability) {
   return availabilityLabels[value];
 }
 
 export function snapshotTypeLabel(value: OddsSnapshotType) {
   return snapshotTypeLabels[value];
+}
+
+export function predictionStatusLabel(value: PredictionStatus) {
+  return predictionStatusLabels[value];
+}
+
+export function handicapPickLabel(value: HandicapPick) {
+  return handicapPickLabels[value];
+}
+
+export function confidenceLabel(value: ConfidenceLevel) {
+  return confidenceLabels[value];
+}
+
+export function publicSnapshotAvailabilityLabel(value: PublicSnapshotAvailability) {
+  return publicSnapshotAvailabilityLabels[value];
 }
 
 export function dataSourceLabel(value: string | null | undefined) {

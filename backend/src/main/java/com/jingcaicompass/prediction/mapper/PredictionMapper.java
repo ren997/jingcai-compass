@@ -48,6 +48,16 @@ public interface PredictionMapper extends BaseMapper<Prediction> {
             @Param("snapshotDate") LocalDate snapshotDate
     );
 
+    /** 按模型和版本顺序读取单场全部公开预测，草稿不会进入公共查询。 */
+    @Select("""
+            SELECT *
+            FROM predictions
+            WHERE match_id = #{matchId}
+              AND prediction_status IN ('PUBLISHED', 'LOCKED')
+            ORDER BY model_version ASC, prediction_version ASC, id ASC
+            """)
+    List<Prediction> selectPublicByMatchId(@Param("matchId") Long matchId);
+
     /** 仅允许完整 DRAFT 原子进入 PUBLISHED。 */
     @Update("""
             UPDATE predictions

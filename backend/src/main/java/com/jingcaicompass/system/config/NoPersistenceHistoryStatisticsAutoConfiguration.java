@@ -2,6 +2,8 @@ package com.jingcaicompass.system.config;
 
 import com.jingcaicompass.history.service.HistoryQueryService;
 import com.jingcaicompass.history.service.UnavailableHistoryQueryService;
+import com.jingcaicompass.home.service.HomeSummaryQueryService;
+import com.jingcaicompass.home.service.UnavailableHomeSummaryQueryService;
 import com.jingcaicompass.match.service.MatchQueryService;
 import com.jingcaicompass.match.service.UnavailableMatchQueryService;
 import com.jingcaicompass.prediction.service.PublicPredictionQueryService;
@@ -13,7 +15,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
 
-/** 无 DataSource 时为公开历史与统计 Controller 提供统一的不可用响应。 */
+/** 无 DataSource 时为公开查询 Controller 提供统一的不可用响应。 */
 @AutoConfiguration(afterName = "org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration")
 @ConditionalOnMissingBean(DataSource.class)
 public class NoPersistenceHistoryStatisticsAutoConfiguration {
@@ -40,5 +42,11 @@ public class NoPersistenceHistoryStatisticsAutoConfiguration {
     @ConditionalOnMissingBean(StatisticsQueryService.class)
     StatisticsQueryService unavailableStatisticsQueryService() {
         return new UnavailableStatisticsQueryService();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(HomeSummaryQueryService.class)
+    HomeSummaryQueryService unavailableHomeSummaryQueryService() {
+        return new UnavailableHomeSummaryQueryService();
     }
 }

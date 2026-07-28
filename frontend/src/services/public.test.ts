@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchMatchDetail,
   fetchMatchList,
+  fetchHomeSummary,
   fetchHistoryList,
   fetchPredictionDetail,
   fetchStatisticsSummary,
@@ -17,6 +18,7 @@ import {
   matchPredictionDetailQueryKey,
 } from '../features/matches/useMatchQueries';
 import { historyListQueryKey, statisticsSummaryQueryKey } from '../features/history/useHistoryQueries';
+import { homeSummaryQueryKey } from '../features/home/useHomeSummaryQuery';
 
 function apiResponse(data: unknown, options: { code?: string; message?: string; status?: number; traceId?: string } = {}) {
   const status = options.status ?? 200;
@@ -40,6 +42,26 @@ describe('public match API service', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('gets the fact-driven home summary with a stable key and caller cancellation', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(apiResponse({ asOfDate: '2026-07-28' }));
+
+    await expect(fetchHomeSummary()).resolves.toMatchObject({ asOfDate: '2026-07-28' });
+
+    expect(fetch).toHaveBeenCalledWith('/api/public/home/summary', expect.objectContaining({ method: 'GET' }));
+    expect(homeSummaryQueryKey).toEqual(['public', 'home', 'summary']);
+
+    vi.mocked(fetch).mockImplementationOnce((_, init) => new Promise((_, reject) => {
+      (init?.signal as AbortSignal).addEventListener('abort', () => {
+        reject(new DOMException('aborted', 'AbortError'));
+      });
+    }) as Promise<Response>);
+    const controller = new AbortController();
+    const request = fetchHomeSummary(controller.signal);
+    controller.abort();
+
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' });
   });
 
   it('posts the list contract and exposes its matching query key', async () => {

@@ -356,6 +356,39 @@ export type StatisticsSummaryVo = {
   byModelVersion: ModelVersionStatisticsVo[];
 };
 
+/** T505 上海当天的公开比赛及预测去重场次数。 */
+export type HomeTodayOverviewVo = {
+  matchCount: number;
+  publishedPredictionMatchCount: number;
+};
+
+/** 当天体彩池采集时刻与相对首页汇总时间的数据年龄。 */
+export type HomeDataFreshnessVo = {
+  sportteryLastCapturedAt: string | null;
+  sportteryDataAgeSeconds: number | null;
+};
+
+/** 可由持久化事实重建的公开首页汇总。 */
+export type HomeSummaryVo = {
+  asOfDate: string;
+  today: HomeTodayOverviewVo;
+  pendingSettlementMatchCount: number;
+  historicalPublishedMatchCount: number;
+  trailingSevenDays: StatisticsWindowVo;
+  trailingThirtyDays: StatisticsWindowVo;
+  dataFreshness: HomeDataFreshnessVo;
+  latestPublishedSnapshotAt: string | null;
+  generatedAt: string;
+};
+
+/** 读取公开首页的事实汇总。 */
+export function fetchHomeSummary(signal?: AbortSignal) {
+  return requestApi<HomeSummaryVo>('/api/public/home/summary', {
+    method: 'GET',
+    signal,
+  });
+}
+
 /** 使用 T501 的服务端分页、筛选和排序白名单查询比赛。 */
 export function fetchMatchList(query: MatchListQuery, signal?: AbortSignal) {
   return requestApi<PageResult<MatchListItemVo>>('/api/public/matches/list', {

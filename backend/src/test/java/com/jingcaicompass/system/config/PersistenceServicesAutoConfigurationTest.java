@@ -21,6 +21,8 @@ import com.jingcaicompass.data.service.DataPipelineService;
 import com.jingcaicompass.data.service.DataProviderService;
 import com.jingcaicompass.history.mapper.HistoryQueryMapper;
 import com.jingcaicompass.history.service.HistoryQueryService;
+import com.jingcaicompass.home.mapper.HomeSummaryMapper;
+import com.jingcaicompass.home.service.HomeSummaryQueryService;
 import com.jingcaicompass.match.job.SportteryPoolSyncJob;
 import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.match.mapper.LeagueAliasMapper;
@@ -111,6 +113,7 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(PredictionSnapshotMapper.class, () -> mock(PredictionSnapshotMapper.class))
             .withBean(SettlementMapper.class, () -> mock(SettlementMapper.class))
             .withBean(HistoryQueryMapper.class, () -> mock(HistoryQueryMapper.class))
+            .withBean(HomeSummaryMapper.class, () -> mock(HomeSummaryMapper.class))
             .withBean(
                     MarketSettlementCalculatorRouter.class,
                     () -> new MarketSettlementCalculatorRouter(List.of(
@@ -152,6 +155,7 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(SettlementRecalculationService.class);
                     assertThat(context).hasSingleBean(HistoryQueryService.class);
                     assertThat(context).hasSingleBean(StatisticsQueryService.class);
+                    assertThat(context).hasSingleBean(HomeSummaryQueryService.class);
                     assertThat(context).hasSingleBean(AdminAuthService.class);
                     assertThat(context).hasSingleBean(AdminAccountTokenValidator.class);
                     assertThat(context).hasSingleBean(AdminAccountBootstrapRunner.class);

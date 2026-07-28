@@ -1,11 +1,12 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
 import AdminLayout from './AdminLayout';
 import PublicLayout from './PublicLayout';
 import RequireAdmin from './RequireAdmin';
 
 const MatchesPage = lazy(() => import('../features/matches/MatchesPage'));
 const MatchDetailPage = lazy(() => import('../features/matches/MatchDetailPage'));
+const HomePage = lazy(() => import('../features/home/HomePage'));
 const HistoryPage = lazy(() => import('../features/history/HistoryPage'));
 const StatisticsPage = lazy(() => import('../features/history/StatisticsPage'));
 const AdminHomePage = lazy(() => import('../pages/AdminHomePage'));
@@ -18,7 +19,7 @@ export default function App() {
     <Suspense fallback={<main className="page"><section className="state-card">正在加载页面……</section></main>}>
       <Routes>
         <Route element={<PublicLayout />}>
-          <Route index element={<Navigate replace to="/matches" />} />
+          <Route index element={<HomePage />} />
           <Route path="matches" element={<MatchesPage />} />
           <Route path="matches/:matchId" element={<MatchDetailPage />} />
           <Route path="history" element={<HistoryPage />} />

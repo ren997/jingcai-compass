@@ -28,6 +28,9 @@ import com.jingcaicompass.history.mapper.HistoryQueryMapper;
 import com.jingcaicompass.history.service.HistoryQueryService;
 import com.jingcaicompass.history.service.HistoryQueryServiceImpl;
 import com.jingcaicompass.history.service.HistoryRecordAssembler;
+import com.jingcaicompass.home.mapper.HomeSummaryMapper;
+import com.jingcaicompass.home.service.HomeSummaryQueryService;
+import com.jingcaicompass.home.service.HomeSummaryQueryServiceImpl;
 import com.jingcaicompass.match.job.SportteryPoolSyncJob;
 import com.jingcaicompass.match.job.MatchResultSyncJob;
 import com.jingcaicompass.match.mapper.LeagueAliasMapper;
@@ -215,6 +218,16 @@ public class PersistenceServicesAutoConfiguration {
                 historyRecordAssembler,
                 predictionImportClock
         );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(HomeSummaryQueryService.class)
+    HomeSummaryQueryService homeSummaryQueryService(
+            HomeSummaryMapper homeSummaryMapper,
+            StatisticsQueryService statisticsQueryService,
+            Clock predictionImportClock
+    ) {
+        return new HomeSummaryQueryServiceImpl(homeSummaryMapper, statisticsQueryService, predictionImportClock);
     }
 
     @Bean

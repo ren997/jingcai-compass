@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearAdminSession, getAdminSession, setAdminSession } from '../services/adminSession';
-import type { MatchDetailVo, MatchListItemVo, PageResult, PredictionDetailVo } from '../services/public';
+import type { HomeSummaryVo, MatchDetailVo, MatchListItemVo, PageResult, PredictionDetailVo } from '../services/public';
 import App from './App';
 import AppProviders from './AppProviders';
 
@@ -123,6 +123,44 @@ const predictionDetail: PredictionDetailVo = {
   }],
 };
 
+const homeSummary: HomeSummaryVo = {
+  asOfDate: '2026-07-28',
+  today: { matchCount: 8, publishedPredictionMatchCount: 5 },
+  pendingSettlementMatchCount: 3,
+  historicalPublishedMatchCount: 42,
+  trailingSevenDays: {
+    startDate: '2026-07-22',
+    endDate: '2026-07-28',
+    metrics: {
+      lockedPredictionCount: 8,
+      finalFactCount: 5,
+      pendingFactCount: 2,
+      voidFactCount: 1,
+      probabilityMetrics: { sampleSize: 5, brierScore: 0.19, logLoss: 0.72, unavailableReasons: [] },
+      had: { marketType: 'HAD', settledSampleSize: 5, hitCount: 3, missCount: 2, pendingCount: 2, voidCount: 1, hitRate: 0.6 },
+      hhad: { marketType: 'HHAD', settledSampleSize: 5, hitCount: 2, missCount: 3, pendingCount: 2, voidCount: 1, hitRate: 0.4 },
+      roi: { available: false, roi: null, yield: null, sampleSize: 0, unavailableReasons: ['MISSING_FIXED_BETTING_RULE'] },
+    },
+  },
+  trailingThirtyDays: {
+    startDate: '2026-06-29',
+    endDate: '2026-07-28',
+    metrics: {
+      lockedPredictionCount: 42,
+      finalFactCount: 30,
+      pendingFactCount: 8,
+      voidFactCount: 4,
+      probabilityMetrics: { sampleSize: 30, brierScore: 0.2, logLoss: 0.75, unavailableReasons: [] },
+      had: { marketType: 'HAD', settledSampleSize: 30, hitCount: 17, missCount: 13, pendingCount: 8, voidCount: 4, hitRate: 0.57 },
+      hhad: { marketType: 'HHAD', settledSampleSize: 30, hitCount: 15, missCount: 15, pendingCount: 8, voidCount: 4, hitRate: 0.5 },
+      roi: { available: false, roi: null, yield: null, sampleSize: 0, unavailableReasons: ['MISSING_FIXED_BETTING_RULE'] },
+    },
+  },
+  dataFreshness: { sportteryLastCapturedAt: '2026-07-28T00:45:00Z', sportteryDataAgeSeconds: 900 },
+  latestPublishedSnapshotAt: '2026-07-28T00:30:00Z',
+  generatedAt: '2026-07-28T01:00:00Z',
+};
+
 function createTestQueryClient() {
   return new QueryClient({
     defaultOptions: {
@@ -154,6 +192,7 @@ function page(records: MatchListItemVo[] = [match], pageNo = 1, total = records.
 }
 
 function mockPublicMatches(options: {
+  home?: HomeSummaryVo;
   list?: PageResult<MatchListItemVo>;
   detail?: MatchDetailVo;
   prediction?: PredictionDetailVo;
@@ -165,6 +204,9 @@ function mockPublicMatches(options: {
       return apiResponse(null, options.error);
     }
     const url = String(input);
+    if (url.endsWith('/api/public/home/summary')) {
+      return apiResponse(options.home ?? homeSummary);
+    }
     if (url.endsWith('/api/public/predictions/detail')) {
       return options.predictionError
         ? apiResponse(null, options.predictionError)
@@ -208,19 +250,16 @@ describe('App routes', () => {
     vi.unstubAllGlobals();
   });
 
-  it('redirects the root route and loads the paged public list with POST', async () => {
+  it('lazy loads the fact-driven public home from the root route', async () => {
     mockPublicMatches();
     renderApp();
 
-    expect(await screen.findByRole('heading', { name: '今日竞彩比赛' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '公开事实，持续检验每一场预测' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '竞彩罗盘' })).toBeInTheDocument();
-    expect(await screen.findByText('曼彻斯特城')).toBeInTheDocument();
-    expect(screen.getByText('曼彻斯特城').closest('a')).toHaveAttribute('href', expect.stringMatching(/^\/matches\/42/));
-    expect(window.location.pathname).toBe('/matches');
-    expect(publicListBodies()).toEqual(expect.arrayContaining([
-      expect.objectContaining({ pageNo: 1, pageSize: 20, sort: 'KICKOFF_ASC' }),
-      expect.objectContaining({ pageNo: 1, pageSize: 100, sort: 'KICKOFF_ASC' }),
-    ]));
+    expect(screen.getByRole('link', { name: '首页' })).toHaveAttribute('href', '/');
+    expect(await screen.findByRole('link', { name: '查看每日比赛' })).toHaveAttribute('href', '/matches');
+    expect(window.location.pathname).toBe('/');
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith('/api/public/home/summary', expect.objectContaining({ method: 'GET' }));
   });
 
   it('lazy loads public history and statistics routes from the shared navigation', async () => {

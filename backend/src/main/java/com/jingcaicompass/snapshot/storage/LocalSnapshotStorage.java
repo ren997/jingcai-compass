@@ -1,6 +1,7 @@
 package com.jingcaicompass.snapshot.storage;
 
 import com.jingcaicompass.snapshot.enums.SnapshotStorageTypeEnum;
+import java.io.InputStream;
 import java.io.IOException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.FileAlreadyExistsException;
@@ -142,6 +143,16 @@ public class LocalSnapshotStorage implements SnapshotStorage {
                     && expectedHash.equals(sha256Hex(bytes));
         } catch (IOException exception) {
             return false;
+        }
+    }
+
+    @Override
+    public InputStream open(String objectKey) {
+        Path objectPath = resolveObjectPath(objectKey);
+        try {
+            return Files.newInputStream(objectPath);
+        } catch (IOException exception) {
+            throw new SnapshotStorageException("failed to open local snapshot", exception);
         }
     }
 

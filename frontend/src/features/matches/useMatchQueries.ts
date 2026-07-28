@@ -1,5 +1,11 @@
-import { useQuery } from '@tanstack/react-query';
-import { fetchMatchDetail, fetchMatchList, type MatchListQuery } from '../../services/public';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import {
+  fetchMatchDetail,
+  fetchMatchList,
+  fetchPredictionDetail,
+  type MatchListQuery,
+  verifyPredictionSnapshot,
+} from '../../services/public';
 import { LEAGUE_OPTIONS_PAGE_SIZE } from './matchSearch';
 
 export function matchListQueryKey(query: MatchListQuery) {
@@ -8,6 +14,10 @@ export function matchListQueryKey(query: MatchListQuery) {
 
 export function matchDetailQueryKey(matchId: number) {
   return ['public', 'matches', 'detail', matchId] as const;
+}
+
+export function matchPredictionDetailQueryKey(matchId: number) {
+  return ['public', 'predictions', 'detail', matchId] as const;
 }
 
 /** 读取当前筛选下的服务端分页比赛列表。 */
@@ -24,6 +34,22 @@ export function useMatchDetailQuery(matchId: number | undefined) {
     queryKey: matchDetailQueryKey(matchId ?? 0),
     queryFn: ({ signal }) => fetchMatchDetail(matchId!, signal),
     enabled: matchId !== undefined,
+  });
+}
+
+/** 读取比赛全部模型的当前公开预测与替代历史。 */
+export function useMatchPredictionDetailQuery(matchId: number | undefined) {
+  return useQuery({
+    queryKey: matchPredictionDetailQueryKey(matchId ?? 0),
+    queryFn: ({ signal }) => fetchPredictionDetail(matchId!, signal),
+    enabled: matchId !== undefined,
+  });
+}
+
+/** 按需校验公开预测快照当前存储对象。 */
+export function usePredictionSnapshotVerification() {
+  return useMutation({
+    mutationFn: (snapshotId: number) => verifyPredictionSnapshot(snapshotId),
   });
 }
 

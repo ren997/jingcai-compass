@@ -1,6 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { fetchMatchDetail, fetchMatchList, type MatchListQuery } from './public';
-import { matchDetailQueryKey, matchListQueryKey } from '../features/matches/useMatchQueries';
+import {
+  fetchMatchDetail,
+  fetchMatchList,
+  fetchPredictionDetail,
+  predictionSnapshotDownloadUrl,
+  type MatchListQuery,
+  verifyPredictionSnapshot,
+} from './public';
+import {
+  matchDetailQueryKey,
+  matchListQueryKey,
+  matchPredictionDetailQueryKey,
+} from '../features/matches/useMatchQueries';
 
 function apiResponse(data: unknown, options: { code?: string; message?: string; status?: number; traceId?: string } = {}) {
   const status = options.status ?? 200;
@@ -83,5 +94,29 @@ describe('public match API service', () => {
     controller.abort();
 
     await expect(request).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('posts prediction detail and snapshot verification through public endpoints', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(apiResponse({ matchId: 42, modelPredictions: [] }))
+      .mockResolvedValueOnce(apiResponse({
+        snapshotId: 501,
+        snapshotHash: 'a'.repeat(64),
+        contentLength: 99,
+        verified: true,
+      }));
+
+    await expect(fetchPredictionDetail(42)).resolves.toEqual({ matchId: 42, modelPredictions: [] });
+    await expect(verifyPredictionSnapshot(501)).resolves.toMatchObject({ verified: true });
+
+    expect(fetch).toHaveBeenNthCalledWith(1, '/api/public/predictions/detail', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ matchId: 42 }),
+    }));
+    expect(fetch).toHaveBeenNthCalledWith(2, '/api/public/predictions/snapshots/501/verify', expect.objectContaining({
+      method: 'POST',
+    }));
+    expect(matchPredictionDetailQueryKey(42)).toEqual(['public', 'predictions', 'detail', 42]);
+    expect(predictionSnapshotDownloadUrl(501)).toBe('/api/public/predictions/snapshots/501/download');
   });
 });

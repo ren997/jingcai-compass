@@ -27,6 +27,25 @@ public interface PredictionSnapshotMapper extends BaseMapper<PredictionSnapshot>
             @Param("snapshotHash") String snapshotHash
     );
 
+    /** 按最近发布版本读取指定业务日的全部成功快照。 */
+    @Select("""
+            SELECT *
+            FROM prediction_snapshots
+            WHERE snapshot_date = #{snapshotDate}
+              AND snapshot_status = 'PUBLISHED'
+            ORDER BY snapshot_version DESC, id DESC
+            """)
+    List<PredictionSnapshot> selectPublishedByDate(@Param("snapshotDate") LocalDate snapshotDate);
+
+    /** 只允许公开读取已成功发布的快照。 */
+    @Select("""
+            SELECT *
+            FROM prediction_snapshots
+            WHERE id = #{snapshotId}
+              AND snapshot_status = 'PUBLISHED'
+            """)
+    PredictionSnapshot selectPublishedById(@Param("snapshotId") Long snapshotId);
+
     /** 查询业务日所有状态已占用的最高快照版本。 */
     @Select("""
             SELECT MAX(snapshot_version)

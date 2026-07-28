@@ -1,6 +1,7 @@
 package com.jingcaicompass.snapshot.storage;
 
 import com.jingcaicompass.snapshot.enums.SnapshotStorageTypeEnum;
+import java.io.InputStream;
 
 /** 公开预测快照的临时写入、校验与不可覆盖发布契约。 */
 public interface SnapshotStorage {
@@ -23,6 +24,9 @@ public interface SnapshotStorage {
 
     /** 校验已发布对象的长度和 SHA-256；缺失或损坏时返回 false。 */
     boolean verify(String objectKey, String expectedSha256, long expectedContentLength);
+
+    /** 打开已经发布的对象，调用方负责在响应完成后关闭流。 */
+    InputStream open(String objectKey);
 
     /** 尽力清理尚未发布的临时对象。 */
     void discard(SnapshotStagedObject stagedObject);

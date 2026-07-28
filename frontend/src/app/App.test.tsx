@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clearAdminSession, getAdminSession, setAdminSession } from '../services/adminSession';
-import type { MatchDetailVo, MatchListItemVo, PageResult } from '../services/public';
+import type { MatchDetailVo, MatchListItemVo, PageResult, PredictionDetailVo } from '../services/public';
 import App from './App';
 import AppProviders from './AppProviders';
 
@@ -68,6 +68,61 @@ const detail: MatchDetailVo = {
   }],
 };
 
+const predictionDetail: PredictionDetailVo = {
+  matchId: 42,
+  modelPredictions: [{
+    modelVersion: 'model-v1',
+    currentPrediction: {
+      predictionId: 102,
+      predictionVersion: 2,
+      replacesPredictionId: 101,
+      predictionStatus: 'LOCKED',
+      featureVersion: 'feature-v2',
+      homeWinProb: 0.45,
+      drawProb: 0.3,
+      awayWinProb: 0.25,
+      handicapPick: 'HOME_WIN',
+      expectedTotalGoals: 2.5,
+      confidenceLevel: 'HIGH',
+      analysisSummary: '主队近期状态稳定。',
+      generatedAt: '2026-07-22T08:00:00+08:00',
+      publishTime: '2026-07-22T08:01:00+08:00',
+      lockTime: '2026-07-22T12:00:00+08:00',
+      predictionHash: 'a'.repeat(64),
+      snapshotAvailability: 'AVAILABLE',
+      snapshot: {
+        snapshotId: 501,
+        snapshotDate: '2026-07-22',
+        snapshotVersion: 2,
+        snapshotHash: 'b'.repeat(64),
+        contentType: 'application/json',
+        contentLength: 99,
+        publishedAt: '2026-07-22T09:00:00+08:00',
+      },
+    },
+    historicalPredictions: [{
+      predictionId: 101,
+      predictionVersion: 1,
+      replacesPredictionId: null,
+      predictionStatus: 'PUBLISHED',
+      featureVersion: 'feature-v1',
+      homeWinProb: 0.4,
+      drawProb: 0.32,
+      awayWinProb: 0.28,
+      handicapPick: 'DRAW',
+      expectedTotalGoals: 2.4,
+      confidenceLevel: 'MEDIUM',
+      analysisSummary: '历史公开摘要。',
+      generatedAt: '2026-07-21T08:00:00+08:00',
+      publishTime: '2026-07-21T08:01:00+08:00',
+      lockTime: '2026-07-22T12:00:00+08:00',
+      predictionHash: 'c'.repeat(64),
+      snapshotAvailability: 'UNAVAILABLE',
+      snapshot: null,
+    }],
+  }],
+};
+
 function createTestQueryClient() {
   return new QueryClient({
     defaultOptions: {
@@ -101,6 +156,8 @@ function page(records: MatchListItemVo[] = [match], pageNo = 1, total = records.
 function mockPublicMatches(options: {
   list?: PageResult<MatchListItemVo>;
   detail?: MatchDetailVo;
+  prediction?: PredictionDetailVo;
+  predictionError?: Parameters<typeof apiResponse>[1];
   error?: Parameters<typeof apiResponse>[1];
 } = {}) {
   vi.mocked(fetch).mockImplementation(async (input) => {
@@ -108,6 +165,14 @@ function mockPublicMatches(options: {
       return apiResponse(null, options.error);
     }
     const url = String(input);
+    if (url.endsWith('/api/public/predictions/detail')) {
+      return options.predictionError
+        ? apiResponse(null, options.predictionError)
+        : apiResponse(options.prediction ?? predictionDetail);
+    }
+    if (url.endsWith('/api/public/predictions/snapshots/501/verify')) {
+      return apiResponse({ snapshotId: 501, snapshotHash: 'b'.repeat(64), contentLength: 99, verified: true });
+    }
     if (url.endsWith('/api/public/matches/detail')) {
       return apiResponse(options.detail ?? detail);
     }
@@ -235,6 +300,50 @@ describe('App routes', () => {
     }));
   });
 
+  it('renders model transparency, version history and controlled snapshot verification', async () => {
+    const user = userEvent.setup();
+    mockPublicMatches();
+    renderApp('/matches/42');
+
+    expect(await screen.findByRole('heading', { name: '模型分析与透明信息' })).toBeInTheDocument();
+    expect(screen.getByText('model-v1')).toBeInTheDocument();
+    expect(screen.getByText('主队近期状态稳定。')).toBeInTheDocument();
+    expect(screen.getByText('快照可校验')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '下载快照' })).toHaveAttribute(
+      'href',
+      '/api/public/predictions/snapshots/501/download',
+    );
+    expect(screen.getByText('查看 1 个历史公开版本')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '校验快照' }));
+
+    expect(await screen.findByText('当前对象与记录的哈希和长度一致。')).toBeInTheDocument();
+    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+      '/api/public/predictions/snapshots/501/verify',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('keeps the base match detail readable when predictions are empty or fail', async () => {
+    mockPublicMatches({ prediction: { matchId: 42, modelPredictions: [] } });
+    renderApp('/matches/42');
+
+    expect(await screen.findByText('当前没有可公开展示的模型预测。')).toBeInTheDocument();
+  });
+
+  it('shows a traceable prediction error without hiding the base match detail', async () => {
+    mockPublicMatches({ predictionError: {
+      code: 'DATA_SOURCE_UNAVAILABLE',
+      message: '预测查询暂不可用',
+      status: 503,
+      traceId: 'prediction-trace-503',
+    } });
+    renderApp('/matches/42');
+
+    expect(await screen.findByRole('heading', { name: '体彩市场' })).toBeInTheDocument();
+    expect(await screen.findByText('公开预测暂不可用：预测查询暂不可用（追踪号：prediction-trace-503）')).toBeInTheDocument();
+  });
+
   it('shows a stable 404 without requesting an invalid match ID', async () => {
     renderApp('/matches/not-a-number');
 
@@ -273,7 +382,7 @@ describe('App routes', () => {
 
     await user.click(screen.getByRole('button', { name: '刷新' }));
 
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(4));
   });
 
   it('shows a traceable error for a failed public list query', async () => {

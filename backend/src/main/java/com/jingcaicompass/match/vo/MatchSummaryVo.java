@@ -1,7 +1,7 @@
 package com.jingcaicompass.match.vo;
 
 import com.jingcaicompass.match.enums.MatchStatusEnum;
-
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 
@@ -21,7 +21,7 @@ public record MatchSummaryVo(
         /** 预计开赛时间。 */
         OffsetDateTime kickoffTime,
         /** 体彩官方让球数，主队让球时为负数。 */
-        Integer officialHandicap,
+        BigDecimal officialHandicap,
         /** 当前比赛状态。 */
         MatchStatusEnum matchStatus,
         /** 当前记录的数据来源标识。 */

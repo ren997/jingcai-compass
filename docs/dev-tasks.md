@@ -6,8 +6,8 @@
 - 最后更新：2026-07-28
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
 - 当前活动任务：无
-- 下一任务：`T501 公共比赛查询 API`
-- 最近完成增量：`T502 前端路由、请求和布局`
+- 下一任务：`T503 比赛列表与基础详情前后端`
+- 最近完成增量：`T501 公共比赛查询 API`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -219,7 +219,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 | M2 标准化与映射 | `DONE` | T201～T207 已完成；双源闭环及枚举、注释、公开模型命名和包结构规范均已通过验证 |
 | M3 预测发布闭环 | `DONE` | T301～T305、T601 已完成；预测导入、发布、锁定和确定性公开快照闭环已通过验证 |
 | M4 赛果与结算 | `DONE` | T401～T405 已完成；公开修正标识由 T507/T504 基于结算版本链交付 |
-| M5 公共 API 与前端 | `PARTIAL` | T502、T507 已完成；T501 仍为部分增量，待完成持久化比赛查询和详情 API |
+| M5 公共 API 与前端 | `PARTIAL` | T501、T502、T507 已完成；下一任务为 T503 比赛列表与基础详情前后端 |
 | M6 后台、稳定性与上线 | `PARTIAL` | T601 管理员鉴权已完成；后台页面、可观测性、部署及真实数据源上线条件尚未完成 |
 
 ## 5. M0 工程基线
@@ -1344,7 +1344,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T501 公共比赛查询 API
 
-- 状态：`PARTIAL`
+- 状态：`DONE`
 - 优先级：P0
 - 依赖：T004、T202、T206、T207
 - 交付物：
@@ -1353,11 +1353,11 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 建立显式 `MatchSummaryVo` 和按竞彩日期查询的公共比赛列表接口。
   - [x] 编写比赛列表 Controller 测试和 Service 映射测试。
   - [x] 接入 `ApiResponse`、错误码和 traceId。
-  - [ ] 将列表从实时 Provider 查询切换为 T202 持久化比赛池查询。
-  - [ ] 增加分页、日期、联赛、状态筛选和排序白名单。
-  - [ ] 定义并实现比赛基础详情 Vo/API，展示比赛事实、体彩 SP 和亚盘快照，明确区分体彩让球与亚洲盘。
-  - [ ] 展示同步时间、数据延迟、数据来源和映射/盘口缺失原因。
-  - [ ] 为列表和详情编写参数、空结果、排序白名单和 PostgreSQL 集成测试。
+  - [x] 将列表从实时 Provider 查询切换为 T202 持久化比赛池查询。
+  - [x] 增加分页、日期、联赛、状态筛选和排序白名单。
+  - [x] 定义并实现比赛基础详情 Vo/API，展示比赛事实、体彩 SP 和亚盘快照，明确区分体彩让球与亚洲盘。
+  - [x] 展示同步时间、数据延迟、数据来源和映射/盘口缺失原因。
+  - [x] 为列表和详情编写参数、空结果、排序白名单和 PostgreSQL 集成测试。
 - 验证命令：
 
   ```bash
@@ -1365,9 +1365,12 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   npm run backend:test
   ```
 
-- 恢复入口：T207 完成后，先把比赛列表切换为数据库查询，再实现基础详情；预测详情由 T506、历史统计由 T507 单独交付。
+- 恢复入口：已完成；下一任务进入 T503。
 - 执行记录：
   - 2026-07-22：提前完成实时比赛列表原型，用于验证体彩 Provider；正式公共查询依赖尚未满足。
+  - 2026-07-28：开始执行；范围为数据库列表/详情查询、明确分页筛选排序、赛事与盘口数据可用性说明及 PostgreSQL 16 集成测试。预计执行专项 Maven 测试、`npm run backend:test`、`git diff --check` 和 GitHub Actions 集成验证。
+  - 2026-07-28：本地实现完成，保持 GET 兼容入口并新增持久化的 POST 列表/详情查询；详情逐维度保留最新体彩和亚盘快照、映射解释及稳定缺失状态。新增 Controller、Service 与 PostgreSQL 16 Testcontainers 覆盖，并补齐前端 `IN_PROGRESS`、`ABANDONED` 标签。未调用任何 Provider，未新增 migration。
+  - 2026-07-28：实现提交 `48eab614d90bf4cb17af964628541f3f9dfbc25a` 已推送至 Draft PR [#15](https://github.com/ren997/jingcai-compass/pull/15)；[GitHub Actions #30334472450](https://github.com/ren997/jingcai-compass/actions/runs/30334472450) 的 PostgreSQL 16 Testcontainers 集成验证通过。
 - 完成标准：
   - 分页、筛选和排序白名单生效。
   - 所有已知响应结构显式建模。
@@ -1378,6 +1381,8 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 - 验证记录：
   - 2026-07-22：实时体彩比赛列表 API、显式 Vo 和 Controller 测试完成，提交 `21585e8`、`67352d3`。
   - 2026-07-25：规划校准时核对当前 Controller 和前端响应解析，确认已接入统一 `ApiResponse` 与 traceId；未运行代码测试。
+  - 2026-07-28：`npm run backend:test` 通过（353 项普通测试）；`frontend/npm run test` 通过（12 项）；`frontend/npm run build` 通过；`git diff --check` 通过。本机 `mvn -Pintegration '-Dit.test=PublicMatchQueryApplicationIT' verify` 的普通测试 353 项通过，但 Testcontainers 因本机没有 Docker 失败；未以共享或云端开发数据库替代。
+  - 2026-07-28：[GitHub Actions #30334472450](https://github.com/ren997/jingcai-compass/actions/runs/30334472450) 使用 Eclipse Temurin Java 21.0.11、Maven 3.9.16、`postgres:16-alpine`（PostgreSQL 16.14）执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`，353 项普通测试和 40 项 PostgreSQL 集成测试全部通过，其中新增 `PublicMatchQueryApplicationIT` 为 3 项。空库 Flyway V1～V12 迁移成功，实际验证分页/筛选/稳定排序、体彩最新快照、亚盘逐来源/公司/让球线最新快照、映射与缺失状态，且请求路径不调用 Provider。
 
 ### T502 前端路由、请求和布局
 
@@ -1845,9 +1850,9 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ## 14. 推荐的下一步
 
-当前无活动任务；T401 已完成赛果事实与结算持久化基线及 PostgreSQL 16 CI 验证，T402 已完成 Stub 驱动的赛果同步，T403 已完成纯函数市场结算规则，T404 已完成自动结算闭环，T405 已完成赛果修正后的版本化结算重算，T507 已完成公开历史与统计 API，M4 已完成。
+当前无活动任务；T401 已完成赛果事实与结算持久化基线及 PostgreSQL 16 CI 验证，T402 已完成 Stub 驱动的赛果同步，T403 已完成纯函数市场结算规则，T404 已完成自动结算闭环，T405 已完成赛果修正后的版本化结算重算，T501 已完成公共持久化比赛查询，T507 已完成公开历史与统计 API，M4 已完成。
 
-下一主线任务为 `T501 公共比赛查询 API`；完成持久化比赛查询和基础详情后，再交付依赖 T501 与 T502 的 T503 比赛列表与基础详情前后端。
+下一主线任务为 `T503 比赛列表与基础详情前后端`；基于 T501/T502 的 API、Query 基础设施与路由，完成筛选、详情和移动端状态展示。
 
 T106/T107 应尽快启动自动每日采集；开始计时前必须记录负责人、开始日、外部凭据/部署节点、预算上限和第 14 天决策日，启动后标记为 `MONITORING`，可与主线并存。它们不阻塞 Stub 领域开发，但 T108 未达到 Go 标准时禁止生产部署。
 
@@ -1864,14 +1869,15 @@ T000 -> T403（已完成）
 已完成：T304 + T402 + T403 -> T404
 已完成：T404 -> T405
 已完成：T507 公开历史与统计 API
-已完成：T502 前端路由、请求和布局
-下一步：T501 公共比赛查询 API
+已完成：T501 公共比赛查询 API、T502 前端路由、请求和布局
+下一步：T503 比赛列表与基础详情前后端
 ```
 
 ## 15. 变更记录
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-07-28 | T501 / `48eab61` | `IN_PROGRESS -> DONE` | 持久化公开比赛 GET 兼容入口、POST 列表/详情、缺失状态和映射解释完成；[PR #15](https://github.com/ren997/jingcai-compass/pull/15) 的 [Actions #30334472450](https://github.com/ren997/jingcai-compass/actions/runs/30334472450) 在 PostgreSQL 16.14 通过 353 项普通测试与 40 项 IT，其中 T501 为 3 项；M5 保持 `PARTIAL`，下一任务 T503。 |
 | 2026-07-28 | T502 | `IN_PROGRESS -> DONE` | 公共/后台布局、404、懒加载路由、sessionStorage 管理员登录会话和统一 HTTP Client 完成；Vitest 12 项及生产构建通过，下一任务 T501。 |
 | 2026-07-27 | T507 / `33b797a`、`bd53dba`、`020d9cb`、`5608ca0` | `IN_PROGRESS -> DONE` | V12、公开历史/统计 API、完整版本链与赛果修正标识、Brier/Log Loss/分组和 ROI 不可用口径完成；[Actions #30271294353](https://github.com/ren997/jingcai-compass/actions/runs/30271294353) 在 PostgreSQL 16.14 通过 345 个普通测试和 37 个 IT，其中 T507 为 2 个 IT；M5 保持 `PARTIAL`，下一任务 T502。 |
 | 2026-07-27 | T405 / `75fd539`、`a58e21d` | `IN_PROGRESS -> DONE` | 默认关闭的结算 Job 先重算过期结算，再扫描待结算；旧结算保留、`t403-v1` 重算、`SUPERSEDE` 审计、并发幂等完成。[Actions #30260370908](https://github.com/ren997/jingcai-compass/actions/runs/30260370908) 在 PostgreSQL 16.14 通过 337 个普通测试和 35 个 IT，其中 T405 为 3 个 IT；M4 完成，下一任务 T507。 |

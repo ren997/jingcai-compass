@@ -3,9 +3,11 @@ import { requestApi } from './http';
 export type MatchStatus =
   | 'SCHEDULED'
   | 'LOCKED'
+  | 'IN_PROGRESS'
   | 'FINISHED'
   | 'POSTPONED'
-  | 'CANCELLED';
+  | 'CANCELLED'
+  | 'ABANDONED';
 
 /** 公开比赛列表项。 */
 export type MatchSummaryVo = {

@@ -5,9 +5,11 @@ import { useDailyMatchesQuery } from './useDailyMatchesQuery';
 const statusLabels: Record<MatchStatus, string> = {
   SCHEDULED: '未开赛',
   LOCKED: '已锁定',
+  IN_PROGRESS: '进行中',
   FINISHED: '已结束',
   POSTPONED: '已延期',
   CANCELLED: '已取消',
+  ABANDONED: '已中止',
 };
 
 function todayInShanghai() {

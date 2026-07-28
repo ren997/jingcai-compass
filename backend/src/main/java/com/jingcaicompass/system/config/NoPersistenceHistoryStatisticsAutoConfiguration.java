@@ -2,6 +2,8 @@ package com.jingcaicompass.system.config;
 
 import com.jingcaicompass.history.service.HistoryQueryService;
 import com.jingcaicompass.history.service.UnavailableHistoryQueryService;
+import com.jingcaicompass.match.service.MatchQueryService;
+import com.jingcaicompass.match.service.UnavailableMatchQueryService;
 import com.jingcaicompass.statistics.service.StatisticsQueryService;
 import com.jingcaicompass.statistics.service.UnavailableStatisticsQueryService;
 import javax.sql.DataSource;
@@ -18,6 +20,12 @@ public class NoPersistenceHistoryStatisticsAutoConfiguration {
     @ConditionalOnMissingBean(HistoryQueryService.class)
     HistoryQueryService unavailableHistoryQueryService() {
         return new UnavailableHistoryQueryService();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MatchQueryService.class)
+    MatchQueryService unavailableMatchQueryService() {
+        return new UnavailableMatchQueryService();
     }
 
     @Bean

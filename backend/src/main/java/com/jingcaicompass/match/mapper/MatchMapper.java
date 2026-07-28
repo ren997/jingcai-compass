@@ -1,11 +1,13 @@
 package com.jingcaicompass.match.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.jingcaicompass.match.dto.MatchListCriteriaDto;
 import com.jingcaicompass.match.entity.MatchEntity;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import java.time.LocalDate;
+import java.util.List;
 
 @Mapper
 public interface MatchMapper extends BaseMapper<MatchEntity> {
@@ -25,4 +27,64 @@ public interface MatchMapper extends BaseMapper<MatchEntity> {
             @Param("lotteryDate") LocalDate lotteryDate,
             @Param("lotteryMatchNo") String lotteryMatchNo
     );
+
+    /** 按固定白名单排序分页查询公开比赛。 */
+    @Select("""
+            <script>
+            SELECT * FROM matches
+            <where>
+              <if test="criteria.lotteryDate != null">
+                lottery_date = #{criteria.lotteryDate}
+              </if>
+              <if test="criteria.leagueId != null">
+                AND league_id = #{criteria.leagueId}
+              </if>
+              <if test="criteria.matchStatuses != null and !criteria.matchStatuses.isEmpty()">
+                AND match_status IN
+                <foreach collection="criteria.matchStatuses" item="status" open="(" separator="," close=")">
+                  #{status}
+                </foreach>
+              </if>
+            </where>
+            ORDER BY
+            <choose>
+              <when test="criteria.sort.name() == 'KICKOFF_DESC'">kickoff_time DESC, id DESC</when>
+              <when test="criteria.sort.name() == 'LOTTERY_MATCH_NO_ASC'">lottery_match_no ASC, id ASC</when>
+              <when test="criteria.sort.name() == 'LOTTERY_MATCH_NO_DESC'">lottery_match_no DESC, id DESC</when>
+              <otherwise>kickoff_time ASC, id ASC</otherwise>
+            </choose>
+            LIMIT #{criteria.pageSize} OFFSET #{criteria.offset}
+            </script>
+            """)
+    List<MatchEntity> selectPublicPage(@Param("criteria") MatchListCriteriaDto criteria);
+
+    /** 统计公开比赛分页筛选结果。 */
+    @Select("""
+            <script>
+            SELECT COUNT(*) FROM matches
+            <where>
+              <if test="criteria.lotteryDate != null">
+                lottery_date = #{criteria.lotteryDate}
+              </if>
+              <if test="criteria.leagueId != null">
+                AND league_id = #{criteria.leagueId}
+              </if>
+              <if test="criteria.matchStatuses != null and !criteria.matchStatuses.isEmpty()">
+                AND match_status IN
+                <foreach collection="criteria.matchStatuses" item="status" open="(" separator="," close=")">
+                  #{status}
+                </foreach>
+              </if>
+            </where>
+            </script>
+            """)
+    long countPublicPage(@Param("criteria") MatchListCriteriaDto criteria);
+
+    /** 兼容按竞彩业务日返回全部比赛。 */
+    @Select("""
+            SELECT * FROM matches
+            WHERE lottery_date = #{lotteryDate}
+            ORDER BY kickoff_time ASC, id ASC
+            """)
+    List<MatchEntity> selectPublicDailyMatches(@Param("lotteryDate") LocalDate lotteryDate);
 }

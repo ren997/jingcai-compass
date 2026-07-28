@@ -23,6 +23,7 @@ import com.jingcaicompass.data.service.ProviderSyncTemplate;
 import com.jingcaicompass.data.service.RawDataPayloadService;
 import com.jingcaicompass.data.service.RawDataPayloadServiceImpl;
 import com.jingcaicompass.data.mapper.DataSyncRunMapper;
+import com.jingcaicompass.data.mapper.RawDataPayloadMapper;
 import com.jingcaicompass.history.mapper.HistoryQueryMapper;
 import com.jingcaicompass.history.service.HistoryQueryService;
 import com.jingcaicompass.history.service.HistoryQueryServiceImpl;
@@ -42,6 +43,8 @@ import com.jingcaicompass.match.mapper.TeamMapper;
 import com.jingcaicompass.match.service.LeagueNormalizationService;
 import com.jingcaicompass.match.service.LeagueNormalizationServiceImpl;
 import com.jingcaicompass.match.service.MatchMappingReviewService;
+import com.jingcaicompass.match.service.MatchQueryService;
+import com.jingcaicompass.match.service.MatchQueryServiceImpl;
 import com.jingcaicompass.match.service.MatchResultFactWriter;
 import com.jingcaicompass.match.service.MatchResultSyncService;
 import com.jingcaicompass.match.service.MatchResultSyncServiceImpl;
@@ -158,6 +161,26 @@ public class PersistenceServicesAutoConfiguration {
             PaginationProperties paginationProperties
     ) {
         return new HistoryQueryServiceImpl(historyQueryMapper, historyRecordAssembler, paginationProperties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MatchQueryService.class)
+    MatchQueryService matchQueryService(
+            MatchMapper matchMapper,
+            SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
+            AsianOddsSnapshotMapper asianOddsSnapshotMapper,
+            MatchSourceMappingMapper matchSourceMappingMapper,
+            RawDataPayloadMapper rawDataPayloadMapper,
+            PaginationProperties paginationProperties
+    ) {
+        return new MatchQueryServiceImpl(
+                matchMapper,
+                sportteryPoolSnapshotMapper,
+                asianOddsSnapshotMapper,
+                matchSourceMappingMapper,
+                rawDataPayloadMapper,
+                paginationProperties
+        );
     }
 
     @Bean

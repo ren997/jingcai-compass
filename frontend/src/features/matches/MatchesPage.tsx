@@ -1,123 +1,151 @@
-import { useState } from 'react';
-import type { MatchStatus, MatchSummaryVo } from '../../services/public';
-import { useDailyMatchesQuery } from './useDailyMatchesQuery';
+import { Link, useSearchParams } from 'react-router-dom';
+import { MATCH_LIST_SORTS, MATCH_STATUSES, type MatchListSort, type MatchStatus } from '../../services/public';
+import { availabilityLabel, dataSourceLabel, formatHandicap, formatTimestamp, statusLabels } from './matchPresentation';
+import { parseMatchListSearch, todayInShanghai, toMatchListQuery, toMatchListSearchParams, type MatchListSearch } from './matchSearch';
+import { useLeagueOptionsQuery, useMatchListQuery } from './useMatchQueries';
 
-const statusLabels: Record<MatchStatus, string> = {
-  SCHEDULED: '未开赛',
-  LOCKED: '已锁定',
-  IN_PROGRESS: '进行中',
-  FINISHED: '已结束',
-  POSTPONED: '已延期',
-  CANCELLED: '已取消',
-  ABANDONED: '已中止',
+const sortLabels: Record<MatchListSort, string> = {
+  KICKOFF_ASC: '开赛时间：早到晚',
+  KICKOFF_DESC: '开赛时间：晚到早',
+  LOTTERY_MATCH_NO_ASC: '竞彩编号：升序',
+  LOTTERY_MATCH_NO_DESC: '竞彩编号：降序',
 };
 
-function todayInShanghai() {
-  return new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date());
-}
-
-function formatKickoff(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    timeZone: 'Asia/Shanghai',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  }).format(new Date(value));
-}
-
-function formatHandicap(value: number | null) {
-  if (value === null) {
-    return '让球暂缺';
-  }
-  if (value === 0) {
-    return '让球 0';
-  }
-  return `主队 ${value > 0 ? '+' : ''}${value}`;
-}
-
-function formatDataSources(matches: MatchSummaryVo[]) {
-  const sources = [...new Set(matches.map((match) => match.dataSource))];
-  if (sources.length === 0) {
-    return '暂无比赛';
-  }
-  return sources
-    .map((source) => {
-      if (source === 'CHINA_SPORTTERY') {
-        return '中国体彩网公开数据';
-      }
-      if (source === 'STUB') {
-        return 'Stub 演示数据';
-      }
-      return source;
-    })
-    .join('、');
-}
-
-/** 公共每日竞彩比赛列表。 */
+/** T501 支持的公开分页比赛列表与筛选。 */
 export default function MatchesPage() {
-  const [lotteryDate, setLotteryDate] = useState(todayInShanghai);
-  const matchesQuery = useDailyMatchesQuery(lotteryDate);
-  const matches = matchesQuery.data ?? [];
+  const [searchParams, setSearchParams] = useSearchParams();
+  const filters = parseMatchListSearch(searchParams, todayInShanghai());
+  const matchesQuery = useMatchListQuery(toMatchListQuery(filters));
+  const leagueOptionsQuery = useLeagueOptionsQuery(filters.lotteryDate);
+  const page = matchesQuery.data;
+  const pageCount = page ? Math.max(1, Math.ceil(page.total / page.pageSize)) : 1;
+  const listSearch = searchParams.toString();
+
+  function updateFilters(next: Partial<MatchListSearch>) {
+    setSearchParams(toMatchListSearchParams({ ...filters, ...next }));
+  }
+
+  function changeStatus(status: MatchStatus, checked: boolean) {
+    const matchStatuses = checked
+      ? MATCH_STATUSES.filter((candidate) => candidate === status || filters.matchStatuses.includes(candidate))
+      : filters.matchStatuses.filter((candidate) => candidate !== status);
+    updateFilters({ matchStatuses, pageNo: 1 });
+  }
+
+  function refresh() {
+    void matchesQuery.refetch();
+    void leagueOptionsQuery.refetch();
+  }
 
   return (
     <main className="page">
       <section className="hero">
         <div>
-          <p className="eyebrow">JingCai Compass · Product Demo</p>
+          <p className="eyebrow">JingCai Compass · Public Matches</p>
           <h1>今日竞彩比赛</h1>
-          <p className="summary">先把每日比赛池做清楚，再逐步接入盘口、预测与结算。</p>
+          <p className="summary">按日期、联赛与状态查看已持久化的比赛池和体彩数据状态。</p>
         </div>
         <label className="date-control">
           <span>竞彩日期</span>
           <input
+            aria-label="竞彩日期"
             type="date"
-            value={lotteryDate}
-            onChange={(event) => setLotteryDate(event.target.value)}
+            value={filters.lotteryDate}
+            onChange={(event) => updateFilters({
+              lotteryDate: event.target.value,
+              leagueId: undefined,
+              pageNo: 1,
+            })}
           />
         </label>
       </section>
 
+      <section className="match-filters" aria-label="比赛筛选">
+        <label>
+          <span>联赛</span>
+          <select
+            aria-label="联赛"
+            value={filters.leagueId ?? ''}
+            onChange={(event) => updateFilters({
+              leagueId: event.target.value ? Number(event.target.value) : undefined,
+              pageNo: 1,
+            })}
+          >
+            <option value="">全部联赛</option>
+            {(leagueOptionsQuery.data ?? []).map((league) => (
+              <option key={league.id} value={league.id}>{league.name}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>排序</span>
+          <select
+            aria-label="排序"
+            value={filters.sort}
+            onChange={(event) => updateFilters({
+              sort: event.target.value as MatchListSort,
+              pageNo: 1,
+            })}
+          >
+            {MATCH_LIST_SORTS.map((sort) => <option key={sort} value={sort}>{sortLabels[sort]}</option>)}
+          </select>
+        </label>
+        <fieldset className="status-filter">
+          <legend>比赛状态</legend>
+          <div>
+            {MATCH_STATUSES.map((status) => (
+              <label key={status}>
+                <input
+                  type="checkbox"
+                  checked={filters.matchStatuses.includes(status)}
+                  onChange={(event) => changeStatus(status, event.target.checked)}
+                />
+                {statusLabels[status]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+      </section>
+
       {matchesQuery.isPending && <section className="state-card">正在加载比赛池……</section>}
       {matchesQuery.isError && (
-        <section className="state-card error">
+        <section className="state-card error" role="alert">
           后端连接失败：{matchesQuery.error.message}
         </section>
       )}
-      {matchesQuery.isSuccess && (
+      {matchesQuery.isSuccess && page && (
         <>
           <section className="summary-strip">
             <div>
-              <span>比赛数量</span>
-              <strong>{matches.length}</strong>
+              <span>筛选结果</span>
+              <strong>{page.total} 场</strong>
             </div>
             <div>
-              <span>当前来源</span>
-              <strong>{formatDataSources(matches)}</strong>
+              <span>页面读取时间</span>
+              <strong>{formatTimestamp(new Date(matchesQuery.dataUpdatedAt).toISOString())}</strong>
             </div>
-            <p>
-              {matches.length === 0
-                ? '当前日期没有可展示的比赛。'
-                : matches.some((match) => match.dataSource === 'STUB')
-                  ? '演示数据不代表真实赛程或推荐结果。'
-                  : '比赛池来自中国体彩网公开前台，暂不代表已取得生产数据授权。'}
+            <p className={matchesQuery.isStale ? 'data-stale' : undefined}>
+              {matchesQuery.isStale ? '数据可能已过期，请刷新。' : '数据来自已持久化的公开比赛池。'}
             </p>
+            <button className="refresh-button" type="button" onClick={refresh} disabled={matchesQuery.isFetching}>
+              {matchesQuery.isFetching ? '刷新中…' : '刷新'}
+            </button>
           </section>
 
-          {matches.length === 0 ? (
-            <section className="state-card">所选竞彩日期暂无比赛。</section>
+          {page.records.length === 0 ? (
+            <section className="state-card">当前筛选条件下暂无比赛。</section>
           ) : (
             <section className="match-list" aria-label="竞彩比赛列表">
-              {matches.map((match) => (
-                <article className="match-card" key={match.matchId}>
+              {page.records.map((match) => (
+                <Link
+                  className="match-card match-card-link"
+                  key={match.matchId}
+                  to={`/matches/${match.matchId}${listSearch ? `?${listSearch}` : ''}`}
+                >
                   <header>
                     <span className="match-number">{match.lotteryMatchNo}</span>
                     <span>{match.leagueName}</span>
-                    <time dateTime={match.kickoffTime}>{formatKickoff(match.kickoffTime)}</time>
+                    <time dateTime={match.kickoffTime}>{formatTimestamp(match.kickoffTime)}</time>
                   </header>
                   <div className="teams">
                     <strong>{match.homeTeamName}</strong>
@@ -128,10 +156,33 @@ export default function MatchesPage() {
                     <span className="handicap">{formatHandicap(match.officialHandicap)}</span>
                     <span className="match-status">{statusLabels[match.matchStatus]}</span>
                   </footer>
-                </article>
+                  <div className="match-meta">
+                    <span>{availabilityLabel(match.sportteryAvailability)}</span>
+                    <span>{dataSourceLabel(match.sportteryDataSource)}</span>
+                    <span>采集：{formatTimestamp(match.sportteryCapturedAt)}</span>
+                  </div>
+                </Link>
               ))}
             </section>
           )}
+
+          <nav className="pagination" aria-label="比赛分页">
+            <button
+              type="button"
+              onClick={() => updateFilters({ pageNo: filters.pageNo - 1 })}
+              disabled={filters.pageNo <= 1}
+            >
+              上一页
+            </button>
+            <span>第 {page.pageNo} / {pageCount} 页</span>
+            <button
+              type="button"
+              onClick={() => updateFilters({ pageNo: filters.pageNo + 1 })}
+              disabled={filters.pageNo >= pageCount}
+            >
+              下一页
+            </button>
+          </nav>
         </>
       )}
     </main>

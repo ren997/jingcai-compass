@@ -112,6 +112,7 @@ import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
 import com.jingcaicompass.system.observability.MappingMetrics;
 import com.jingcaicompass.system.observability.JobMetrics;
+import com.jingcaicompass.system.observability.PredictionLifecycleMetrics;
 import com.jingcaicompass.system.observability.ProviderMetrics;
 import com.jingcaicompass.system.observability.SensitiveDataSanitizer;
 import com.jingcaicompass.system.observability.SyncMetrics;
@@ -176,6 +177,12 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean
     JobMetrics jobMetrics(MeterRegistry meterRegistry) {
         return new JobMetrics(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    PredictionLifecycleMetrics predictionLifecycleMetrics(MeterRegistry meterRegistry) {
+        return new PredictionLifecycleMetrics(meterRegistry);
     }
 
     @Bean
@@ -410,14 +417,16 @@ public class PersistenceServicesAutoConfiguration {
             PredictionSnapshotMapper predictionSnapshotMapper,
             SnapshotManifestGenerator snapshotManifestGenerator,
             SnapshotStorage snapshotStorage,
-            JdbcTemplate jdbcTemplate
+            JdbcTemplate jdbcTemplate,
+            PredictionLifecycleMetrics predictionLifecycleMetrics
     ) {
         return new PredictionSnapshotServiceImpl(
                 predictionMapper,
                 predictionSnapshotMapper,
                 snapshotManifestGenerator,
                 snapshotStorage,
-                jdbcTemplate
+                jdbcTemplate,
+                predictionLifecycleMetrics
         );
     }
 
@@ -577,9 +586,10 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean(SettlementService.class)
     SettlementService settlementService(
             SettlementMapper settlementMapper,
-            SettlementWriter settlementWriter
+            SettlementWriter settlementWriter,
+            PredictionLifecycleMetrics predictionLifecycleMetrics
     ) {
-        return new SettlementServiceImpl(settlementMapper, settlementWriter);
+        return new SettlementServiceImpl(settlementMapper, settlementWriter, predictionLifecycleMetrics);
     }
 
     @Bean
@@ -608,9 +618,14 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean(SettlementRecalculationService.class)
     SettlementRecalculationService settlementRecalculationService(
             SettlementMapper settlementMapper,
-            SettlementRecalculationWriter settlementRecalculationWriter
+            SettlementRecalculationWriter settlementRecalculationWriter,
+            PredictionLifecycleMetrics predictionLifecycleMetrics
     ) {
-        return new SettlementRecalculationServiceImpl(settlementMapper, settlementRecalculationWriter);
+        return new SettlementRecalculationServiceImpl(
+                settlementMapper,
+                settlementRecalculationWriter,
+                predictionLifecycleMetrics
+        );
     }
 
     @Bean
@@ -817,8 +832,8 @@ public class PersistenceServicesAutoConfiguration {
             name = {"enabled", "prediction-lock.enabled"},
             havingValue = "true"
     )
-    PredictionLockJob predictionLockJob(PredictionLockService predictionLockService) {
-        return new PredictionLockJob(predictionLockService);
+    PredictionLockJob predictionLockJob(PredictionLockService predictionLockService, JobMetrics jobMetrics) {
+        return new PredictionLockJob(predictionLockService, jobMetrics);
     }
 
     @Bean
@@ -830,9 +845,10 @@ public class PersistenceServicesAutoConfiguration {
     )
     SnapshotPublishJob snapshotPublishJob(
             PredictionSnapshotService predictionSnapshotService,
-            Clock predictionImportClock
+            Clock predictionImportClock,
+            JobMetrics jobMetrics
     ) {
-        return new SnapshotPublishJob(predictionSnapshotService, predictionImportClock);
+        return new SnapshotPublishJob(predictionSnapshotService, predictionImportClock, jobMetrics);
     }
 
     @Bean
@@ -846,8 +862,14 @@ public class PersistenceServicesAutoConfiguration {
     SettlementJob settlementJob(
             SettlementRecalculationService settlementRecalculationService,
             SettlementService settlementService,
-            SyncTaskProperties taskProperties
+            SyncTaskProperties taskProperties,
+            JobMetrics jobMetrics
     ) {
-        return new SettlementJob(settlementRecalculationService, settlementService, taskProperties);
+        return new SettlementJob(
+                settlementRecalculationService,
+                settlementService,
+                taskProperties,
+                jobMetrics
+        );
     }
 }

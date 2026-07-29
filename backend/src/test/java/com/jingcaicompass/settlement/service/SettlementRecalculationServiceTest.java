@@ -32,6 +32,7 @@ import com.jingcaicompass.settlement.enums.MarketTypeEnum;
 import com.jingcaicompass.settlement.enums.SettlementStatusEnum;
 import com.jingcaicompass.settlement.exception.SettlementManualReviewException;
 import com.jingcaicompass.settlement.mapper.SettlementMapper;
+import com.jingcaicompass.system.observability.PredictionLifecycleMetrics;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -50,6 +51,9 @@ class SettlementRecalculationServiceTest {
 
     @Mock
     private SettlementMapper settlementMapper;
+
+    @Mock
+    private PredictionLifecycleMetrics lifecycleMetrics;
 
     @Mock
     private PredictionMapper predictionMapper;
@@ -88,7 +92,7 @@ class SettlementRecalculationServiceTest {
                 )),
                 auditLogService
         );
-        service = new SettlementRecalculationServiceImpl(settlementMapper, writer);
+        service = new SettlementRecalculationServiceImpl(settlementMapper, writer, lifecycleMetrics);
 
         prediction = new Prediction();
         prediction.setId(11L);
@@ -228,7 +232,11 @@ class SettlementRecalculationServiceTest {
     @Test
     void isolatesManualReviewAndFailureAcrossBatchCandidates() {
         SettlementRecalculationWriter batchWriter = org.mockito.Mockito.mock(SettlementRecalculationWriter.class);
-        SettlementRecalculationService batchService = new SettlementRecalculationServiceImpl(settlementMapper, batchWriter);
+        SettlementRecalculationService batchService = new SettlementRecalculationServiceImpl(
+                settlementMapper,
+                batchWriter,
+                lifecycleMetrics
+        );
         when(settlementMapper.selectOutdatedLockedPredictionIds(4)).thenReturn(List.of(1L, 2L, 3L, 4L));
         when(batchWriter.recalculatePrediction(1L)).thenReturn(SettlementRecalculationWriteResult.recalculated(2));
         when(batchWriter.recalculatePrediction(2L)).thenReturn(SettlementRecalculationWriteResult.skipped());
@@ -243,6 +251,10 @@ class SettlementRecalculationServiceTest {
         assertThat(result.skippedPredictionCount()).isEqualTo(1);
         assertThat(result.manualReviewPredictionCount()).isEqualTo(1);
         assertThat(result.failedPredictionCount()).isEqualTo(1);
+        verify(lifecycleMetrics).recordSettlementItem("recalculate", "recalculated");
+        verify(lifecycleMetrics).recordSettlementItem("recalculate", "skipped");
+        verify(lifecycleMetrics).recordSettlementItem("recalculate", "manual_review");
+        verify(lifecycleMetrics).recordSettlementItem("recalculate", "failed");
     }
 
     @Test

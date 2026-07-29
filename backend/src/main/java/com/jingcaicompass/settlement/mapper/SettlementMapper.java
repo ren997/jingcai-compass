@@ -73,6 +73,33 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
             """)
     List<Long> selectOutdatedLockedPredictionIds(@Param("batchSize") int batchSize);
 
+    /** 统计确认赛果已超过宽限期、但仍缺失或引用旧事实的去重锁定预测。 */
+    @Select("""
+            SELECT COUNT(*)
+            FROM predictions prediction
+            INNER JOIN match_result_facts fact
+                ON fact.match_id = prediction.match_id
+               AND fact.is_current = TRUE
+            LEFT JOIN settlements had
+                ON had.prediction_id = prediction.id
+               AND had.market_type = 'HAD'
+               AND had.is_current = TRUE
+            LEFT JOIN settlements hhad
+                ON hhad.prediction_id = prediction.id
+               AND hhad.market_type = 'HHAD'
+               AND hhad.is_current = TRUE
+            WHERE prediction.prediction_status = 'LOCKED'
+              AND fact.fact_status IN ('FINAL', 'VOID')
+              AND fact.created_at <= #{overdueBefore}
+              AND (
+                    had.id IS NULL
+                    OR hhad.id IS NULL
+                    OR had.match_fact_id <> fact.id
+                    OR hhad.match_fact_id <> fact.id
+              )
+            """)
+    long countOverdueSettlementBacklog(@Param("overdueBefore") java.time.Instant overdueBefore);
+
     /** 唯一允许的结算更新：将 current 标记降为 false。 */
     @Update("""
             UPDATE settlements

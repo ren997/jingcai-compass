@@ -1,7 +1,10 @@
 package com.jingcaicompass.snapshot.job;
 
 import com.jingcaicompass.snapshot.dto.PredictionSnapshotResultDto;
+import com.jingcaicompass.snapshot.enums.PredictionSnapshotStatusEnum;
 import com.jingcaicompass.snapshot.service.PredictionSnapshotService;
+import com.jingcaicompass.system.observability.JobMetrics;
+import com.jingcaicompass.system.observability.MdcScope;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -25,13 +28,16 @@ public class SnapshotPublishJob {
 
     private final PredictionSnapshotService snapshotService;
     private final Clock clock;
+    private final JobMetrics jobMetrics;
 
     public SnapshotPublishJob(
             PredictionSnapshotService snapshotService,
-            Clock clock
+            Clock clock,
+            JobMetrics jobMetrics
     ) {
         this.snapshotService = snapshotService;
         this.clock = clock;
+        this.jobMetrics = jobMetrics;
     }
 
     @Scheduled(
@@ -39,31 +45,37 @@ public class SnapshotPublishJob {
             initialDelayString = "${app.tasks.snapshot-publish.initial-delay}"
     )
     public void publishCurrentBusinessDate() {
+        JobMetrics.JobExecution execution = jobMetrics.start("snapshot_publish");
         // 1) 使用注入时钟按上海时区确定当前竞彩业务日
         LocalDate businessDate = LocalDate.now(clock.withZone(SHANGHAI));
-        log.info("prediction snapshot job started businessDate={}", businessDate);
+        log.info("event=prediction_snapshot_job_started businessDate={}", businessDate);
 
         try {
             // 2) 调用唯一发布入口，由 Service 处理多实例串行和无变化复用
             PredictionSnapshotResultDto result = snapshotService.publish(businessDate);
 
-            // 3) 输出低基数状态和计数，对象路径与失败原因留在数据库记录
-            log.info(
-                    "prediction snapshot job finished businessDate={} snapshotId={} "
-                            + "version={} status={} predictions={} reused={}",
-                    businessDate,
-                    result.snapshotId(),
-                    result.snapshotVersion(),
-                    result.snapshotStatus(),
-                    result.predictionCount(),
-                    result.reused()
+            // 3) 输出低基数状态和计数，对象路径与失败原因均不进入日志。
+            try (MdcScope ignored = MdcScope.snapshot(result.snapshotId())) {
+                log.info(
+                        "event=prediction_snapshot_job_finished businessDate={} version={} status={} predictions={} reused={}",
+                        businessDate,
+                        result.snapshotVersion(),
+                        result.snapshotStatus(),
+                        result.predictionCount(),
+                        result.reused()
+                );
+            }
+            jobMetrics.record(
+                    execution,
+                    result.snapshotStatus() == PredictionSnapshotStatusEnum.FAILED ? "FAILED" : "SUCCESS"
             );
         } catch (RuntimeException exception) {
             log.error(
-                    "prediction snapshot job failed businessDate={}",
+                    "event=prediction_snapshot_job_failed businessDate={} exceptionType={}",
                     businessDate,
-                    exception
+                    exception.getClass().getSimpleName()
             );
+            jobMetrics.record(execution, "FAILED");
             throw exception;
         }
     }

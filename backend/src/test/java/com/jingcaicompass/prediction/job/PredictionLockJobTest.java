@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 
 import com.jingcaicompass.prediction.dto.PredictionLockResultDto;
 import com.jingcaicompass.prediction.service.PredictionLockService;
+import com.jingcaicompass.system.observability.JobMetrics;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -16,6 +17,7 @@ class PredictionLockJobTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withBean(PredictionLockService.class, () -> mock(PredictionLockService.class))
+            .withBean(JobMetrics.class, JobMetrics::noop)
             .withUserConfiguration(PredictionLockJob.class);
 
     @Test
@@ -53,7 +55,7 @@ class PredictionLockJobTest {
         PredictionLockService service = mock(PredictionLockService.class);
         when(service.lockDuePredictions(7))
                 .thenReturn(new PredictionLockResultDto(0, 0, List.of(), List.of(), 1));
-        PredictionLockJob job = new PredictionLockJob(service);
+        PredictionLockJob job = new PredictionLockJob(service, JobMetrics.noop());
         ReflectionTestUtils.setField(job, "batchSize", 7);
 
         job.lockDuePredictions();

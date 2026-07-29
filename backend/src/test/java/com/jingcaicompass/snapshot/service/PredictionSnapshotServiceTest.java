@@ -20,6 +20,7 @@ import com.jingcaicompass.snapshot.storage.SnapshotStagedObject;
 import com.jingcaicompass.snapshot.storage.SnapshotStorage;
 import com.jingcaicompass.snapshot.storage.SnapshotStorageException;
 import com.jingcaicompass.snapshot.storage.SnapshotStoredObject;
+import com.jingcaicompass.system.observability.PredictionLifecycleMetrics;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -54,6 +55,9 @@ class PredictionSnapshotServiceTest {
     @Mock
     private JdbcTemplate jdbcTemplate;
 
+    @Mock
+    private PredictionLifecycleMetrics lifecycleMetrics;
+
     private PredictionSnapshotService service;
 
     @BeforeEach
@@ -63,7 +67,8 @@ class PredictionSnapshotServiceTest {
                 snapshotMapper,
                 manifestGenerator,
                 snapshotStorage,
-                jdbcTemplate
+                jdbcTemplate,
+                lifecycleMetrics
         );
         when(predictionMapper.selectCurrentPublishedByLotteryDate(SNAPSHOT_DATE))
                 .thenReturn(List.of());
@@ -105,6 +110,7 @@ class PredictionSnapshotServiceTest {
         assertThat(result.predictionCount()).isEqualTo(2);
         assertThat(result.reused()).isFalse();
         verify(snapshotMapper, never()).failPending(anyLong(), any());
+        verify(lifecycleMetrics).recordSnapshotPublish("published");
     }
 
     @Test
@@ -125,6 +131,7 @@ class PredictionSnapshotServiceTest {
         assertThat(result.reused()).isTrue();
         verify(snapshotMapper, never()).selectMaxVersion(any());
         verify(snapshotStorage, never()).stage(any(), any(), any());
+        verify(lifecycleMetrics).recordSnapshotPublish("reused");
     }
 
     @Test
@@ -161,6 +168,7 @@ class PredictionSnapshotServiceTest {
 
         assertThat(result.snapshotVersion()).isEqualTo(3);
         assertThat(result.reused()).isFalse();
+        verify(lifecycleMetrics).recordSnapshotHashMismatch();
     }
 
     @Test
@@ -183,6 +191,7 @@ class PredictionSnapshotServiceTest {
         verify(snapshotMapper, never()).publishPending(
                 anyLong(), any(), any(), any(), any(), any(), any(), anyLong()
         );
+        verify(lifecycleMetrics).recordSnapshotPublish("failed");
     }
 
     @Test

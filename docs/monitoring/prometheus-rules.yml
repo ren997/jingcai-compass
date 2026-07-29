@@ -17,3 +17,37 @@ groups:
         annotations:
           summary: "竞彩罗盘定时任务失败：{{ $labels.job }}"
           description: "最近 15 分钟存在失败任务；按 traceId 和 jobName 查询结构化日志。"
+  - name: jingcai-compass-prediction-lifecycle
+    rules:
+      - alert: JingcaiPredictionLockOverdue
+        expr: jingcai_lifecycle_alert_active{component="prediction_lock",alert="overdue"} == 1
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "竞彩罗盘预测锁定滞后"
+          description: "存在超过锁定宽限期仍未锁定的公开预测；按 traceId、jobName 和 predictionId 排查。"
+      - alert: JingcaiSettlementBacklogOverdue
+        expr: jingcai_lifecycle_alert_active{component="settlement",alert="backlog_overdue"} == 1
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "竞彩罗盘结算积压超时"
+          description: "确认赛果后仍存在缺失或过期的 HAD/HHAD 当前结算；按 traceId、jobName 和 predictionId 排查。"
+      - alert: JingcaiPredictionSnapshotPublishFailed
+        expr: increase(jingcai_snapshot_publish_total{result="failed"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "竞彩罗盘预测快照发布失败"
+          description: "最近十分钟存在快照发布失败；按 traceId、jobName 和 snapshotId 查询结构化日志。"
+      - alert: JingcaiPredictionSnapshotHashMismatch
+        expr: increase(jingcai_snapshot_integrity_failure_total{reason="HASH_MISMATCH"}[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "竞彩罗盘预测快照完整性异常"
+          description: "最近十分钟检测到快照哈希或存储校验不一致；按 traceId、jobName 和 snapshotId 排查。"

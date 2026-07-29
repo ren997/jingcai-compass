@@ -11,10 +11,14 @@ import com.jingcaicompass.snapshot.storage.SnapshotStagedObject;
 import com.jingcaicompass.snapshot.storage.SnapshotStorage;
 import com.jingcaicompass.snapshot.storage.SnapshotStorageException;
 import com.jingcaicompass.snapshot.storage.SnapshotStoredObject;
+import com.jingcaicompass.system.observability.MdcScope;
+import com.jingcaicompass.system.observability.PredictionLifecycleMetrics;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Objects;
 import javax.sql.DataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.jdbc.core.PreparedStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,25 +32,29 @@ public class PredictionSnapshotServiceImpl implements PredictionSnapshotService 
 
     private static final int ADVISORY_LOCK_NAMESPACE = 130305;
     private static final int FAILURE_REASON_LIMIT = 1000;
+    private static final Logger log = LoggerFactory.getLogger(PredictionSnapshotServiceImpl.class);
 
     private final PredictionMapper predictionMapper;
     private final PredictionSnapshotMapper snapshotMapper;
     private final SnapshotManifestGenerator manifestGenerator;
     private final SnapshotStorage snapshotStorage;
     private final JdbcTemplate jdbcTemplate;
+    private final PredictionLifecycleMetrics lifecycleMetrics;
 
     public PredictionSnapshotServiceImpl(
             PredictionMapper predictionMapper,
             PredictionSnapshotMapper snapshotMapper,
             SnapshotManifestGenerator manifestGenerator,
             SnapshotStorage snapshotStorage,
-            JdbcTemplate jdbcTemplate
+            JdbcTemplate jdbcTemplate,
+            PredictionLifecycleMetrics lifecycleMetrics
     ) {
         this.predictionMapper = predictionMapper;
         this.snapshotMapper = snapshotMapper;
         this.manifestGenerator = manifestGenerator;
         this.snapshotStorage = snapshotStorage;
         this.jdbcTemplate = jdbcTemplate;
+        this.lifecycleMetrics = lifecycleMetrics;
     }
 
     @Override
@@ -62,14 +70,18 @@ public class PredictionSnapshotServiceImpl implements PredictionSnapshotService 
         // 2) 单条 SQL 读取每个比赛和模型的最高公开版本，生成确定性 manifest
         List<Prediction> predictions =
                 predictionMapper.selectCurrentPublishedByLotteryDate(businessDate);
-        SnapshotManifestContentDto manifest = manifestGenerator.generate(
-                businessDate,
-                predictions
-        );
+        SnapshotManifestContentDto manifest;
+        try {
+            manifest = manifestGenerator.generate(businessDate, predictions);
+        } catch (IllegalArgumentException exception) {
+            lifecycleMetrics.recordSnapshotHashMismatch();
+            throw exception;
+        }
 
         // 3) 相同事实已有完整对象时直接复用，不增加数据库版本
         PredictionSnapshot reusable = findReusableSnapshot(businessDate, manifest);
         if (reusable != null) {
+            lifecycleMetrics.recordSnapshotPublish("reused");
             return toResult(reusable, manifest.predictionCount(), true);
         }
 
@@ -118,11 +130,13 @@ public class PredictionSnapshotServiceImpl implements PredictionSnapshotService 
                         "prediction snapshot state changed before publication"
                 );
             }
+            lifecycleMetrics.recordSnapshotPublish("published");
             return toResult(published, manifest.predictionCount(), false);
         } catch (SnapshotStorageException exception) {
             // 7) 存储失败保留 FAILED 版本，禁止被后续运行静默覆盖
             snapshotStorage.discard(stagedObject);
             String failureReason = truncateFailure(exception.getMessage());
+            lifecycleMetrics.recordSnapshotPublish("failed");
             if (snapshotMapper.failPending(pending.getId(), failureReason) != 1) {
                 throw new IllegalStateException(
                         "failed to record prediction snapshot storage failure",
@@ -169,6 +183,10 @@ public class PredictionSnapshotServiceImpl implements PredictionSnapshotService 
             )) {
                 return candidate;
             }
+            try (MdcScope ignored = MdcScope.snapshot(candidate.getId())) {
+                lifecycleMetrics.recordSnapshotHashMismatch();
+                log.warn("event=prediction_snapshot_integrity_failed reason=HASH_MISMATCH");
+            }
         }
         return null;
     }
@@ -207,6 +225,7 @@ public class PredictionSnapshotServiceImpl implements PredictionSnapshotService 
                 || storedObject.storageType() != snapshotStorage.storageType()
                 || !manifest.sha256().equals(storedObject.sha256())
                 || storedObject.contentLength() != manifest.bytes().length) {
+            lifecycleMetrics.recordSnapshotHashMismatch();
             throw new SnapshotStorageException(
                     "published snapshot metadata does not match manifest"
             );
@@ -216,6 +235,7 @@ public class PredictionSnapshotServiceImpl implements PredictionSnapshotService 
                 storedObject.sha256(),
                 storedObject.contentLength()
         )) {
+            lifecycleMetrics.recordSnapshotHashMismatch();
             throw new SnapshotStorageException("published snapshot object is not readable");
         }
     }

@@ -1,6 +1,7 @@
 package com.jingcaicompass.prediction.service;
 
 import com.jingcaicompass.prediction.dto.PredictionLockResultDto;
+import com.jingcaicompass.system.observability.MdcScope;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -50,14 +51,10 @@ public class PredictionLockServiceImpl implements PredictionLockService {
                     failedIds.add(exception.predictionId());
                     excludedIds.add(exception.predictionId());
                     predictionLockMetrics.recordItemFailure();
-                    log.warn(
-                            "prediction lock item failed predictionId={} stage={} reason={}",
-                            exception.predictionId(),
-                            exception.stage(),
-                            exception.getCause() == null
-                                    ? exception.getMessage()
-                                    : exception.getCause().getClass().getSimpleName()
-                    );
+                    try (MdcScope ignored = MdcScope.prediction(exception.predictionId())) {
+                        log.warn("event=prediction_lock_item_failed stage={} exceptionType={}",
+                                exception.stage(), exception.getClass().getSimpleName());
+                    }
                     continue;
                 }
                 if (item == null) {

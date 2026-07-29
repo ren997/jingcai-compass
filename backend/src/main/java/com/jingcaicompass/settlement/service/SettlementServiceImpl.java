@@ -3,6 +3,8 @@ package com.jingcaicompass.settlement.service;
 import com.jingcaicompass.settlement.dto.SettlementBatchResultDto;
 import com.jingcaicompass.settlement.exception.SettlementManualReviewException;
 import com.jingcaicompass.settlement.mapper.SettlementMapper;
+import com.jingcaicompass.system.observability.MdcScope;
+import com.jingcaicompass.system.observability.PredictionLifecycleMetrics;
 import java.util.List;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
@@ -19,13 +21,16 @@ public class SettlementServiceImpl implements SettlementService {
 
     private final SettlementMapper settlementMapper;
     private final SettlementWriter settlementWriter;
+    private final PredictionLifecycleMetrics lifecycleMetrics;
 
     public SettlementServiceImpl(
             SettlementMapper settlementMapper,
-            SettlementWriter settlementWriter
+            SettlementWriter settlementWriter,
+            PredictionLifecycleMetrics lifecycleMetrics
     ) {
         this.settlementMapper = settlementMapper;
         this.settlementWriter = settlementWriter;
+        this.lifecycleMetrics = lifecycleMetrics;
     }
 
     @Override
@@ -40,15 +45,25 @@ public class SettlementServiceImpl implements SettlementService {
 
         // 2) 每条预测委派到独立事务，单条回滚不会阻塞本批其他比赛。
         for (Long predictionId : candidateIds) {
-            try {
-                SettlementWriteResult result = settlementWriter.settlePrediction(predictionId);
-                counters.record(result);
-            } catch (SettlementManualReviewException exception) {
-                counters.manualReviewCount++;
-                log.warn("settlement requires manual review predictionId={} reason={}", predictionId, exception.getMessage());
-            } catch (RuntimeException exception) {
-                counters.failureCount++;
-                log.error("settlement failed predictionId={}", predictionId, exception);
+            try (MdcScope ignored = MdcScope.prediction(predictionId)) {
+                try {
+                    SettlementWriteResult result = settlementWriter.settlePrediction(predictionId);
+                    counters.record(result);
+                    lifecycleMetrics.recordSettlementItem(
+                            "settle",
+                            result.outcome() == SettlementWriteResult.Outcome.SETTLED ? "settled" : "skipped"
+                    );
+                } catch (SettlementManualReviewException exception) {
+                    counters.manualReviewCount++;
+                    lifecycleMetrics.recordSettlementItem("settle", "manual_review");
+                    log.warn("event=settlement_item_manual_review exceptionType={}",
+                            exception.getClass().getSimpleName());
+                } catch (RuntimeException exception) {
+                    counters.failureCount++;
+                    lifecycleMetrics.recordSettlementItem("settle", "failed");
+                    log.error("event=settlement_item_failed exceptionType={}",
+                            exception.getClass().getSimpleName());
+                }
             }
         }
 

@@ -29,6 +29,7 @@ import com.jingcaicompass.settlement.entity.Settlement;
 import com.jingcaicompass.settlement.enums.MarketTypeEnum;
 import com.jingcaicompass.settlement.exception.SettlementManualReviewException;
 import com.jingcaicompass.settlement.mapper.SettlementMapper;
+import com.jingcaicompass.system.observability.PredictionLifecycleMetrics;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
@@ -49,6 +50,9 @@ class SettlementServiceTest {
 
     @Mock
     private SettlementWriter settlementWriter;
+
+    @Mock
+    private PredictionLifecycleMetrics lifecycleMetrics;
 
     @Mock
     private PredictionMapper predictionMapper;
@@ -72,7 +76,7 @@ class SettlementServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new SettlementServiceImpl(settlementMapper, settlementWriter);
+        service = new SettlementServiceImpl(settlementMapper, settlementWriter, lifecycleMetrics);
         writer = new SettlementWriter(
                 predictionMapper,
                 matchMapper,
@@ -136,6 +140,10 @@ class SettlementServiceTest {
         assertThat(result.skippedPredictionCount()).isEqualTo(1);
         assertThat(result.manualReviewPredictionCount()).isEqualTo(1);
         assertThat(result.failedPredictionCount()).isEqualTo(1);
+        verify(lifecycleMetrics).recordSettlementItem("settle", "settled");
+        verify(lifecycleMetrics).recordSettlementItem("settle", "skipped");
+        verify(lifecycleMetrics).recordSettlementItem("settle", "manual_review");
+        verify(lifecycleMetrics).recordSettlementItem("settle", "failed");
     }
 
     @Test

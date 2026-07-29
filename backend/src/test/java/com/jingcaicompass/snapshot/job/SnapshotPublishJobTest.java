@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import com.jingcaicompass.snapshot.dto.PredictionSnapshotResultDto;
 import com.jingcaicompass.snapshot.enums.PredictionSnapshotStatusEnum;
 import com.jingcaicompass.snapshot.service.PredictionSnapshotService;
+import com.jingcaicompass.system.observability.JobMetrics;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -23,6 +24,7 @@ class SnapshotPublishJobTest {
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withBean(PredictionSnapshotService.class, () -> mock(PredictionSnapshotService.class))
             .withBean(Clock.class, () -> FIXED_CLOCK)
+            .withBean(JobMetrics.class, JobMetrics::noop)
             .withUserConfiguration(SnapshotPublishJob.class);
 
     @Test
@@ -75,7 +77,7 @@ class SnapshotPublishJobTest {
                 null,
                 false
         ));
-        SnapshotPublishJob job = new SnapshotPublishJob(service, FIXED_CLOCK);
+        SnapshotPublishJob job = new SnapshotPublishJob(service, FIXED_CLOCK, JobMetrics.noop());
 
         job.publishCurrentBusinessDate();
 

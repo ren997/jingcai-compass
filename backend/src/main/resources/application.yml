@@ -126,6 +126,8 @@ app:
     coverage-minimum-rate: ${ASIAN_ODDS_COVERAGE_MINIMUM_RATE:0.90}
     failed-run-streak-threshold: ${SYNC_FAILED_RUN_STREAK_THRESHOLD:3}
     pending-mapping-threshold: ${PENDING_MAPPING_THRESHOLD:20}
+    prediction-lock-overdue-grace: ${PREDICTION_LOCK_OVERDUE_GRACE:1m}
+    settlement-backlog-grace: ${SETTLEMENT_BACKLOG_GRACE:10m}
 
 mybatis-plus:
   configuration:

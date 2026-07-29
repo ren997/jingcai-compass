@@ -85,3 +85,13 @@ app:
       enabled: ${SNAPSHOT_PUBLISH_TASK_ENABLED:false}
       fixed-delay: ${SNAPSHOT_PUBLISH_FIXED_DELAY:5m}
       initial-delay: ${SNAPSHOT_PUBLISH_INITIAL_DELAY:60s}
+  observability:
+    enabled: ${OBSERVABILITY_ENABLED:true}
+    refresh-delay: ${OBSERVABILITY_REFRESH_DELAY:1m}
+    sporttery-max-sync-age: ${SPORTTERY_MAX_SYNC_AGE:30m}
+    asian-odds-max-sync-age: ${ASIAN_ODDS_MAX_SYNC_AGE:40m}
+    coverage-minimum-rate: ${ASIAN_ODDS_COVERAGE_MINIMUM_RATE:0.90}
+    failed-run-streak-threshold: ${SYNC_FAILED_RUN_STREAK_THRESHOLD:3}
+    pending-mapping-threshold: ${PENDING_MAPPING_THRESHOLD:20}
+    prediction-lock-overdue-grace: ${PREDICTION_LOCK_OVERDUE_GRACE:1m}
+    settlement-backlog-grace: ${SETTLEMENT_BACKLOG_GRACE:10m}

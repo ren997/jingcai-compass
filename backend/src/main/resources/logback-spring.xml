@@ -7,6 +7,7 @@
             <includeMdcKeyName>providerCode</includeMdcKeyName>
             <includeMdcKeyName>matchId</includeMdcKeyName>
             <includeMdcKeyName>predictionId</includeMdcKeyName>
+            <includeMdcKeyName>snapshotId</includeMdcKeyName>
             <includeMdcKeyName>status</includeMdcKeyName>
             <includeMdcKeyName>durationMs</includeMdcKeyName>
         </encoder>

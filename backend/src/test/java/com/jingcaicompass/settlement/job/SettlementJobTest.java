@@ -11,6 +11,7 @@ import com.jingcaicompass.settlement.dto.SettlementRecalculationBatchResultDto;
 import com.jingcaicompass.settlement.service.SettlementRecalculationService;
 import com.jingcaicompass.settlement.service.SettlementService;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
+import com.jingcaicompass.system.observability.JobMetrics;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
 import org.mockito.InOrder;
@@ -23,6 +24,7 @@ class SettlementJobTest {
             .withBean(SettlementService.class, () -> mock(SettlementService.class))
             .withBean(SettlementRecalculationService.class, () -> mock(SettlementRecalculationService.class))
             .withBean(SyncTaskProperties.class, SettlementJobTest::taskProperties)
+            .withBean(JobMetrics.class, JobMetrics::noop)
             .withUserConfiguration(SettlementJob.class);
 
     @Test
@@ -59,7 +61,12 @@ class SettlementJobTest {
         when(recalculationService.recalculateOutdatedSettlements(7))
                 .thenReturn(new SettlementRecalculationBatchResultDto(1, 1, 2, 0, 0, 0));
         when(service.settlePendingPredictions(7)).thenReturn(new SettlementBatchResultDto(1, 1, 2, 0, 0, 0));
-        SettlementJob job = new SettlementJob(recalculationService, service, taskProperties());
+        SettlementJob job = new SettlementJob(
+                recalculationService,
+                service,
+                taskProperties(),
+                JobMetrics.noop()
+        );
 
         job.settlePendingPredictions();
 

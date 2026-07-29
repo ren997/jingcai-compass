@@ -117,4 +117,17 @@ public interface PredictionMapper extends BaseMapper<Prediction> {
               AND lock_time <= CURRENT_TIMESTAMP
             """)
     int lockPublishedPrediction(@Param("predictionId") Long predictionId);
+
+    /** 使用数据库当前时间统计超过锁定宽限期仍未锁定的公开预测。 */
+    @Select("""
+            SELECT COUNT(*)
+            FROM predictions
+            WHERE prediction_status = 'PUBLISHED'
+              AND lock_time <= #{overdueBefore}
+            """)
+    long countOverduePublishedPredictions(@Param("overdueBefore") Instant overdueBefore);
+
+    /** 从 PostgreSQL 取得生命周期监测使用的统一时间。 */
+    @Select("SELECT CURRENT_TIMESTAMP")
+    Instant selectDatabaseTime();
 }

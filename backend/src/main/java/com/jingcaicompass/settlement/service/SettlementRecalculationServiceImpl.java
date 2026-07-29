@@ -3,6 +3,8 @@ package com.jingcaicompass.settlement.service;
 import com.jingcaicompass.settlement.dto.SettlementRecalculationBatchResultDto;
 import com.jingcaicompass.settlement.exception.SettlementManualReviewException;
 import com.jingcaicompass.settlement.mapper.SettlementMapper;
+import com.jingcaicompass.system.observability.MdcScope;
+import com.jingcaicompass.system.observability.PredictionLifecycleMetrics;
 import java.util.List;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
@@ -19,13 +21,16 @@ public class SettlementRecalculationServiceImpl implements SettlementRecalculati
 
     private final SettlementMapper settlementMapper;
     private final SettlementRecalculationWriter recalculationWriter;
+    private final PredictionLifecycleMetrics lifecycleMetrics;
 
     public SettlementRecalculationServiceImpl(
             SettlementMapper settlementMapper,
-            SettlementRecalculationWriter recalculationWriter
+            SettlementRecalculationWriter recalculationWriter,
+            PredictionLifecycleMetrics lifecycleMetrics
     ) {
         this.settlementMapper = settlementMapper;
         this.recalculationWriter = recalculationWriter;
+        this.lifecycleMetrics = lifecycleMetrics;
     }
 
     @Override
@@ -40,15 +45,26 @@ public class SettlementRecalculationServiceImpl implements SettlementRecalculati
 
         // 2) 每条预测使用独立事务，单条人工处理或回滚不阻塞本批其他预测。
         for (Long predictionId : candidateIds) {
-            try {
-                counters.record(recalculationWriter.recalculatePrediction(predictionId));
-            } catch (SettlementManualReviewException exception) {
-                counters.manualReviewCount++;
-                log.warn("settlement recalculation requires manual review predictionId={} reason={}",
-                        predictionId, exception.getMessage());
-            } catch (RuntimeException exception) {
-                counters.failureCount++;
-                log.error("settlement recalculation failed predictionId={}", predictionId, exception);
+            try (MdcScope ignored = MdcScope.prediction(predictionId)) {
+                try {
+                    SettlementRecalculationWriteResult result = recalculationWriter.recalculatePrediction(predictionId);
+                    counters.record(result);
+                    lifecycleMetrics.recordSettlementItem(
+                            "recalculate",
+                            result.outcome() == SettlementRecalculationWriteResult.Outcome.RECALCULATED
+                                    ? "recalculated" : "skipped"
+                    );
+                } catch (SettlementManualReviewException exception) {
+                    counters.manualReviewCount++;
+                    lifecycleMetrics.recordSettlementItem("recalculate", "manual_review");
+                    log.warn("event=settlement_recalculation_manual_review exceptionType={}",
+                            exception.getClass().getSimpleName());
+                } catch (RuntimeException exception) {
+                    counters.failureCount++;
+                    lifecycleMetrics.recordSettlementItem("recalculate", "failed");
+                    log.error("event=settlement_recalculation_item_failed exceptionType={}",
+                            exception.getClass().getSimpleName());
+                }
             }
         }
 

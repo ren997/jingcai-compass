@@ -3,6 +3,7 @@ package com.jingcaicompass.settlement.job;
 import com.jingcaicompass.settlement.service.SettlementService;
 import com.jingcaicompass.settlement.service.SettlementRecalculationService;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
+import com.jingcaicompass.system.observability.JobMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -21,15 +22,18 @@ public class SettlementJob {
     private final SettlementRecalculationService recalculationService;
     private final SettlementService settlementService;
     private final SyncTaskProperties taskProperties;
+    private final JobMetrics jobMetrics;
 
     public SettlementJob(
             SettlementRecalculationService recalculationService,
             SettlementService settlementService,
-            SyncTaskProperties taskProperties
+            SyncTaskProperties taskProperties,
+            JobMetrics jobMetrics
     ) {
         this.recalculationService = recalculationService;
         this.settlementService = settlementService;
         this.taskProperties = taskProperties;
+        this.jobMetrics = jobMetrics;
     }
 
     @Scheduled(
@@ -37,35 +41,48 @@ public class SettlementJob {
             initialDelayString = "${app.tasks.settlement.initial-delay}"
     )
     public void settlePendingPredictions() {
+        JobMetrics.JobExecution execution = jobMetrics.start("settlement");
         int batchSize = taskProperties.settlement().batchSize();
 
-        // 1) 先替代被官方修正事实淘汰的结算版本，保留旧历史供追溯。
-        log.info("settlement job started jobName=SettlementJob batchSize={}", batchSize);
-        var recalculationResult = recalculationService.recalculateOutdatedSettlements(batchSize);
-        log.info(
-                "settlement recalculation finished jobName=SettlementJob candidates={} recalculatedPredictions={} "
-                        + "recalculatedMarkets={} skipped={} failed={} manualReview={}",
-                recalculationResult.candidatePredictionCount(),
-                recalculationResult.recalculatedPredictionCount(),
-                recalculationResult.recalculatedMarketCount(),
-                recalculationResult.skippedPredictionCount(),
-                recalculationResult.failedPredictionCount(),
-                recalculationResult.manualReviewPredictionCount()
-        );
+        try {
+            // 1) 先替代被官方修正事实淘汰的结算版本，保留旧历史供追溯。
+            log.info("event=settlement_job_started batchSize={}", batchSize);
+            var recalculationResult = recalculationService.recalculateOutdatedSettlements(batchSize);
+            log.info(
+                    "event=settlement_recalculation_finished candidates={} recalculatedPredictions={} "
+                            + "recalculatedMarkets={} skipped={} failed={} manualReview={}",
+                    recalculationResult.candidatePredictionCount(),
+                    recalculationResult.recalculatedPredictionCount(),
+                    recalculationResult.recalculatedMarketCount(),
+                    recalculationResult.skippedPredictionCount(),
+                    recalculationResult.failedPredictionCount(),
+                    recalculationResult.manualReviewPredictionCount()
+            );
 
-        // 2) 再补齐尚未产生首版结算的预测，两个批次均受相同上限约束。
-        var result = settlementService.settlePendingPredictions(batchSize);
+            // 2) 再补齐尚未产生首版结算的预测，两个批次均受相同上限约束。
+            var result = settlementService.settlePendingPredictions(batchSize);
 
-        // 3) 输出普通待结算扫描的候选、成功、失败和需人工补齐输入数量。
-        log.info(
-                "settlement job finished jobName=SettlementJob candidates={} settledPredictions={} "
-                        + "settledMarkets={} skipped={} failed={} manualReview={}",
-                result.candidatePredictionCount(),
-                result.settledPredictionCount(),
-                result.settledMarketCount(),
-                result.skippedPredictionCount(),
-                result.failedPredictionCount(),
-                result.manualReviewPredictionCount()
-        );
+            // 3) 输出普通待结算扫描摘要，失败与人工复核均标记为部分完成。
+            log.info(
+                    "event=settlement_job_finished candidates={} settledPredictions={} "
+                            + "settledMarkets={} skipped={} failed={} manualReview={}",
+                    result.candidatePredictionCount(),
+                    result.settledPredictionCount(),
+                    result.settledMarketCount(),
+                    result.skippedPredictionCount(),
+                    result.failedPredictionCount(),
+                    result.manualReviewPredictionCount()
+            );
+            boolean partial = recalculationResult.failedPredictionCount() > 0
+                    || recalculationResult.manualReviewPredictionCount() > 0
+                    || result.failedPredictionCount() > 0
+                    || result.manualReviewPredictionCount() > 0;
+            jobMetrics.record(execution, partial ? "PARTIAL" : "SUCCESS");
+        } catch (RuntimeException exception) {
+            log.error("event=settlement_job_failed batchSize={} exceptionType={}",
+                    batchSize, exception.getClass().getSimpleName());
+            jobMetrics.record(execution, "FAILED");
+            throw exception;
+        }
     }
 }

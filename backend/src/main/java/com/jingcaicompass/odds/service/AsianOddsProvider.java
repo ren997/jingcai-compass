@@ -20,4 +20,9 @@ public interface AsianOddsProvider {
 
     /** 赛前盘口原始 JSON，供 ProviderSyncTemplate 幂等入库。 */
     ProviderFetchResult fetchPreMatchOddsRaw(AsianOddsQueryDto query);
+
+    /** 估算本次查询的 credits，用于在请求前执行额度门禁。 */
+    default int estimateQuotaCost(AsianOddsQueryDto query) {
+        return 0;
+    }
 }

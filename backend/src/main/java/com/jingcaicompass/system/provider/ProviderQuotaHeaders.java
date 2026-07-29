@@ -16,6 +16,7 @@ public final class ProviderQuotaHeaders {
 
     public static final String HEADER_REQUESTS_REMAINING = "x-requests-remaining";
     public static final String HEADER_REQUESTS_USED = "x-requests-used";
+    public static final String HEADER_REQUESTS_LAST = "x-requests-last";
 
     private ProviderQuotaHeaders() {
     }
@@ -56,6 +57,11 @@ public final class ProviderQuotaHeaders {
 
     public static Optional<Integer> parseUsed(HttpHeaders headers) {
         return parseIntHeader(headers, HEADER_REQUESTS_USED);
+    }
+
+    /** 解析供应商声明的本次实际 credits 消耗。 */
+    public static Optional<Integer> parseLast(HttpHeaders headers) {
+        return parseIntHeader(headers, HEADER_REQUESTS_LAST);
     }
 
     private static Optional<Integer> parseIntHeader(HttpHeaders headers, String name) {

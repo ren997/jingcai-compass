@@ -26,10 +26,13 @@ import com.jingcaicompass.odds.dto.AsianOddsMatchOddsDto;
 import com.jingcaicompass.odds.dto.AsianOddsQueryDto;
 import com.jingcaicompass.odds.dto.AsianOddsSyncRequestDto;
 import com.jingcaicompass.odds.dto.AsianOddsSyncResultDto;
+import com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
+import com.jingcaicompass.system.provider.ProviderErrorCategory;
+import com.jingcaicompass.system.provider.ProviderException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
@@ -38,13 +41,16 @@ import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 /** 亚盘同步实现：额度门禁 → ProviderSyncTemplate → 映射门禁 → 追加快照。 */
 @Service
@@ -102,22 +108,37 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
                 .eq(MatchEntity::getLotteryDate, businessDate));
         int sportteryMatchCount = dayMatches.size();
 
-        AsianOddsQueryDto query = buildQuery(businessDate, dayMatches);
-        Instant dayStart = businessDate.atStartOfDay(SHANGHAI).toInstant();
-        Instant dayEnd = businessDate.plusDays(1).atStartOfDay(SHANGHAI).toInstant();
-
+        SportKeySelection sportKeys = resolveSportKeys(dayMatches);
+        AsianOddsQueryDto query = buildQuery(businessDate, dayMatches, sportKeys.sportKeys());
         // 2) 额度门禁
-        int usedQuota = sumQuotaCost(asianOddsProvider.providerCode(), dayStart, dayEnd);
-        int threshold = asianOddsProviderProperties.quotaWarningThreshold();
-        if (threshold > 0 && usedQuota >= threshold) {
+        int usedQuota = sumValidationQuotaCost(asianOddsProvider.providerCode());
+        int quotaBudget = asianOddsProviderProperties.provider() == AsianOddsProviderTypeEnum.THE_ODDS_API
+                ? asianOddsProviderProperties.theOdds().quotaBudget()
+                : 0;
+        int estimatedQuotaCost = Math.max(asianOddsProvider.estimateQuotaCost(query), 0);
+        if (quotaBudget > 0 && usedQuota + estimatedQuotaCost > quotaBudget) {
+            ProviderSyncOutcome blockedOutcome = providerSyncTemplate.execute(
+                    asianOddsProvider.providerCode(),
+                    ProviderDataTypeEnum.ASIAN_ODDS,
+                    () -> {
+                        throw new ProviderException(
+                                asianOddsProvider.providerCode(),
+                                ProviderErrorCategory.QUOTA_EXCEEDED,
+                                "validation quota preflight blocked: used=%d estimate=%d budget=%d"
+                                        .formatted(usedQuota, estimatedQuotaCost, quotaBudget)
+                        );
+                    },
+                    (dataType, requestKey, payload) -> ProviderParseResult.empty()
+            );
             return new AsianOddsSyncResultDto(
-                    null,
+                    blockedOutcome,
                     true,
                     0,
                     0,
                     0,
                     0,
                     sportteryMatchCount,
+                    sportKeys.unconfiguredLeagueMatchCount(),
                     countCoveredMatches(dayMatches),
                     coverageRate(sportteryMatchCount, countCoveredMatches(dayMatches)),
                     usedQuota
@@ -142,6 +163,11 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
 
                     for (AsianOddsMatchOddsDto matchOdds : matches) {
                         try {
+                            if (StringUtils.hasText(matchOdds.parseError())) {
+                                failure++;
+                                appendError(errors, matchOdds.providerMatchId(), matchOdds.parseError());
+                                continue;
+                            }
                             // 4) 跳过滚球，优先复用已确认比赛映射
                             if (matchOdds.live()) {
                                 skippedLive.incrementAndGet();
@@ -180,17 +206,11 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
                             success += writeResult.parseResult().successCount();
                             failure += writeResult.parseResult().failureCount();
                             if (writeResult.parseResult().errorMessage() != null) {
-                                if (!errors.isEmpty()) {
-                                    errors.append("; ");
-                                }
-                                errors.append(writeResult.parseResult().errorMessage());
+                                appendError(errors, matchOdds.providerMatchId(), writeResult.parseResult().errorMessage());
                             }
                         } catch (RuntimeException exception) {
                             failure++;
-                            if (!errors.isEmpty()) {
-                                errors.append("; ");
-                            }
-                            errors.append(matchOdds.providerMatchId()).append(':').append(exception.getMessage());
+                            appendError(errors, matchOdds.providerMatchId(), exception.getClass().getSimpleName());
                         }
                     }
 
@@ -216,17 +236,22 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
                 skippedLive.get(),
                 skippedIncomplete.get(),
                 sportteryMatchCount,
+                sportKeys.unconfiguredLeagueMatchCount(),
                 covered,
                 coverageRate(sportteryMatchCount, covered),
                 quotaCostUsed
         );
     }
 
-    private AsianOddsQueryDto buildQuery(LocalDate businessDate, List<MatchEntity> dayMatches) {
+    private AsianOddsQueryDto buildQuery(
+            LocalDate businessDate,
+            List<MatchEntity> dayMatches,
+            List<String> sportKeys
+    ) {
         if (dayMatches == null || dayMatches.isEmpty()) {
             OffsetDateTime from = businessDate.atStartOfDay(SHANGHAI).toOffsetDateTime();
             OffsetDateTime to = businessDate.plusDays(1).atStartOfDay(SHANGHAI).toOffsetDateTime().minusNanos(1);
-            return new AsianOddsQueryDto(null, from, to, null);
+            return new AsianOddsQueryDto(null, from, to, null, sportKeys);
         }
         Instant minKickoff = dayMatches.stream()
                 .map(MatchEntity::getKickoffTime)
@@ -242,8 +267,29 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
                 null,
                 OffsetDateTime.ofInstant(minKickoff, ZoneOffset.UTC),
                 OffsetDateTime.ofInstant(maxKickoff, ZoneOffset.UTC),
-                null
+                null,
+                sportKeys
         );
+    }
+
+    private SportKeySelection resolveSportKeys(List<MatchEntity> dayMatches) {
+        if (asianOddsProviderProperties.provider() != AsianOddsProviderTypeEnum.THE_ODDS_API
+                || dayMatches == null || dayMatches.isEmpty()) {
+            return SportKeySelection.empty();
+        }
+        Map<String, String> configured = asianOddsProviderProperties.theOdds().leagueSportKeys();
+        Set<String> sportKeys = new LinkedHashSet<>();
+        int unconfigured = 0;
+        for (MatchEntity match : dayMatches) {
+            String leagueName = match == null ? null : match.getLeagueName();
+            String sportKey = StringUtils.hasText(leagueName) ? configured.get(leagueName.trim()) : null;
+            if (!StringUtils.hasText(sportKey)) {
+                unconfigured++;
+                continue;
+            }
+            sportKeys.add(sportKey.trim());
+        }
+        return new SportKeySelection(List.copyOf(sportKeys), unconfigured);
     }
 
     private MatchMapRequestDto toMapRequest(AsianOddsMatchOddsDto matchOdds) {
@@ -255,7 +301,7 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
         return new MatchMapRequestDto(
                 asianOddsProvider.providerCode(),
                 matchOdds.providerMatchId(),
-                null,
+                matchOdds.providerLeagueId(),
                 externalHomeTeamId,
                 externalAwayTeamId,
                 null,
@@ -296,12 +342,11 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
         return status == MappingStatusEnum.AUTO_CONFIRMED || status == MappingStatusEnum.MANUAL_CONFIRMED;
     }
 
-    private int sumQuotaCost(String providerCode, Instant fromInclusive, Instant toExclusive) {
+    /** 汇总当前 The Odds API 验证周期已记录的实际 credits，而不是按单日重新放宽预算。 */
+    private int sumValidationQuotaCost(String providerCode) {
         List<DataSyncRun> runs = dataSyncRunMapper.selectList(new LambdaQueryWrapper<DataSyncRun>()
                 .eq(DataSyncRun::getProviderCode, providerCode)
-                .eq(DataSyncRun::getDataType, ProviderDataTypeEnum.ASIAN_ODDS)
-                .ge(DataSyncRun::getStartedAt, fromInclusive)
-                .lt(DataSyncRun::getStartedAt, toExclusive));
+                .eq(DataSyncRun::getDataType, ProviderDataTypeEnum.ASIAN_ODDS));
         return runs.stream()
                 .mapToInt(run -> run.getQuotaCost() == null ? 0 : run.getQuotaCost())
                 .sum();
@@ -346,5 +391,20 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
             return null;
         }
         return message.length() <= 500 ? message : message.substring(0, 500);
+    }
+
+    private static void appendError(StringBuilder target, String matchId, String reason) {
+        if (!target.isEmpty()) {
+            target.append("; ");
+        }
+        String safeMatchId = StringUtils.hasText(matchId) ? matchId : "unknown";
+        String safeReason = StringUtils.hasText(reason) ? reason : "PARSE_FAILURE";
+        target.append(safeMatchId).append(':').append(safeReason);
+    }
+
+    private record SportKeySelection(List<String> sportKeys, int unconfiguredLeagueMatchCount) {
+        private static SportKeySelection empty() {
+            return new SportKeySelection(List.of(), 0);
+        }
     }
 }

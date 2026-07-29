@@ -79,10 +79,8 @@ public class ProviderHttpExecutor {
             int retryCount = attempt - 1;
             try {
                 AttemptResult result = exchangeOnce(restClient, request);
-                if (result.headers() != null
-                        && (ProviderQuotaHeaders.parseRemaining(result.headers()).isPresent()
-                        || ProviderQuotaHeaders.parseUsed(result.headers()).isPresent())) {
-                    quotaCost++;
+                if (result.headers() != null) {
+                    quotaCost += ProviderQuotaHeaders.parseLast(result.headers()).orElse(0);
                     warnIfLowQuota(providerCode, result.headers(), quotaWarningThreshold);
                 }
 

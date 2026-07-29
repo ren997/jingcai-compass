@@ -62,6 +62,10 @@ app:
       max-attempts: ${ASIAN_ODDS_RETRY_MAX_ATTEMPTS:2}
       delay: ${ASIAN_ODDS_RETRY_DELAY:500ms}
     quota-warning-threshold: ${ASIAN_ODDS_QUOTA_WARNING_THRESHOLD:0}
+    the-odds:
+      # 验证节点用外部 application-validation.yml 或 SPRING_APPLICATION_JSON 提供联赛映射。
+      league-sport-keys: {}
+      quota-budget: ${ASIAN_ODDS_QUOTA_BUDGET:400}
   tasks:
     enabled: ${SYNC_TASKS_ENABLED:false}
     sporttery-pool:
@@ -70,8 +74,8 @@ app:
       initial-delay: ${SPORTTERY_POOL_INITIAL_DELAY:30s}
     asian-odds:
       enabled: ${ASIAN_ODDS_TASK_ENABLED:false}
-      fixed-delay: ${ASIAN_ODDS_FIXED_DELAY:20m}
-      initial-delay: ${ASIAN_ODDS_INITIAL_DELAY:45s}
+      fixed-delay: ${ASIAN_ODDS_FIXED_DELAY:12h}
+      initial-delay: ${ASIAN_ODDS_INITIAL_DELAY:0s}
     data-pipeline:
       enabled: ${DATA_PIPELINE_TASK_ENABLED:false}
       fixed-delay: ${DATA_PIPELINE_FIXED_DELAY:20m}
@@ -89,7 +93,7 @@ app:
     enabled: ${OBSERVABILITY_ENABLED:true}
     refresh-delay: ${OBSERVABILITY_REFRESH_DELAY:1m}
     sporttery-max-sync-age: ${SPORTTERY_MAX_SYNC_AGE:30m}
-    asian-odds-max-sync-age: ${ASIAN_ODDS_MAX_SYNC_AGE:40m}
+    asian-odds-max-sync-age: ${ASIAN_ODDS_MAX_SYNC_AGE:13h}
     coverage-minimum-rate: ${ASIAN_ODDS_COVERAGE_MINIMUM_RATE:0.90}
     failed-run-streak-threshold: ${SYNC_FAILED_RUN_STREAK_THRESHOLD:3}
     pending-mapping-threshold: ${PENDING_MAPPING_THRESHOLD:20}

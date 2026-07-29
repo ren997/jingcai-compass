@@ -44,6 +44,8 @@ class ApplicationConfigurationPropertiesTest {
                     "app.asian-odds.retry.max-attempts=2",
                     "app.asian-odds.retry.delay=500ms",
                     "app.asian-odds.quota-warning-threshold=0",
+                    "app.asian-odds.the-odds.league-sport-keys[英超]=soccer_epl",
+                    "app.asian-odds.the-odds.quota-budget=400",
                     "app.pagination.max-page-size=100",
                     "app.snapshot.storage.type=local",
                     "app.snapshot.storage.path=./runtime/test-snapshots",
@@ -92,6 +94,8 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(asianOdds.apiKey()).isEqualTo("secret-key");
             assertThat(asianOdds.toString()).doesNotContain("secret-key");
             assertThat(asianOdds.toString()).contains("apiKey=***");
+            assertThat(asianOdds.theOdds().leagueSportKeys()).containsEntry("英超", "soccer_epl");
+            assertThat(asianOdds.theOdds().quotaBudget()).isEqualTo(400);
 
             SyncTaskProperties tasks = context.getBean(SyncTaskProperties.class);
             assertThat(tasks.enabled()).isFalse();

@@ -84,5 +84,11 @@ class ProductionConfigurationTest {
                 .isEqualTo("${SNAPSHOT_STORAGE_TYPE:local}");
         assertThat(production.getProperty("app.tasks.snapshot-publish.fixed-delay"))
                 .isEqualTo("${SNAPSHOT_PUBLISH_FIXED_DELAY:5m}");
+        assertThat(production.getProperty("app.tasks.asian-odds.fixed-delay"))
+                .isEqualTo("${ASIAN_ODDS_FIXED_DELAY:12h}");
+        assertThat(production.getProperty("app.tasks.asian-odds.initial-delay"))
+                .isEqualTo("${ASIAN_ODDS_INITIAL_DELAY:0s}");
+        assertThat(production.getProperty("app.observability.asian-odds-max-sync-age"))
+                .isEqualTo("${ASIAN_ODDS_MAX_SYNC_AGE:13h}");
     }
 }

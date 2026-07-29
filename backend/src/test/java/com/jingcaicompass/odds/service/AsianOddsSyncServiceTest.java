@@ -1,6 +1,7 @@
 package com.jingcaicompass.odds.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -33,12 +34,15 @@ import com.jingcaicompass.odds.dto.AsianOddsSyncRequestDto;
 import com.jingcaicompass.odds.dto.AsianOddsSyncResultDto;
 import com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.system.provider.ProviderErrorCategory;
+import com.jingcaicompass.system.provider.ProviderException;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -103,15 +107,16 @@ class AsianOddsSyncServiceTest {
     }
 
     @Test
-    void blocksWhenQuotaThresholdReached() {
-        AsianOddsProviderProperties tightQuota = new AsianOddsProviderProperties(
-                AsianOddsProviderTypeEnum.STUB,
+    void blocksTheOddsRequestBeforeItWouldExceedConfiguredBudget() {
+        AsianOddsProviderProperties cappedProperties = new AsianOddsProviderProperties(
+                AsianOddsProviderTypeEnum.THE_ODDS_API,
                 URI.create("https://api.the-odds-api.com"),
                 "",
                 Duration.ofSeconds(5),
                 Duration.ofSeconds(10),
                 new AsianOddsProviderProperties.RetryProperties(2, Duration.ofMillis(500)),
-                1
+                0,
+                new AsianOddsProviderProperties.TheOddsProperties(Map.of("英超", "soccer_epl"), 400)
         );
         service = new AsianOddsSyncServiceImpl(
                 asianOddsProvider,
@@ -123,22 +128,91 @@ class AsianOddsSyncServiceTest {
                 matchMapper,
                 asianOddsSnapshotMapper,
                 dataSyncRunMapper,
-                tightQuota,
+                cappedProperties,
                 objectMapper
         );
-
-        when(asianOddsProvider.providerCode()).thenReturn("STUB");
-        when(matchMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        MatchEntity match = new MatchEntity();
+        match.setLeagueName("英超");
+        match.setKickoffTime(Instant.parse("2026-07-22T12:00:00Z"));
+        when(asianOddsProvider.providerCode()).thenReturn("THE_ODDS_API");
+        when(asianOddsProvider.estimateQuotaCost(any())).thenReturn(2);
+        when(matchMapper.selectList(any(Wrapper.class))).thenReturn(List.of(match));
         DataSyncRun prior = new DataSyncRun();
-        prior.setQuotaCost(1);
+        prior.setQuotaCost(399);
         when(dataSyncRunMapper.selectList(any(Wrapper.class))).thenReturn(List.of(prior));
+        DataSyncRun blockedRun = new DataSyncRun();
+        blockedRun.setId(88L);
+        blockedRun.setQuotaCost(0);
+        when(providerSyncTemplate.execute(
+                eq("THE_ODDS_API"),
+                eq(ProviderDataTypeEnum.ASIAN_ODDS),
+                any(ProviderPayloadFetcher.class),
+                any(ProviderPayloadParser.class)
+        )).thenAnswer(invocation -> {
+            ProviderPayloadFetcher fetcher = invocation.getArgument(2);
+            assertThatThrownBy(fetcher::fetch)
+                    .isInstanceOf(ProviderException.class)
+                    .satisfies(exception -> assertThat(((ProviderException) exception).category())
+                            .isEqualTo(ProviderErrorCategory.QUOTA_EXCEEDED));
+            return new ProviderSyncOutcome(blockedRun, null, SyncStatusEnum.FAILED, false);
+        });
 
         AsianOddsSyncResultDto result = service.sync(new AsianOddsSyncRequestDto(LocalDate.of(2026, 7, 22)));
 
         assertThat(result.quotaBlocked()).isTrue();
-        assertThat(result.quotaCostUsed()).isEqualTo(1);
-        assertThat(result.outcome()).isNull();
-        verify(providerSyncTemplate, never()).execute(any(), any(), any(), any());
+        assertThat(result.quotaCostUsed()).isEqualTo(399);
+        assertThat(result.outcome()).isNotNull();
+        assertThat(result.unconfiguredLeagueMatchCount()).isZero();
+        verify(asianOddsProvider).estimateQuotaCost(argThat(query ->
+                query.sportKeys().equals(List.of("soccer_epl"))));
+        verify(providerSyncTemplate).execute(
+                eq("THE_ODDS_API"),
+                eq(ProviderDataTypeEnum.ASIAN_ODDS),
+                any(ProviderPayloadFetcher.class),
+                any(ProviderPayloadParser.class)
+        );
+        verify(asianOddsProvider, never()).fetchPreMatchOddsRaw(any());
+    }
+
+    @Test
+    void recordsUnconfiguredSportteryLeagueAsUncoveredInsteadOfCallingAHiddenDefault() {
+        AsianOddsProviderProperties properties = new AsianOddsProviderProperties(
+                AsianOddsProviderTypeEnum.THE_ODDS_API,
+                URI.create("https://api.the-odds-api.com"),
+                "",
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(10),
+                new AsianOddsProviderProperties.RetryProperties(2, Duration.ofMillis(500)),
+                0,
+                new AsianOddsProviderProperties.TheOddsProperties(Map.of(), 400)
+        );
+        service = new AsianOddsSyncServiceImpl(
+                asianOddsProvider,
+                providerSyncTemplate,
+                new AsianOddsPayloadMapper(objectMapper),
+                snapshotWriter,
+                matchMappingService,
+                teamNormalizationService,
+                matchMapper,
+                asianOddsSnapshotMapper,
+                dataSyncRunMapper,
+                properties,
+                objectMapper
+        );
+        MatchEntity match = new MatchEntity();
+        match.setLeagueName("未配置联赛");
+        match.setKickoffTime(Instant.parse("2026-07-22T12:00:00Z"));
+        when(asianOddsProvider.providerCode()).thenReturn("THE_ODDS_API");
+        when(matchMapper.selectList(any(Wrapper.class))).thenReturn(List.of(match));
+        when(dataSyncRunMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(providerSyncTemplate.execute(any(), any(), any(), any())).thenReturn(
+                new ProviderSyncOutcome(null, null, SyncStatusEnum.SUCCESS, false));
+
+        AsianOddsSyncResultDto result = service.sync(new AsianOddsSyncRequestDto(LocalDate.of(2026, 7, 22)));
+
+        assertThat(result.unconfiguredLeagueMatchCount()).isEqualTo(1);
+        assertThat(result.coverageRate()).isEqualByComparingTo("0.0000");
+        verify(asianOddsProvider).estimateQuotaCost(argThat(query -> query.sportKeys().isEmpty()));
     }
 
     @Test

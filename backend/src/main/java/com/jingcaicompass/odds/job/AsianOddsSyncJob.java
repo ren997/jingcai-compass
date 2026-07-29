@@ -49,8 +49,13 @@ public class AsianOddsSyncJob {
                     ? "QUOTA_BLOCKED"
                     : result.outcome() == null ? "FAILED" : result.outcome().status().getCode();
             execution.recordOutcome(status);
-            log.info("event=job_finished businessDate={} status={} snapshots={} coverage={} durationMs={}",
-                    businessDate, status, result.snapshotInsertCount(), result.coverageRate(), execution.durationMs());
+            log.info("event=job_finished businessDate={} status={} snapshots={} coverage={} unconfiguredLeagueMatches={} durationMs={}",
+                    businessDate,
+                    status,
+                    result.snapshotInsertCount(),
+                    result.coverageRate(),
+                    result.unconfiguredLeagueMatchCount(),
+                    execution.durationMs());
             jobMetrics.record(execution, status);
         } catch (RuntimeException exception) {
             execution.recordOutcome("FAILED");

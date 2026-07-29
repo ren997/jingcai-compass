@@ -85,6 +85,10 @@ app:
       max-attempts: ${ASIAN_ODDS_RETRY_MAX_ATTEMPTS:2}
       delay: ${ASIAN_ODDS_RETRY_DELAY:500ms}
     quota-warning-threshold: ${ASIAN_ODDS_QUOTA_WARNING_THRESHOLD:0}
+    the-odds:
+      # 验证节点用外部 application-validation.yml 或 SPRING_APPLICATION_JSON 提供联赛映射。
+      league-sport-keys: {}
+      quota-budget: ${ASIAN_ODDS_QUOTA_BUDGET:0}
   tasks:
     enabled: ${SYNC_TASKS_ENABLED:false}
     sporttery-pool:

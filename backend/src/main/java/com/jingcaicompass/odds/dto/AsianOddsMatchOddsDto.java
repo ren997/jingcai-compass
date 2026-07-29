@@ -18,6 +18,21 @@ public record AsianOddsMatchOddsDto(
         /** 是否滚球盘。 */
         boolean live,
         /** 可用亚盘盘口。 */
-        List<AsianOddsLineDto> lines
+        List<AsianOddsLineDto> lines,
+        /** 供应商侧联赛或 sport key，可空。 */
+        String providerLeagueId,
+        /** 单场响应的受控解析失败原因，可空。 */
+        String parseError
 ) {
+
+    public AsianOddsMatchOddsDto(
+            String providerMatchId,
+            String homeTeamName,
+            String awayTeamName,
+            OffsetDateTime kickoffTime,
+            boolean live,
+            List<AsianOddsLineDto> lines
+    ) {
+        this(providerMatchId, homeTeamName, awayTeamName, kickoffTime, live, lines, null, null);
+    }
 }

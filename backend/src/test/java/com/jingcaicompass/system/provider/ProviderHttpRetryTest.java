@@ -48,6 +48,7 @@ class ProviderHttpRetryTest {
                 .setResponseCode(200)
                 .addHeader(ProviderQuotaHeaders.HEADER_REQUESTS_REMAINING, "5")
                 .addHeader(ProviderQuotaHeaders.HEADER_REQUESTS_USED, "10")
+                .addHeader(ProviderQuotaHeaders.HEADER_REQUESTS_LAST, "1")
                 .setBody("{\"ok\":true}"));
 
         ProviderHttpResponse response = executor.get(

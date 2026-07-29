@@ -41,6 +41,7 @@ class ProviderHttpContractTest {
                 .setResponseCode(200)
                 .addHeader(ProviderQuotaHeaders.HEADER_REQUESTS_REMAINING, "3")
                 .addHeader(ProviderQuotaHeaders.HEADER_REQUESTS_USED, "97")
+                .addHeader(ProviderQuotaHeaders.HEADER_REQUESTS_LAST, "2")
                 .setBody("{\"sports\":[]}"));
 
         String secret = "odds-api-secret-should-not-leak";
@@ -53,7 +54,7 @@ class ProviderHttpContractTest {
         );
 
         assertThat(response.status()).isEqualTo(200);
-        assertThat(response.quotaCost()).isEqualTo(1);
+        assertThat(response.quotaCost()).isEqualTo(2);
         assertThat(response.body()).doesNotContain(secret);
         assertThat(response.toString()).doesNotContain(secret);
 
@@ -86,6 +87,14 @@ class ProviderHttpContractTest {
         HttpHeaders headers = new HttpHeaders();
         headers.add(HttpHeaders.RETRY_AFTER, "7");
         assertThat(ProviderQuotaHeaders.parseRetryAfter(headers)).contains(Duration.ofSeconds(7));
+    }
+
+    @Test
+    void parsesActualQuotaCostFromLastHeader() {
+        HttpHeaders headers = new HttpHeaders();
+        headers.add(ProviderQuotaHeaders.HEADER_REQUESTS_LAST, "7");
+
+        assertThat(ProviderQuotaHeaders.parseLast(headers)).contains(7);
     }
 
     private RestClient restClient() {

@@ -1684,6 +1684,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 - 执行记录：
   - 2026-07-29：开始映射复核可读队名修复。The Odds API 已解析 `home_team`/`away_team`，但同步把它们转换成 `NAME:<SHA-256>` 稳定键后，详情接口只返回该键，管理员无法核对英文队名。本次新增可读字段及受控回填：仅以 `THE_ODDS_API + external_match_id` 在已保存的亚盘原始响应中精确取出同一事件的主客队名；不展示原始 JSON、密钥、请求头或存储路径，不重新调用 Provider。计划执行后端/前端测试、`git diff --check`，并在 Draft PR 执行 PostgreSQL 16 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`。
   - 2026-07-29：本地实现完成。V14 新增外部主/客队展示名，后续同步保留哈希稳定键给归一化服务，同时持久化原始英文展示名；后台详情返回并优先展示名称。已在本机配置的既有 PostgreSQL 16 数据库实际执行 V14：映射 #12 按 `THE_ODDS_API + ecdcdc8d31ce5829bc5ff0bc1023346e` 精确回填为 `ŠK Slovan Bratislava` vs `FC Iberia 1999`，未发起任何 Provider 请求。等待 Draft PR 的 PostgreSQL 16 空库 CI。
+  - 2026-07-29：实现提交 `f34be25` 已推送到 `codex/t602-mapping-provider-names`。创建 Draft PR 时，已授权 GitHub 插件返回 `403 Resource not accessible by integration`，本机未安装 GitHub CLI；工作流仅在 PR 或 `master` 触发，因此 PostgreSQL 16 CI 尚未运行。待授予插件 Pull requests 写入权限，或安装并认证 `gh` 后创建 Draft PR；任务保持 `IN_PROGRESS`。
   - 2026-07-29：导航入口补充开始。用户确认公共首页顶部未显示后台入口；范围为在公共导航新增受守卫的“后台登录”链接并补充前端路由断言，不修改后台权限、接口、数据库或现有后台业务。计划执行 `cd frontend && npm run test && npm run build` 与 `git diff --check`。
   - 2026-07-29：完成公共导航“后台登录”入口，固定指向 `/admin/login`，保留既有 JWT 登录和路由守卫；未改后端、数据库或接口。
   - 2026-07-29：实现提交 `f841b2750732453b63e972eb884337bb70a7e194` 已推送至 `codex/t602-mapping-list-fix`。Draft [PR #18](https://github.com/ren997/jingcai-compass/pull/18) 的 [Actions #30434074735](https://github.com/ren997/jingcai-compass/actions/runs/30434074735) 在 Ubuntu Runner、Temurin Java 21 与 PostgreSQL 16 集成环境中成功执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`；持久化服务/无数据源占位装配回归和映射列表真实记录一致性均已验证。本次无 migration、无 Provider 调用、无真实映射写入；M6 仍为 `PARTIAL`，下一任务为 T106/T107 连续观测与 T108 Go / No-Go。
@@ -1695,6 +1696,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 - 验证记录：
   - 2026-07-29：本地 `npm run backend:test` 通过 412 项；`cd frontend && npm run test` 通过 11 个文件/55 项；`npm run build` 通过；`git diff --check` 通过。独立后端重启后，Flyway 成功从 V13 迁移到 V14，`http://127.0.0.1:8081/actuator/health` 为 `UP`；尚待 Draft PR PostgreSQL 16 集成验证。
+  - 2026-07-29：CI 阻塞证据：`backend-integration.yml` 仅监听 PR 与 `master`；分支推送不触发该工作流。GitHub 插件创建 PR 返回 `403 Resource not accessible by integration`，且 `gh` 不可用。
   - 2026-07-29：`cd frontend && npm run test` 通过（11 个文件、54 项）；`npm run build` 通过；`git diff --check` 通过。
   - 2026-07-29：Draft PR #18 的 Actions #30434074735 成功：Ubuntu Runner、Temurin Java 21、PostgreSQL 16 上的 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过；本地后端、前端和真实只读列表验收同样通过。
   - 2026-07-29：回归修复本地检查通过：`npm run backend:test`、前端 Vitest 11 个文件/54 项、前端生产构建和 `git diff --check` 均成功；真实本地后端实例的管理员映射列表由 0 条恢复为 12 条，等待 PostgreSQL 16 CI。

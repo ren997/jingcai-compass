@@ -224,6 +224,12 @@ export type MappingReviewListItem = {
   updatedAt: string;
 };
 
+/** 以竞彩比赛为主体的映射复核项。 */
+export type MappingReviewMatchListItem = {
+  match: MappingMatchBrief;
+  externalCandidates: MappingReviewExternalCandidate[];
+};
+
 export type MappingMatchBrief = {
   matchId: number;
   lotteryMatchNo: string;
@@ -232,6 +238,20 @@ export type MappingMatchBrief = {
   homeTeamName: string;
   awayTeamName: string;
   kickoffTime: string;
+};
+
+export type MappingReviewExternalCandidate = {
+  mappingId: number;
+  providerCode: string;
+  externalMatchId: string;
+  externalLeagueId: string | null;
+  externalHomeTeamName: string | null;
+  externalAwayTeamName: string | null;
+  mappingStatus: MappingReviewStatus;
+  score: number | null;
+  reasons: string[];
+  mappingExplanation: string | null;
+  updatedAt: string;
 };
 
 export type MappingReviewCandidate = {
@@ -332,6 +352,13 @@ export function fetchAdminPredictionStatusDetail(predictionId: number, signal?: 
 /** 分页读取映射复核队列。 */
 export function fetchMappingReviews(query: MappingReviewListQuery, signal?: AbortSignal) {
   return requestApi<PageResult<MappingReviewListItem>>('/api/admin/provider/mappings/list', {
+    method: 'POST', body: query, signal, authenticated: true,
+  });
+}
+
+/** 按竞彩比赛读取可确认的外部比赛候选。 */
+export function fetchMappingReviewMatches(query: MappingReviewListQuery, signal?: AbortSignal) {
+  return requestApi<PageResult<MappingReviewMatchListItem>>('/api/admin/provider/mappings/matches/list', {
     method: 'POST', body: query, signal, authenticated: true,
   });
 }

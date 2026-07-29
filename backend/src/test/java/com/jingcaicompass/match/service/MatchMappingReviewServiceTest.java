@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
@@ -27,6 +28,7 @@ import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
+import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -80,6 +82,40 @@ class MatchMappingReviewServiceTest {
         assertThat(result.pageSize()).isEqualTo(100);
         assertThat(result.records()).hasSize(1);
         assertThat(result.records().get(0).mappingStatus()).isEqualTo(MappingStatusEnum.PENDING);
+    }
+
+    @Test
+    void listByMatchUsesLotteryMatchAsTheReviewSubject() {
+        MatchEntity lotteryMatch = match(10L);
+        lotteryMatch.setHomeTeamName("阿拉木图");
+        lotteryMatch.setAwayTeamName("奥莫尼亚");
+        MatchSourceMapping mapping = pendingMapping(1L, 10L);
+        mapping.setMappingCandidates(List.of(Map.of(
+                "matchId", 10,
+                "score", "0.8000",
+                "reasons", List.of("KICKOFF_TIME")
+        )));
+
+        when(matchMapper.countMappingReviewMatches("THE_ODDS_API", "PENDING")).thenReturn(1L);
+        when(matchMapper.selectMappingReviewMatchPage("THE_ODDS_API", "PENDING", 0L, 20L))
+                .thenReturn(List.of(lotteryMatch));
+        when(matchSourceMappingMapper.selectReviewMappingIdsForMatches(
+                eq("THE_ODDS_API"), eq("PENDING"), anyList()
+        )).thenReturn(List.of(1L));
+        when(matchSourceMappingMapper.selectBatchIds(anyCollection())).thenReturn(List.of(mapping));
+
+        PageResult<MappingReviewMatchListItemVo> result = service.listByMatch(
+                new MappingReviewListQueryDto("THE_ODDS_API", null, 1, 20)
+        );
+
+        assertThat(result.total()).isEqualTo(1);
+        assertThat(result.records()).hasSize(1);
+        assertThat(result.records().get(0).match().lotteryMatchNo()).isEqualTo("周三0010");
+        assertThat(result.records().get(0).externalCandidates()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.mappingId()).isEqualTo(1L);
+            assertThat(candidate.externalHomeTeamName()).isEqualTo("Manchester United");
+            assertThat(candidate.score()).isEqualByComparingTo("0.8000");
+        });
     }
 
     @Test

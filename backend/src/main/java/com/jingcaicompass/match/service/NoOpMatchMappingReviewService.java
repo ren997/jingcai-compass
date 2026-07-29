@@ -7,6 +7,7 @@ import com.jingcaicompass.match.dto.MappingReviewRejectDto;
 import com.jingcaicompass.match.dto.MappingReviewReopenDto;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
+import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
@@ -19,6 +20,11 @@ public class NoOpMatchMappingReviewService implements MatchMappingReviewService 
 
     @Override
     public PageResult<MappingReviewListItemVo> list(MappingReviewListQueryDto query) {
+        return new PageResult<>(List.of(), 1, 20, 0);
+    }
+
+    @Override
+    public PageResult<MappingReviewMatchListItemVo> listByMatch(MappingReviewListQueryDto query) {
         return new PageResult<>(List.of(), 1, 20, 0);
     }
 

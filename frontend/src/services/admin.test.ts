@@ -7,6 +7,7 @@ import {
   fetchAdminSyncRunDetail,
   fetchAdminSyncRuns,
   fetchMappingReviewDetail,
+  fetchMappingReviewMatches,
 } from './admin';
 
 function response(data: unknown, options: { status?: number; code?: string; message?: string; traceId?: string } = {}) {
@@ -56,6 +57,16 @@ describe('admin API services', () => {
     vi.mocked(fetch).mockResolvedValue(response({ mappingId: 9, candidates: [] }));
     await expect(fetchMappingReviewDetail(9)).resolves.toMatchObject({ mappingId: 9 });
     expect(fetch).toHaveBeenCalledWith('/api/admin/provider/mappings/detail', expect.objectContaining({ body: JSON.stringify({ mappingId: 9 }) }));
+  });
+
+  it('posts lottery-match-oriented mapping candidates with cancellation', async () => {
+    vi.mocked(fetch).mockResolvedValue(response({ records: [], pageNo: 1, pageSize: 20, total: 0 }));
+    const controller = new AbortController();
+    await fetchMappingReviewMatches({ providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING', pageNo: 1, pageSize: 20 }, controller.signal);
+
+    expect(fetch).toHaveBeenCalledWith('/api/admin/provider/mappings/matches/list', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING', pageNo: 1, pageSize: 20 }), signal: expect.any(AbortSignal),
+    }));
   });
 
   it('posts authenticated prediction status queries and keeps detail trace errors', async () => {

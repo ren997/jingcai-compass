@@ -9,6 +9,7 @@ import {
   fetchAdminSyncRunQuotaSummary,
   fetchAdminSyncRuns,
   fetchMappingReviewDetail,
+  fetchMappingReviewMatches,
   fetchMappingReviews,
   rejectMappingReview,
   reopenMappingReview,
@@ -36,6 +37,10 @@ export function adminSyncRunQuotaQueryKey(businessDate: string) {
 
 export function mappingReviewsQueryKey(query: MappingReviewListQuery) {
   return ['admin', 'mappings', 'list', query] as const;
+}
+
+export function mappingReviewMatchesQueryKey(query: MappingReviewListQuery) {
+  return ['admin', 'mappings', 'matches', query] as const;
 }
 
 export function mappingReviewDetailQueryKey(mappingId: number) {
@@ -103,6 +108,14 @@ export function useMappingReviewDetailQuery(mappingId: number | undefined) {
     queryKey: mappingReviewDetailQueryKey(mappingId ?? 0),
     queryFn: ({ signal }) => fetchMappingReviewDetail(mappingId!, signal),
     enabled: mappingId !== undefined,
+  });
+}
+
+/** 按竞彩比赛读取外部映射候选。 */
+export function useMappingReviewMatchesQuery(query: MappingReviewListQuery) {
+  return useQuery({
+    queryKey: mappingReviewMatchesQueryKey(query),
+    queryFn: ({ signal }) => fetchMappingReviewMatches(query, signal),
   });
 }
 

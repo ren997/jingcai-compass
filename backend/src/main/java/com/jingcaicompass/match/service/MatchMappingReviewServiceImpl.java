@@ -19,11 +19,13 @@ import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
+import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -85,6 +87,59 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                 .map(this::toListItem)
                 .toList();
         return new PageResult<>(records, page.getCurrent(), page.getSize(), page.getTotal());
+    }
+
+    @Override
+    public PageResult<MappingReviewMatchListItemVo> listByMatch(MappingReviewListQueryDto query) {
+        int pageNo = query == null || query.pageNo() == null || query.pageNo() < 1 ? 1 : query.pageNo();
+        long requestedSize = query == null || query.pageSize() == null || query.pageSize() < 1
+                ? 20
+                : query.pageSize();
+        long pageSize = Math.min(requestedSize, paginationProperties.maxPageSize());
+        MappingStatusEnum status = query == null || query.mappingStatus() == null
+                ? MappingStatusEnum.PENDING
+                : query.mappingStatus();
+        String providerCode = query == null || !StringUtils.hasText(query.providerCode())
+                ? null
+                : query.providerCode().trim();
+
+        // 1) 先按竞彩比赛分页，避免外部事件重复占据复核列表。
+        long total = matchMapper.countMappingReviewMatches(providerCode, status.getCode());
+        List<MatchEntity> matches = matchMapper.selectMappingReviewMatchPage(
+                providerCode,
+                status.getCode(),
+                (long) (pageNo - 1) * pageSize,
+                pageSize
+        );
+        if (matches == null || matches.isEmpty()) {
+            return new PageResult<>(List.of(), pageNo, pageSize, total);
+        }
+
+        // 2) 批量读取当前页比赛可选择的外部事件，不做逐场查询。
+        List<Long> matchIds = matches.stream().map(MatchEntity::getId).filter(Objects::nonNull).toList();
+        List<Long> mappingIds = matchIds.isEmpty()
+                ? List.of()
+                : matchSourceMappingMapper.selectReviewMappingIdsForMatches(providerCode, status.getCode(), matchIds);
+        List<MatchSourceMapping> mappings = mappingIds == null || mappingIds.isEmpty()
+                ? List.of()
+                : matchSourceMappingMapper.selectBatchIds(mappingIds);
+
+        // 3) 每个竞彩比赛仅展示服务端保留的外部候选，确认仍受既有候选校验保护。
+        List<MappingReviewMatchListItemVo> records = matches.stream()
+                .map(match -> new MappingReviewMatchListItemVo(
+                        toMatchBrief(match),
+                        mappings.stream()
+                                .map(mapping -> toExternalCandidate(mapping, match.getId()))
+                                .filter(Objects::nonNull)
+                                .sorted(Comparator.comparing(
+                                                MappingReviewMatchListItemVo.ExternalCandidateVo::updatedAt,
+                                                Comparator.nullsLast(Comparator.reverseOrder()))
+                                        .thenComparing(MappingReviewMatchListItemVo.ExternalCandidateVo::mappingId,
+                                                Comparator.nullsLast(Comparator.reverseOrder())))
+                                .toList()
+                ))
+                .toList();
+        return new PageResult<>(records, pageNo, pageSize, total);
     }
 
     @Override
@@ -271,6 +326,35 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                 mapping.getMappingExplanation(),
                 candidateCount,
                 mapping.getConfirmedBy(),
+                mapping.getUpdatedAt()
+        );
+    }
+
+    private MappingReviewMatchListItemVo.ExternalCandidateVo toExternalCandidate(
+            MatchSourceMapping mapping,
+            Long targetMatchId
+    ) {
+        if (mapping == null || targetMatchId == null) {
+            return null;
+        }
+        MatchMapCandidateDto candidate = toCandidateDtos(mapping.getMappingCandidates()).stream()
+                .filter(item -> Objects.equals(item.matchId(), targetMatchId))
+                .findFirst()
+                .orElse(null);
+        if (!Objects.equals(mapping.getMatchId(), targetMatchId) && candidate == null) {
+            return null;
+        }
+        return new MappingReviewMatchListItemVo.ExternalCandidateVo(
+                mapping.getId(),
+                mapping.getProviderCode(),
+                mapping.getExternalMatchId(),
+                mapping.getExternalLeagueId(),
+                mapping.getExternalHomeTeamName(),
+                mapping.getExternalAwayTeamName(),
+                mapping.getMappingStatus(),
+                candidate == null ? mapping.getMappingConfidence() : candidate.score(),
+                candidate == null ? List.of("当前关联比赛") : candidate.reasons(),
+                mapping.getMappingExplanation(),
                 mapping.getUpdatedAt()
         );
     }

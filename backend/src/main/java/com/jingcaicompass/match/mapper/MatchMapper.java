@@ -87,4 +87,54 @@ public interface MatchMapper extends BaseMapper<MatchEntity> {
             ORDER BY kickoff_time ASC, id ASC
             """)
     List<MatchEntity> selectPublicDailyMatches(@Param("lotteryDate") LocalDate lotteryDate);
+
+    /** 按映射候选关系分页读取待复核的竞彩比赛。 */
+    @Select("""
+            <script>
+            SELECT DISTINCT m.*
+            FROM matches m
+            INNER JOIN match_source_mappings mapping
+              ON mapping.match_id = m.id
+                 OR EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(COALESCE(mapping.mapping_candidates, '[]'::jsonb)) candidate
+                    WHERE candidate -&gt;&gt; 'matchId' = m.id::text
+                 )
+            WHERE mapping.mapping_status = #{mappingStatus}
+            <if test="providerCode != null and providerCode != ''">
+              AND mapping.provider_code = #{providerCode}
+            </if>
+            ORDER BY m.lottery_date DESC, m.kickoff_time ASC NULLS LAST, m.id ASC
+            LIMIT #{pageSize} OFFSET #{offset}
+            </script>
+            """)
+    List<MatchEntity> selectMappingReviewMatchPage(
+            @Param("providerCode") String providerCode,
+            @Param("mappingStatus") String mappingStatus,
+            @Param("offset") long offset,
+            @Param("pageSize") long pageSize
+    );
+
+    /** 统计至少拥有一个该状态外部候选的竞彩比赛数。 */
+    @Select("""
+            <script>
+            SELECT COUNT(DISTINCT m.id)
+            FROM matches m
+            INNER JOIN match_source_mappings mapping
+              ON mapping.match_id = m.id
+                 OR EXISTS (
+                    SELECT 1
+                    FROM jsonb_array_elements(COALESCE(mapping.mapping_candidates, '[]'::jsonb)) candidate
+                    WHERE candidate -&gt;&gt; 'matchId' = m.id::text
+                 )
+            WHERE mapping.mapping_status = #{mappingStatus}
+            <if test="providerCode != null and providerCode != ''">
+              AND mapping.provider_code = #{providerCode}
+            </if>
+            </script>
+            """)
+    long countMappingReviewMatches(
+            @Param("providerCode") String providerCode,
+            @Param("mappingStatus") String mappingStatus
+    );
 }

@@ -7,6 +7,7 @@ import com.jingcaicompass.match.dto.MappingReviewRejectDto;
 import com.jingcaicompass.match.dto.MappingReviewReopenDto;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
+import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
 import com.jingcaicompass.system.api.PageResult;
 
 /** 映射人工复核：列表/详情/确认/拒绝/重新打开，并追加审计。 */
@@ -14,6 +15,9 @@ public interface MatchMappingReviewService {
 
     /** 分页查询映射；默认仅 PENDING。 */
     PageResult<MappingReviewListItemVo> list(MappingReviewListQueryDto query);
+
+    /** 以竞彩比赛为主体，返回其已持久化外部候选。 */
+    PageResult<MappingReviewMatchListItemVo> listByMatch(MappingReviewListQueryDto query);
 
     /** 查询映射详情（含候选与内部比赛摘要）。 */
     MappingReviewDetailVo detail(MappingReviewDetailQueryDto query);

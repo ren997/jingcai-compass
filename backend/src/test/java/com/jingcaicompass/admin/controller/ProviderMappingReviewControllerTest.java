@@ -16,6 +16,7 @@ import com.jingcaicompass.match.enums.MappingStatusEnum;
 import com.jingcaicompass.match.service.MatchMappingReviewService;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
+import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.exception.ErrorCode;
 import com.jingcaicompass.system.exception.GlobalExceptionHandler;
@@ -80,6 +81,35 @@ class ProviderMappingReviewControllerTest {
                 .andExpect(jsonPath("$.code").value(ErrorCode.SUCCESS.code()))
                 .andExpect(jsonPath("$.data.records[0].mappingId").value(1))
                 .andExpect(jsonPath("$.data.total").value(1));
+    }
+
+    @Test
+    void listByMatchReturnsLotteryMatchesAndExternalCandidates() throws Exception {
+        MappingReviewDetailVo.MatchBriefVo match = new MappingReviewDetailVo.MatchBriefVo(
+                10L, "周三001", java.time.LocalDate.of(2026, 7, 29), "欧冠",
+                "阿拉木图", "奥莫尼亚", Instant.parse("2026-07-29T12:00:00Z")
+        );
+        when(matchMappingReviewService.listByMatch(any())).thenReturn(new PageResult<>(
+                List.of(new MappingReviewMatchListItemVo(match, List.of(
+                        new MappingReviewMatchListItemVo.ExternalCandidateVo(
+                                1L, "THE_ODDS_API", "ext-1", "soccer_uefa_champs_league",
+                                "Kairat Almaty", "Omonia Nicosia", MappingStatusEnum.PENDING,
+                                new BigDecimal("0.7000"), List.of("KICKOFF_TIME"), "PENDING",
+                                Instant.parse("2026-07-29T12:00:00Z")
+                        )
+                ))),
+                1,
+                20,
+                1
+        ));
+
+        mockMvc.perform(post("/api/admin/provider/mappings/matches/list")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new MappingReviewListQueryDto(null, null, 1, 20))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records[0].match.lotteryMatchNo").value("周三001"))
+                .andExpect(jsonPath("$.data.records[0].externalCandidates[0].externalHomeTeamName")
+                        .value("Kairat Almaty"));
     }
 
     @Test

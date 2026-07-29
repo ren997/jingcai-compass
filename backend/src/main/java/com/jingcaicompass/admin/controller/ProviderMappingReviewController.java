@@ -8,6 +8,7 @@ import com.jingcaicompass.match.dto.MappingReviewReopenDto;
 import com.jingcaicompass.match.service.MatchMappingReviewService;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
+import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
 import com.jingcaicompass.system.api.ApiResponse;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -39,6 +40,14 @@ public class ProviderMappingReviewController {
             @RequestBody(required = false) MappingReviewListQueryDto query
     ) {
         return ApiResponse.success(matchMappingReviewService.list(query));
+    }
+
+    /** 按竞彩比赛分页展示已持久化的外部候选，供人工选择。 */
+    @PostMapping("/matches/list")
+    public ApiResponse<PageResult<MappingReviewMatchListItemVo>> listByMatch(
+            @RequestBody(required = false) MappingReviewListQueryDto query
+    ) {
+        return ApiResponse.success(matchMappingReviewService.listByMatch(query));
     }
 
     /** 详情（含候选与内部比赛摘要）。 */

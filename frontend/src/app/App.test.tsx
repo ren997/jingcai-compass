@@ -499,6 +499,24 @@ describe('App routes', () => {
     expect(getAdminSession()).toBeNull();
   });
 
+  it('lazy loads protected prediction lock and settlement navigation entries', async () => {
+    setAdminSession({
+      accessToken: 'signed-jwt', tokenType: 'Bearer', expiresAt: '2099-01-01T00:00:00Z',
+      adminId: 7, username: 'operator', role: 'ADMIN',
+    });
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      if (String(input).endsWith('/api/admin/prediction-status/locks/list')) {
+        return apiResponse({ records: [], pageNo: 1, pageSize: 20, total: 0, manualAttentionCount: 0 });
+      }
+      return apiResponse(null);
+    });
+    renderApp('/admin/predictions');
+
+    expect(await screen.findByRole('heading', { name: '预测锁定' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '预测锁定' })).toHaveAttribute('href', '/admin/predictions');
+    expect(screen.getByRole('link', { name: '结算状态' })).toHaveAttribute('href', '/admin/settlements');
+  });
+
   it('renders a stable 404 page for unmatched routes', async () => {
     renderApp('/missing-page');
 

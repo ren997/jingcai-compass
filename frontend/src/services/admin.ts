@@ -16,6 +16,18 @@ export type SyncStatus = (typeof SYNC_STATUSES)[number];
 export const MAPPING_STATUSES = ['PENDING', 'AUTO_CONFIRMED', 'MANUAL_CONFIRMED', 'REJECTED'] as const;
 export type MappingReviewStatus = (typeof MAPPING_STATUSES)[number];
 
+export const PREDICTION_STATUSES = ['PUBLISHED', 'LOCKED'] as const;
+export type PredictionStatus = (typeof PREDICTION_STATUSES)[number];
+
+export const LOCK_DIAGNOSTICS = ['OVERDUE', 'SCHEDULED', 'LOCKED'] as const;
+export type LockDiagnostic = (typeof LOCK_DIAGNOSTICS)[number];
+
+export const SETTLEMENT_DIAGNOSTICS = [
+  'AWAITING_RESULT', 'SETTLEMENT_MISSING_HAD', 'SETTLEMENT_MISSING_HHAD',
+  'SETTLEMENT_STALE_HAD', 'SETTLEMENT_STALE_HHAD',
+] as const;
+export type SettlementDiagnostic = (typeof SETTLEMENT_DIAGNOSTICS)[number];
+
 export type AdminSyncRunListQuery = {
   providerCode?: string;
   dataType?: ProviderDataType;
@@ -83,6 +95,112 @@ export type AdminSyncRunQuotaSummary = {
   businessDate: string;
   generatedAt: string;
   items: AdminSyncRunQuotaItem[];
+};
+
+export type AdminPredictionLockListQuery = {
+  lotteryDate?: string;
+  modelVersion?: string;
+  predictionStatuses?: PredictionStatus[];
+  lockDiagnostics?: LockDiagnostic[];
+  pageNo: number;
+  pageSize: number;
+};
+
+export type AdminSettlementStatusListQuery = {
+  lotteryDate?: string;
+  modelVersion?: string;
+  diagnostics?: SettlementDiagnostic[];
+  pageNo: number;
+  pageSize: number;
+};
+
+export type AdminStatusDiagnostic = {
+  code: LockDiagnostic | SettlementDiagnostic;
+  description: string;
+};
+
+export type AdminPredictionMatch = {
+  matchId: number;
+  lotteryDate: string;
+  lotteryMatchNo: string;
+  leagueName: string;
+  homeTeamName: string;
+  awayTeamName: string;
+  kickoffTime: string;
+};
+
+export type AdminResultFact = {
+  factId: number;
+  factVersion: number;
+  supersedesFactVersion: number | null;
+  factStatus: 'PENDING' | 'FINAL' | 'VOID';
+  matchStatus: string;
+  homeScore: number | null;
+  awayScore: number | null;
+  providerUpdatedAt: string;
+  current: boolean;
+  createdAt: string;
+};
+
+export type AdminSettlementMarket = {
+  marketType: 'HAD' | 'HHAD';
+  currentStatus: 'PENDING' | 'HIT' | 'MISS' | 'VOID';
+  currentSettlementPersisted: boolean;
+  settlementId: number | null;
+  settlementVersion: number | null;
+  matchFactId: number | null;
+  ruleVersion: string | null;
+  stale: boolean;
+};
+
+export type AdminSettlementVersion = {
+  settlementId: number;
+  settlementVersion: number;
+  supersedesSettlementVersion: number | null;
+  settlementStatus: 'HIT' | 'MISS' | 'VOID';
+  matchFactId: number;
+  ruleVersion: string;
+  current: boolean;
+  createdAt: string;
+};
+
+export type AdminSettlementMarketHistory = {
+  marketType: 'HAD' | 'HHAD';
+  currentStatus: AdminSettlementMarket['currentStatus'];
+  currentSettlementPersisted: boolean;
+  currentSettlementStale: boolean;
+  versions: AdminSettlementVersion[];
+};
+
+export type AdminPredictionStatusItem = {
+  predictionId: number;
+  modelVersion: string;
+  featureVersion: string;
+  predictionVersion: number;
+  predictionStatus: PredictionStatus;
+  publishTime: string;
+  lockTime: string;
+  predictionHash: string;
+  match: AdminPredictionMatch;
+  lockDiagnostics: AdminStatusDiagnostic[];
+  currentResultFact: AdminResultFact | null;
+  hadSettlement: AdminSettlementMarket;
+  hhadSettlement: AdminSettlementMarket;
+  settlementDiagnostics: AdminStatusDiagnostic[];
+};
+
+export type AdminPredictionStatusPage = {
+  records: AdminPredictionStatusItem[];
+  pageNo: number;
+  pageSize: number;
+  total: number;
+  manualAttentionCount: number;
+};
+
+export type AdminPredictionStatusDetail = {
+  prediction: AdminPredictionStatusItem;
+  resultFactHistory: AdminResultFact[];
+  settlementMarkets: AdminSettlementMarketHistory[];
 };
 
 export type MappingReviewListQuery = {
@@ -185,6 +303,27 @@ export function fetchAdminSyncRunErrors(
 export function fetchAdminSyncRunQuotaSummary(businessDate: string, signal?: AbortSignal) {
   return requestApi<AdminSyncRunQuotaSummary>('/api/admin/provider/sync-runs/quota/summary', {
     method: 'POST', body: { businessDate }, signal, authenticated: true,
+  });
+}
+
+/** 分页读取已发布预测的锁定状态。 */
+export function fetchAdminPredictionLocks(query: AdminPredictionLockListQuery, signal?: AbortSignal) {
+  return requestApi<AdminPredictionStatusPage>('/api/admin/prediction-status/locks/list', {
+    method: 'POST', body: query, signal, authenticated: true,
+  });
+}
+
+/** 分页读取已锁定预测的待赛果、待结算及需重算状态。 */
+export function fetchAdminSettlementStatuses(query: AdminSettlementStatusListQuery, signal?: AbortSignal) {
+  return requestApi<AdminPredictionStatusPage>('/api/admin/prediction-status/settlements/list', {
+    method: 'POST', body: query, signal, authenticated: true,
+  });
+}
+
+/** 读取后台预测状态及不可变版本链。 */
+export function fetchAdminPredictionStatusDetail(predictionId: number, signal?: AbortSignal) {
+  return requestApi<AdminPredictionStatusDetail>('/api/admin/prediction-status/detail', {
+    method: 'POST', body: { predictionId }, signal, authenticated: true,
   });
 }
 

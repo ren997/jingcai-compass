@@ -1145,6 +1145,7 @@ h1 {
 .admin-actions,
 .admin-run-card header,
 .admin-mapping-card header,
+.admin-operation-card header,
 .admin-payload header {
   display: flex;
   align-items: center;
@@ -1255,14 +1256,16 @@ h1 {
 }
 
 .admin-run-list,
-.admin-mapping-list {
+.admin-mapping-list,
+.admin-operation-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
 }
 
 .admin-run-card,
-.admin-mapping-card {
+.admin-mapping-card,
+.admin-operation-card {
   display: block;
   padding: 16px;
   border: 1px solid #e0e8e1;
@@ -1273,18 +1276,21 @@ h1 {
 }
 
 .admin-run-card:hover,
-.admin-mapping-card:hover {
+.admin-mapping-card:hover,
+.admin-operation-card:hover {
   border-color: #a8cdb3;
   background: #f3faf4;
 }
 
 .admin-run-card p,
-.admin-mapping-card p {
+.admin-mapping-card p,
+.admin-operation-card p {
   margin: 10px 0;
 }
 
 .admin-run-card dl,
 .admin-mapping-card dl,
+.admin-operation-card dl,
 .admin-metadata {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1294,12 +1300,14 @@ h1 {
 
 .admin-run-card dl div,
 .admin-mapping-card dl div,
+.admin-operation-card dl div,
 .admin-metadata div {
   min-width: 0;
 }
 
 .admin-run-card dt,
 .admin-mapping-card dt,
+.admin-operation-card dt,
 .admin-metadata dt {
   color: #718077;
   font-size: 11px;
@@ -1307,6 +1315,7 @@ h1 {
 
 .admin-run-card dd,
 .admin-mapping-card dd,
+.admin-operation-card dd,
 .admin-metadata dd {
   margin: 3px 0 0;
   overflow-wrap: anywhere;
@@ -1338,6 +1347,22 @@ h1 {
 .admin-status.success,
 .admin-status.mapping-auto_confirmed,
 .admin-status.mapping-manual_confirmed {
+  color: #1c7047;
+  background: #edf6ef;
+}
+
+.admin-status.lock-overdue,
+.admin-status.settlement-attention {
+  color: #9c3131;
+  background: #fff0f0;
+}
+
+.admin-status.lock-scheduled {
+  color: #8a6752;
+  background: #fff6e8;
+}
+
+.admin-status.lock-locked {
   color: #1c7047;
   background: #edf6ef;
 }
@@ -1459,6 +1484,65 @@ h1 {
   color: #53645a;
   line-height: 1.6;
   background: #f7f9f6;
+}
+
+.admin-version-list {
+  display: grid;
+  gap: 10px;
+}
+
+.admin-version-list article {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid #e0e8e1;
+  border-radius: 10px;
+  background: #fbfdfb;
+}
+
+.admin-version-list article.current {
+  border-color: #8fc2a0;
+  background: #f0f8f1;
+}
+
+.admin-version-list span,
+.admin-version-list small,
+.admin-version-market p {
+  color: #718077;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.admin-version-markets {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.admin-version-market {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #e0e8e1;
+  border-radius: 12px;
+  background: #fbfdfb;
+}
+
+.admin-version-market > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.admin-version-market h3,
+.admin-version-market p {
+  margin: 0;
+}
+
+.admin-version-market h3 {
+  color: #1d5839;
+  font-size: 16px;
 }
 
 .mapping-candidate-list {
@@ -1694,11 +1778,14 @@ h1 {
   .admin-filters,
   .admin-run-list,
   .admin-mapping-list,
+  .admin-operation-list,
   .admin-two-column,
   .admin-metadata,
   .admin-metadata.compact,
   .admin-run-card dl,
-  .admin-mapping-card dl {
+  .admin-mapping-card dl,
+  .admin-operation-card dl,
+  .admin-version-markets {
     grid-template-columns: 1fr;
   }
 

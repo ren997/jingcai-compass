@@ -14,6 +14,9 @@ const AdminSyncRunsPage = lazy(() => import('../features/admin/AdminSyncRunsPage
 const AdminSyncRunDetailPage = lazy(() => import('../features/admin/AdminSyncRunDetailPage'));
 const AdminMappingsPage = lazy(() => import('../features/admin/AdminMappingsPage'));
 const AdminMappingDetailPage = lazy(() => import('../features/admin/AdminMappingDetailPage'));
+const AdminPredictionLocksPage = lazy(() => import('../features/admin/AdminPredictionLocksPage'));
+const AdminSettlementStatusesPage = lazy(() => import('../features/admin/AdminSettlementStatusesPage'));
+const AdminPredictionStatusDetailPage = lazy(() => import('../features/admin/AdminPredictionStatusDetailPage'));
 const AdminLoginPage = lazy(() => import('../pages/AdminLoginPage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
 
@@ -37,6 +40,10 @@ export default function App() {
             <Route path="sync-runs/:syncRunId" element={<AdminSyncRunDetailPage />} />
             <Route path="mappings" element={<AdminMappingsPage />} />
             <Route path="mappings/:mappingId" element={<AdminMappingDetailPage />} />
+            <Route path="predictions" element={<AdminPredictionLocksPage />} />
+            <Route path="predictions/:predictionId" element={<AdminPredictionStatusDetailPage />} />
+            <Route path="settlements" element={<AdminSettlementStatusesPage />} />
+            <Route path="settlements/:predictionId" element={<AdminPredictionStatusDetailPage />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFoundPage />} />

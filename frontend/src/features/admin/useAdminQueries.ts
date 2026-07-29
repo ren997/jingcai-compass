@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   confirmMappingReview,
+  fetchAdminPredictionLocks,
+  fetchAdminPredictionStatusDetail,
+  fetchAdminSettlementStatuses,
   fetchAdminSyncRunDetail,
   fetchAdminSyncRunErrors,
   fetchAdminSyncRunQuotaSummary,
@@ -10,6 +13,8 @@ import {
   rejectMappingReview,
   reopenMappingReview,
   type AdminSyncRunListQuery,
+  type AdminPredictionLockListQuery,
+  type AdminSettlementStatusListQuery,
   type MappingReviewListQuery,
 } from '../../services/admin';
 
@@ -35,6 +40,18 @@ export function mappingReviewsQueryKey(query: MappingReviewListQuery) {
 
 export function mappingReviewDetailQueryKey(mappingId: number) {
   return ['admin', 'mappings', 'detail', mappingId] as const;
+}
+
+export function adminPredictionLocksQueryKey(query: AdminPredictionLockListQuery) {
+  return ['admin', 'prediction-status', 'locks', query] as const;
+}
+
+export function adminSettlementStatusesQueryKey(query: AdminSettlementStatusListQuery) {
+  return ['admin', 'prediction-status', 'settlements', query] as const;
+}
+
+export function adminPredictionStatusDetailQueryKey(predictionId: number) {
+  return ['admin', 'prediction-status', 'detail', predictionId] as const;
 }
 
 /** 读取后台同步运行列表。 */
@@ -86,6 +103,31 @@ export function useMappingReviewDetailQuery(mappingId: number | undefined) {
     queryKey: mappingReviewDetailQueryKey(mappingId ?? 0),
     queryFn: ({ signal }) => fetchMappingReviewDetail(mappingId!, signal),
     enabled: mappingId !== undefined,
+  });
+}
+
+/** 读取预测锁定运营列表。 */
+export function useAdminPredictionLocksQuery(query: AdminPredictionLockListQuery) {
+  return useQuery({
+    queryKey: adminPredictionLocksQueryKey(query),
+    queryFn: ({ signal }) => fetchAdminPredictionLocks(query, signal),
+  });
+}
+
+/** 读取结算运营列表。 */
+export function useAdminSettlementStatusesQuery(query: AdminSettlementStatusListQuery) {
+  return useQuery({
+    queryKey: adminSettlementStatusesQueryKey(query),
+    queryFn: ({ signal }) => fetchAdminSettlementStatuses(query, signal),
+  });
+}
+
+/** 读取一条预测的当前状态与版本链。 */
+export function useAdminPredictionStatusDetailQuery(predictionId: number | undefined) {
+  return useQuery({
+    queryKey: adminPredictionStatusDetailQueryKey(predictionId ?? 0),
+    queryFn: ({ signal }) => fetchAdminPredictionStatusDetail(predictionId!, signal),
+    enabled: predictionId !== undefined,
   });
 }
 

@@ -1670,7 +1670,8 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 编写权限、交互、冲突、错误和审计测试。
   - [x] 在公共导航提供受守卫的后台登录入口。
   - [x] 为 The Odds API 映射复核返回可读的外部主客队名，并精确回填既有记录。
-  - [ ] 将映射复核入口改为以竞彩比赛为主体，展示并选择其可关联的外部比赛。
+  - [x] 将映射复核入口和详情改为以竞彩比赛为主体，展示并选择其可关联的外部比赛。
+  - [x] 持久化并展示亚盘供应商原始开赛时间；仅按已保存的外部赛事 ID 精确回填历史记录。
 - 验证命令：
 
   ```bash
@@ -1683,6 +1684,8 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 关键操作要求鉴权并写审计。
   - 不展示未脱敏的原始凭据。
 - 执行记录：
+  - 2026-07-29：本地实现完成。新增受 JWT 保护的 `/api/admin/provider/mappings/matches/detail` 与懒加载 `/admin/mappings/matches/:matchId`；列表详情入口以竞彩比赛为主体，官方开赛时间与外部候选的开赛时间并列展示，原 `/admin/mappings/:mappingId` 保留为单条映射的高级操作页。V15 新增 `external_kickoff_time`：后续亚盘同步直接持久化 `commence_time`，仅按 `THE_ODDS_API + external_match_id` 从已保存载荷精确回填旧记录；未重新调用 Provider，未暴露原始响应或凭据。等待本次提交的 PostgreSQL 16 CI。
+  - 2026-07-29：继续完成“竞彩比赛主体”调整。列表已切换但详情仍是“外部映射 → 内部候选”，且 The Odds API 的 `commence_time` 只参与映射评分、未写入 `match_source_mappings`。本次新增竞彩比赛主体详情及受控 V15：后续同步持久化外部开赛时间，历史记录仅以 `THE_ODDS_API + external_match_id` 从既有原始载荷精确回填；详情并列展示官方与外部开赛时间，不展示原始 JSON 或重新调用 Provider。计划运行后端/前端测试、生产构建、`git diff --check`，并由现有 Draft PR 执行 PostgreSQL 16 集成验证。
   - 2026-07-29：开始“竞彩比赛主体”交互调整。当前复核列表按外部 `match_source_mappings` 行显示，不符合人工先核对竞彩比赛、再选择外部赛事的工作方式。本次将以 `matches` 作为列表主体，仅展示服务端已保留为该竞彩比赛候选的外部赛事；确认仍只允许该候选关系，保留 JWT、条件更新和追加审计。计划执行后端/前端测试、生产构建与 `git diff --check`。
   - 2026-07-29：开始映射复核可读队名修复。The Odds API 已解析 `home_team`/`away_team`，但同步把它们转换成 `NAME:<SHA-256>` 稳定键后，详情接口只返回该键，管理员无法核对英文队名。本次新增可读字段及受控回填：仅以 `THE_ODDS_API + external_match_id` 在已保存的亚盘原始响应中精确取出同一事件的主客队名；不展示原始 JSON、密钥、请求头或存储路径，不重新调用 Provider。计划执行后端/前端测试、`git diff --check`，并在 Draft PR 执行 PostgreSQL 16 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`。
   - 2026-07-29：本地实现完成。V14 新增外部主/客队展示名，后续同步保留哈希稳定键给归一化服务，同时持久化原始英文展示名；后台详情返回并优先展示名称。已在本机配置的既有 PostgreSQL 16 数据库实际执行 V14：映射 #12 按 `THE_ODDS_API + ecdcdc8d31ce5829bc5ff0bc1023346e` 精确回填为 `ŠK Slovan Bratislava` vs `FC Iberia 1999`，未发起任何 Provider 请求。等待 Draft PR 的 PostgreSQL 16 空库 CI。
@@ -1698,6 +1701,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-28：实现提交 `f1b93513ae6b3016881f132eaf82dfae8fc42389` 已推送至 `codex/t602-admin-operations`，Draft [PR #17](https://github.com/ren997/jingcai-compass/pull/17) 的 [Actions #30348717331](https://github.com/ren997/jingcai-compass/actions/runs/30348717331) 通过，待本次任务板提交的最终检查通过后合并。
 
 - 验证记录：
+  - 2026-07-29：`npm run backend:test` 通过 417 项；`cd frontend && npm run test` 通过 11 个文件/58 项；`npm run build` 通过；`git diff --check` 通过。本地后端重启后 `http://127.0.0.1:8081/actuator/health` 为 `UP`，Flyway 已应用 V15。未重复尝试本地管理员登录以避免账户失败锁定；受保护端点由 MVC 安全测试覆盖，等待 Draft PR 的 PostgreSQL 16 空库迁移验证。
   - 2026-07-29：本地 `npm run backend:test` 通过 412 项；`cd frontend && npm run test` 通过 11 个文件/55 项；`npm run build` 通过；`git diff --check` 通过。独立后端重启后，Flyway 成功从 V13 迁移到 V14，`http://127.0.0.1:8081/actuator/health` 为 `UP`；尚待 Draft PR PostgreSQL 16 集成验证。
   - 2026-07-29：CI 阻塞证据：`backend-integration.yml` 仅监听 PR 与 `master`；分支推送不触发该工作流。GitHub 插件创建 PR 返回 `403 Resource not accessible by integration`，且 `gh` 不可用。
   - 2026-07-29：`cd frontend && npm run test` 通过（11 个文件、54 项）；`npm run build` 通过；`git diff --check` 通过。

@@ -38,7 +38,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V14 与数据库原生行为。
+ * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V15 与数据库原生行为。
  */
 @Testcontainers
 @ActiveProfiles("integration")
@@ -102,8 +102,8 @@ class PostgresApplicationIT {
                 .filter(info -> info.getVersion() != null)
                 .toArray(MigrationInfo[]::new);
 
-        assertThat(applied).hasSize(14);
-        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("14");
+        assertThat(applied).hasSize(15);
+        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("15");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
@@ -147,7 +147,7 @@ class PostgresApplicationIT {
                 """,
                 String.class
         );
-        assertThat(mappingColumns).contains("mapping_explanation", "mapping_candidates");
+        assertThat(mappingColumns).contains("mapping_explanation", "mapping_candidates", "external_kickoff_time");
     }
 
     @Test

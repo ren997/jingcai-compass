@@ -9,6 +9,7 @@ import {
   fetchAdminSyncRunQuotaSummary,
   fetchAdminSyncRuns,
   fetchMappingReviewDetail,
+  fetchMappingReviewMatchDetail,
   fetchMappingReviewMatches,
   fetchMappingReviews,
   rejectMappingReview,
@@ -45,6 +46,13 @@ export function mappingReviewMatchesQueryKey(query: MappingReviewListQuery) {
 
 export function mappingReviewDetailQueryKey(mappingId: number) {
   return ['admin', 'mappings', 'detail', mappingId] as const;
+}
+
+export function mappingReviewMatchDetailQueryKey(
+  matchId: number,
+  query: Pick<MappingReviewListQuery, 'providerCode' | 'mappingStatus'>,
+) {
+  return ['admin', 'mappings', 'matches', 'detail', matchId, query] as const;
 }
 
 export function adminPredictionLocksQueryKey(query: AdminPredictionLockListQuery) {
@@ -116,6 +124,18 @@ export function useMappingReviewMatchesQuery(query: MappingReviewListQuery) {
   return useQuery({
     queryKey: mappingReviewMatchesQueryKey(query),
     queryFn: ({ signal }) => fetchMappingReviewMatches(query, signal),
+  });
+}
+
+/** 读取竞彩比赛主体的外部候选详情。 */
+export function useMappingReviewMatchDetailQuery(
+  matchId: number | undefined,
+  query: Pick<MappingReviewListQuery, 'providerCode' | 'mappingStatus'>,
+) {
+  return useQuery({
+    queryKey: mappingReviewMatchDetailQueryKey(matchId ?? 0, query),
+    queryFn: ({ signal }) => fetchMappingReviewMatchDetail(matchId!, query, signal),
+    enabled: matchId !== undefined,
   });
 }
 

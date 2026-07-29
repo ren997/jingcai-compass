@@ -24,6 +24,7 @@ public record MappingReviewMatchListItemVo(
             String externalLeagueId,
             String externalHomeTeamName,
             String externalAwayTeamName,
+            Instant externalKickoffTime,
             MappingStatusEnum mappingStatus,
             BigDecimal score,
             List<String> reasons,

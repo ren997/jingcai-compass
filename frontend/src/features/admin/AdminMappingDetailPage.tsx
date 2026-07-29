@@ -55,7 +55,7 @@ export default function AdminMappingDetailPage() {
     {actionError && <Alert type="error" showIcon message={actionError.message} />}
     <section className="admin-panel"><header className="admin-panel-heading"><div><h2>外部映射信息</h2><span>更新时间 {formatTimestamp(detail.updatedAt)}</span></div></header>
       <dl className="admin-metadata"><div><dt>外部联赛 ID</dt><dd>{detail.externalLeagueId || '—'}</dd></div><div><dt>外部主队</dt><dd>{detail.externalHomeTeamName || '暂未恢复'}</dd></div>
-        <div><dt>外部客队</dt><dd>{detail.externalAwayTeamName || '暂未恢复'}</dd></div><div><dt>置信度</dt><dd>{detail.mappingConfidence ?? '—'}</dd></div></dl>
+        <div><dt>外部客队</dt><dd>{detail.externalAwayTeamName || '暂未恢复'}</dd></div><div><dt>外部开赛</dt><dd>{detail.externalKickoffTime ? formatTimestamp(detail.externalKickoffTime) : '暂未提供'}</dd></div><div><dt>置信度</dt><dd>{detail.mappingConfidence ?? '—'}</dd></div></dl>
       <p className="admin-metadata-note">稳定来源键：主队 {detail.externalHomeTeamId || '—'} · 客队 {detail.externalAwayTeamId || '—'}</p>
       <p className="admin-explanation">{detail.mappingExplanation || '暂无映射解释。'}</p></section>
     <section className="admin-panel"><header className="admin-panel-heading"><div><h2>候选比赛对比</h2><span>仅下列比赛可被人工确认</span></div></header>

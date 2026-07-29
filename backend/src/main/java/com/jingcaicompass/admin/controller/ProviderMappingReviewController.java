@@ -2,6 +2,7 @@ package com.jingcaicompass.admin.controller;
 
 import com.jingcaicompass.match.dto.MappingReviewConfirmDto;
 import com.jingcaicompass.match.dto.MappingReviewDetailQueryDto;
+import com.jingcaicompass.match.dto.MappingReviewMatchDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewListQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewRejectDto;
 import com.jingcaicompass.match.dto.MappingReviewReopenDto;
@@ -9,6 +10,7 @@ import com.jingcaicompass.match.service.MatchMappingReviewService;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
 import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
+import com.jingcaicompass.match.vo.MappingReviewMatchDetailVo;
 import com.jingcaicompass.system.api.ApiResponse;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -48,6 +50,14 @@ public class ProviderMappingReviewController {
             @RequestBody(required = false) MappingReviewListQueryDto query
     ) {
         return ApiResponse.success(matchMappingReviewService.listByMatch(query));
+    }
+
+    /** 读取一场竞彩比赛及其可安全确认的外部候选。 */
+    @PostMapping("/matches/detail")
+    public ApiResponse<MappingReviewMatchDetailVo> detailByMatch(
+            @RequestBody MappingReviewMatchDetailQueryDto query
+    ) {
+        return ApiResponse.success(matchMappingReviewService.detailByMatch(query));
     }
 
     /** 详情（含候选与内部比赛摘要）。 */

@@ -554,6 +554,32 @@ describe('App routes', () => {
     expect(screen.getByText(/稳定来源键：主队 NAME:home-hash/)).toBeInTheDocument();
   });
 
+  it('shows lottery and external kickoff times in the lottery-match mapping detail', async () => {
+    setAdminSession({
+      accessToken: 'signed-jwt', tokenType: 'Bearer', expiresAt: '2099-01-01T00:00:00Z',
+      adminId: 7, username: 'operator', role: 'ADMIN',
+    });
+    vi.mocked(fetch).mockResolvedValue(apiResponse({
+      match: {
+        matchId: 42, lotteryMatchNo: '周三042', lotteryDate: '2026-07-29', leagueName: '欧冠',
+        homeTeamName: '阿拉木图', awayTeamName: '奥莫尼亚', kickoffTime: '2026-07-29T12:00:00Z',
+      },
+      externalCandidates: [{
+        mappingId: 12, providerCode: 'THE_ODDS_API', externalMatchId: 'event-12', externalLeagueId: 'soccer_uefa_champs_league',
+        externalHomeTeamName: 'Kairat Almaty', externalAwayTeamName: 'Omonia Nicosia', externalKickoffTime: '2026-07-29T12:05:00Z',
+        mappingStatus: 'PENDING', score: 0.8, reasons: ['KICKOFF_TIME'], mappingExplanation: 'PENDING', updatedAt: '2026-07-29T10:00:00Z',
+      }],
+    }));
+    renderApp('/admin/mappings/matches/42?providerCode=THE_ODDS_API&mappingStatus=PENDING');
+
+    expect(await screen.findByRole('heading', { name: /周三042.*阿拉木图.*奥莫尼亚/ })).toBeInTheDocument();
+    expect(screen.getByText('Kairat Almaty vs Omonia Nicosia')).toBeInTheDocument();
+    expect(screen.getByText(/外部开赛：/)).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith('/api/admin/provider/mappings/matches/detail', expect.objectContaining({
+      body: JSON.stringify({ matchId: 42, providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING' }),
+    }));
+  });
+
   it('renders a stable 404 page for unmatched routes', async () => {
     renderApp('/missing-page');
 

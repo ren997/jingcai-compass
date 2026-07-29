@@ -17,6 +17,7 @@ import java.util.List;
  * @param externalAwayTeamId 外部客队 ID
  * @param externalHomeTeamName 外部主队展示名
  * @param externalAwayTeamName 外部客队展示名
+ * @param externalKickoffTime 外部赛事原始开赛时间
  * @param mappingStatus 状态
  * @param mappingConfidence 置信度
  * @param mappingMethod 方法
@@ -36,6 +37,7 @@ public record MappingReviewDetailVo(
         String externalAwayTeamId,
         String externalHomeTeamName,
         String externalAwayTeamName,
+        Instant externalKickoffTime,
         MappingStatusEnum mappingStatus,
         BigDecimal mappingConfidence,
         String mappingMethod,

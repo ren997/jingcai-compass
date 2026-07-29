@@ -13,6 +13,7 @@ const AdminHomePage = lazy(() => import('../pages/AdminHomePage'));
 const AdminSyncRunsPage = lazy(() => import('../features/admin/AdminSyncRunsPage'));
 const AdminSyncRunDetailPage = lazy(() => import('../features/admin/AdminSyncRunDetailPage'));
 const AdminMappingsPage = lazy(() => import('../features/admin/AdminMappingsPage'));
+const AdminMappingMatchDetailPage = lazy(() => import('../features/admin/AdminMappingMatchDetailPage'));
 const AdminMappingDetailPage = lazy(() => import('../features/admin/AdminMappingDetailPage'));
 const AdminPredictionLocksPage = lazy(() => import('../features/admin/AdminPredictionLocksPage'));
 const AdminSettlementStatusesPage = lazy(() => import('../features/admin/AdminSettlementStatusesPage'));
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="sync-runs" element={<AdminSyncRunsPage />} />
             <Route path="sync-runs/:syncRunId" element={<AdminSyncRunDetailPage />} />
             <Route path="mappings" element={<AdminMappingsPage />} />
+            <Route path="mappings/matches/:matchId" element={<AdminMappingMatchDetailPage />} />
             <Route path="mappings/:mappingId" element={<AdminMappingDetailPage />} />
             <Route path="predictions" element={<AdminPredictionLocksPage />} />
             <Route path="predictions/:predictionId" element={<AdminPredictionStatusDetailPage />} />

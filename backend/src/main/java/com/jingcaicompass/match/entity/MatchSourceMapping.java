@@ -46,6 +46,9 @@ public class MatchSourceMapping {
     /** 供应商侧客队展示名，仅用于后台人工复核。 */
     private String externalAwayTeamName;
 
+    /** 供应商侧原始开赛时间，仅用于人工核对时间差异。 */
+    private Instant externalKickoffTime;
+
     /**
      * 映射确认状态
      *

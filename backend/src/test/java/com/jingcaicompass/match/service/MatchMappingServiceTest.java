@@ -91,6 +91,7 @@ class MatchMappingServiceTest {
         assertThat(captor.getValue().getMappingCandidates()).isNotEmpty();
         assertThat(captor.getValue().getExternalHomeTeamName()).isEqualTo("Manchester United");
         assertThat(captor.getValue().getExternalAwayTeamName()).isEqualTo("Chelsea");
+        assertThat(captor.getValue().getExternalKickoffTime()).isEqualTo(kickoff);
     }
 
     @Test
@@ -187,6 +188,7 @@ class MatchMappingServiceTest {
         verify(matchSourceMappingMapper, times(1)).updateById(any(MatchSourceMapping.class));
         assertThat(pending.getExternalHomeTeamName()).isEqualTo("Manchester United");
         assertThat(pending.getExternalAwayTeamName()).isEqualTo("Chelsea");
+        assertThat(pending.getExternalKickoffTime()).isEqualTo(kickoff);
     }
 
     @Test

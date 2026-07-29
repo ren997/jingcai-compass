@@ -2,12 +2,14 @@ package com.jingcaicompass.match.service;
 
 import com.jingcaicompass.match.dto.MappingReviewConfirmDto;
 import com.jingcaicompass.match.dto.MappingReviewDetailQueryDto;
+import com.jingcaicompass.match.dto.MappingReviewMatchDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewListQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewRejectDto;
 import com.jingcaicompass.match.dto.MappingReviewReopenDto;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
 import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
+import com.jingcaicompass.match.vo.MappingReviewMatchDetailVo;
 import com.jingcaicompass.system.api.PageResult;
 
 /** 映射人工复核：列表/详情/确认/拒绝/重新打开，并追加审计。 */
@@ -18,6 +20,9 @@ public interface MatchMappingReviewService {
 
     /** 以竞彩比赛为主体，返回其已持久化外部候选。 */
     PageResult<MappingReviewMatchListItemVo> listByMatch(MappingReviewListQueryDto query);
+
+    /** 按竞彩比赛读取已持久化外部候选；时间和队名仅供人工核对。 */
+    MappingReviewMatchDetailVo detailByMatch(MappingReviewMatchDetailQueryDto query);
 
     /** 查询映射详情（含候选与内部比赛摘要）。 */
     MappingReviewDetailVo detail(MappingReviewDetailQueryDto query);

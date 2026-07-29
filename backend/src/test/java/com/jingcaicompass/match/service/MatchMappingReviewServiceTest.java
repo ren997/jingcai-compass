@@ -18,6 +18,7 @@ import com.jingcaicompass.audit.enums.AuditTargetTypeEnum;
 import com.jingcaicompass.audit.service.AuditLogService;
 import com.jingcaicompass.match.dto.MappingReviewConfirmDto;
 import com.jingcaicompass.match.dto.MappingReviewDetailQueryDto;
+import com.jingcaicompass.match.dto.MappingReviewMatchDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewListQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewRejectDto;
 import com.jingcaicompass.match.dto.MappingReviewReopenDto;
@@ -29,6 +30,7 @@ import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
 import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
+import com.jingcaicompass.match.vo.MappingReviewMatchDetailVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -115,6 +117,31 @@ class MatchMappingReviewServiceTest {
             assertThat(candidate.mappingId()).isEqualTo(1L);
             assertThat(candidate.externalHomeTeamName()).isEqualTo("Manchester United");
             assertThat(candidate.score()).isEqualByComparingTo("0.8000");
+            assertThat(candidate.externalKickoffTime()).isEqualTo(Instant.parse("2026-07-24T13:00:00Z"));
+        });
+    }
+
+    @Test
+    void detailByMatchKeepsLotteryMatchAsSubjectAndReturnsExternalKickoff() {
+        MatchEntity lotteryMatch = match(10L);
+        lotteryMatch.setHomeTeamName("阿拉木图");
+        lotteryMatch.setAwayTeamName("奥莫尼亚");
+        MatchSourceMapping mapping = pendingMapping(1L, 10L);
+        mapping.setMappingCandidates(List.of(Map.of("matchId", 10, "score", "0.8000", "reasons", List.of("KICKOFF_TIME"))));
+        when(matchMapper.selectById(10L)).thenReturn(lotteryMatch);
+        when(matchSourceMappingMapper.selectReviewMappingIdsForMatches(
+                eq("THE_ODDS_API"), eq("PENDING"), anyList()
+        )).thenReturn(List.of(1L));
+        when(matchSourceMappingMapper.selectBatchIds(anyCollection())).thenReturn(List.of(mapping));
+
+        MappingReviewMatchDetailVo result = service.detailByMatch(
+                new MappingReviewMatchDetailQueryDto(10L, "THE_ODDS_API", MappingStatusEnum.PENDING)
+        );
+
+        assertThat(result.match().matchId()).isEqualTo(10L);
+        assertThat(result.externalCandidates()).singleElement().satisfies(candidate -> {
+            assertThat(candidate.externalMatchId()).isEqualTo("ext-1");
+            assertThat(candidate.externalKickoffTime()).isEqualTo(Instant.parse("2026-07-24T13:00:00Z"));
         });
     }
 
@@ -301,6 +328,7 @@ class MatchMappingReviewServiceTest {
         mapping.setExternalMatchId("ext-" + id);
         mapping.setExternalHomeTeamName("Manchester United");
         mapping.setExternalAwayTeamName("Chelsea");
+        mapping.setExternalKickoffTime(Instant.parse("2026-07-24T13:00:00Z"));
         mapping.setMappingStatus(MappingStatusEnum.PENDING);
         mapping.setMappingConfidence(new BigDecimal("0.7000"));
         mapping.setMappingMethod("SCORE_PENDING");

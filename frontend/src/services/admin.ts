@@ -247,11 +247,19 @@ export type MappingReviewExternalCandidate = {
   externalLeagueId: string | null;
   externalHomeTeamName: string | null;
   externalAwayTeamName: string | null;
+  /** 亚盘供应商事件原始开赛时间；仅用于与竞彩官方时间核对。 */
+  externalKickoffTime: string | null;
   mappingStatus: MappingReviewStatus;
   score: number | null;
   reasons: string[];
   mappingExplanation: string | null;
   updatedAt: string;
+};
+
+/** 一场竞彩比赛及其服务端保留的外部赛事候选。 */
+export type MappingReviewMatchDetail = {
+  match: MappingMatchBrief;
+  externalCandidates: MappingReviewExternalCandidate[];
 };
 
 export type MappingReviewCandidate = {
@@ -271,6 +279,7 @@ export type MappingReviewDetail = {
   externalAwayTeamId: string | null;
   externalHomeTeamName: string | null;
   externalAwayTeamName: string | null;
+  externalKickoffTime: string | null;
   mappingStatus: MappingReviewStatus;
   mappingConfidence: number | null;
   mappingMethod: string | null;
@@ -360,6 +369,17 @@ export function fetchMappingReviews(query: MappingReviewListQuery, signal?: Abor
 export function fetchMappingReviewMatches(query: MappingReviewListQuery, signal?: AbortSignal) {
   return requestApi<PageResult<MappingReviewMatchListItem>>('/api/admin/provider/mappings/matches/list', {
     method: 'POST', body: query, signal, authenticated: true,
+  });
+}
+
+/** 读取一场竞彩比赛及其可安全确认的外部候选。 */
+export function fetchMappingReviewMatchDetail(
+  matchId: number,
+  query: Pick<MappingReviewListQuery, 'providerCode' | 'mappingStatus'>,
+  signal?: AbortSignal,
+) {
+  return requestApi<MappingReviewMatchDetail>('/api/admin/provider/mappings/matches/detail', {
+    method: 'POST', body: { matchId, ...query }, signal, authenticated: true,
   });
 }
 

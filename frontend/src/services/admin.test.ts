@@ -7,6 +7,7 @@ import {
   fetchAdminSyncRunDetail,
   fetchAdminSyncRuns,
   fetchMappingReviewDetail,
+  fetchMappingReviewMatchDetail,
   fetchMappingReviewMatches,
 } from './admin';
 
@@ -66,6 +67,19 @@ describe('admin API services', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/admin/provider/mappings/matches/list', expect.objectContaining({
       method: 'POST', body: JSON.stringify({ providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING', pageNo: 1, pageSize: 20 }), signal: expect.any(AbortSignal),
+    }));
+  });
+
+  it('posts one lottery match detail with filters and forwards cancellation', async () => {
+    vi.mocked(fetch).mockResolvedValue(response({ match: { matchId: 42 }, externalCandidates: [] }));
+    const controller = new AbortController();
+
+    await fetchMappingReviewMatchDetail(42, { providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING' }, controller.signal);
+
+    expect(fetch).toHaveBeenCalledWith('/api/admin/provider/mappings/matches/detail', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ matchId: 42, providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING' }),
+      signal: expect.any(AbortSignal),
     }));
   });
 

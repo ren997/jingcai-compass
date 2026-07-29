@@ -88,12 +88,13 @@ export default function AdminMappingsPage() {
             {item.externalCandidates.map((external) => <Radio key={external.mappingId} value={external.mappingId}>
               <div className="mapping-candidate-content"><strong>{externalName(external)}</strong>
                 <span>{external.providerCode} · 外部 ID：{external.externalMatchId}</span>
+                <span>外部开赛：{external.externalKickoffTime ? formatTimestamp(external.externalKickoffTime) : '暂未提供'}</span>
                 <small>得分：{external.score ?? '—'} · {external.reasons.join('、') || external.mappingExplanation || '服务端保留的候选'}</small></div>
             </Radio>)}
           </Radio.Group>
           <div className="admin-actions">
             <Button type="primary" disabled={!canConfirm} onClick={() => selected && (setPendingConfirmation({ match: item.match, external: selected }), setConfirmation(''))}>确认关联</Button>
-            {selected && <Link to={`/admin/mappings/${selected.mappingId}${returnSearch ? `?${returnSearch}` : ''}`}>查看候选详情</Link>}
+            <Link to={`/admin/mappings/matches/${item.match.matchId}${returnSearch ? `?${returnSearch}` : ''}`}>查看候选详情</Link>
           </div>
         </article>;
       })}</div>}

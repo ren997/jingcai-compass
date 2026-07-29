@@ -9,6 +9,7 @@ import com.jingcaicompass.audit.service.AuditLogService;
 import com.jingcaicompass.match.dto.MatchMapCandidateDto;
 import com.jingcaicompass.match.dto.MappingReviewConfirmDto;
 import com.jingcaicompass.match.dto.MappingReviewDetailQueryDto;
+import com.jingcaicompass.match.dto.MappingReviewMatchDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewListQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewRejectDto;
 import com.jingcaicompass.match.dto.MappingReviewReopenDto;
@@ -20,6 +21,7 @@ import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
 import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
+import com.jingcaicompass.match.vo.MappingReviewMatchDetailVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -140,6 +142,39 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                 ))
                 .toList();
         return new PageResult<>(records, pageNo, pageSize, total);
+    }
+
+    @Override
+    public MappingReviewMatchDetailVo detailByMatch(MappingReviewMatchDetailQueryDto query) {
+        if (query == null || query.matchId() == null || query.matchId() < 1) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "matchId must be a positive integer");
+        }
+        MatchEntity match = matchMapper.selectById(query.matchId());
+        if (match == null) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "match not found: " + query.matchId());
+        }
+        MappingStatusEnum status = query.mappingStatus() == null ? MappingStatusEnum.PENDING : query.mappingStatus();
+        String providerCode = StringUtils.hasText(query.providerCode()) ? query.providerCode().trim() : null;
+
+        // 1) 仅读取当前竞彩比赛已持久化的外部候选，不接受客户端任意赛事 ID。
+        List<Long> mappingIds = matchSourceMappingMapper.selectReviewMappingIdsForMatches(
+                providerCode, status.getCode(), List.of(match.getId())
+        );
+        List<MatchSourceMapping> mappings = mappingIds == null || mappingIds.isEmpty()
+                ? List.of()
+                : matchSourceMappingMapper.selectBatchIds(mappingIds);
+
+        // 2) 返回可读外部队名和供应商原始开赛时间，供与官方开赛时间并列核对。
+        List<MappingReviewMatchListItemVo.ExternalCandidateVo> candidates = mappings.stream()
+                .map(mapping -> toExternalCandidate(mapping, match.getId()))
+                .filter(Objects::nonNull)
+                .sorted(Comparator.comparing(
+                                MappingReviewMatchListItemVo.ExternalCandidateVo::updatedAt,
+                                Comparator.nullsLast(Comparator.reverseOrder()))
+                        .thenComparing(MappingReviewMatchListItemVo.ExternalCandidateVo::mappingId,
+                                Comparator.nullsLast(Comparator.reverseOrder())))
+                .toList();
+        return new MappingReviewMatchDetailVo(toMatchBrief(match), candidates);
     }
 
     @Override
@@ -351,6 +386,7 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                 mapping.getExternalLeagueId(),
                 mapping.getExternalHomeTeamName(),
                 mapping.getExternalAwayTeamName(),
+                mapping.getExternalKickoffTime(),
                 mapping.getMappingStatus(),
                 candidate == null ? mapping.getMappingConfidence() : candidate.score(),
                 candidate == null ? List.of("当前关联比赛") : candidate.reasons(),
@@ -379,6 +415,7 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                 mapping.getExternalAwayTeamId(),
                 mapping.getExternalHomeTeamName(),
                 mapping.getExternalAwayTeamName(),
+                mapping.getExternalKickoffTime(),
                 mapping.getMappingStatus(),
                 mapping.getMappingConfidence(),
                 mapping.getMappingMethod(),

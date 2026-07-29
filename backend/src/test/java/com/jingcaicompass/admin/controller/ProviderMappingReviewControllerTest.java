@@ -12,11 +12,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.match.dto.MappingReviewConfirmDto;
 import com.jingcaicompass.match.dto.MappingReviewDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewListQueryDto;
+import com.jingcaicompass.match.dto.MappingReviewMatchDetailQueryDto;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
 import com.jingcaicompass.match.service.MatchMappingReviewService;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
 import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
+import com.jingcaicompass.match.vo.MappingReviewMatchDetailVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.exception.ErrorCode;
 import com.jingcaicompass.system.exception.GlobalExceptionHandler;
@@ -93,7 +95,7 @@ class ProviderMappingReviewControllerTest {
                 List.of(new MappingReviewMatchListItemVo(match, List.of(
                         new MappingReviewMatchListItemVo.ExternalCandidateVo(
                                 1L, "THE_ODDS_API", "ext-1", "soccer_uefa_champs_league",
-                                "Kairat Almaty", "Omonia Nicosia", MappingStatusEnum.PENDING,
+                                "Kairat Almaty", "Omonia Nicosia", Instant.parse("2026-07-29T12:00:00Z"), MappingStatusEnum.PENDING,
                                 new BigDecimal("0.7000"), List.of("KICKOFF_TIME"), "PENDING",
                                 Instant.parse("2026-07-29T12:00:00Z")
                         )
@@ -108,8 +110,33 @@ class ProviderMappingReviewControllerTest {
                         .content(objectMapper.writeValueAsString(new MappingReviewListQueryDto(null, null, 1, 20))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.records[0].match.lotteryMatchNo").value("周三001"))
-                .andExpect(jsonPath("$.data.records[0].externalCandidates[0].externalHomeTeamName")
+                        .andExpect(jsonPath("$.data.records[0].externalCandidates[0].externalHomeTeamName")
                         .value("Kairat Almaty"));
+    }
+
+    @Test
+    void detailByMatchReturnsLotterySubjectAndExternalKickoff() throws Exception {
+        MappingReviewDetailVo.MatchBriefVo match = new MappingReviewDetailVo.MatchBriefVo(
+                10L, "周三001", java.time.LocalDate.of(2026, 7, 29), "欧冠",
+                "阿拉木图", "奥莫尼亚", Instant.parse("2026-07-29T12:00:00Z")
+        );
+        when(matchMappingReviewService.detailByMatch(any())).thenReturn(new MappingReviewMatchDetailVo(
+                match, List.of(new MappingReviewMatchListItemVo.ExternalCandidateVo(
+                        1L, "THE_ODDS_API", "ext-1", "soccer_uefa_champs_league",
+                        "Kairat Almaty", "Omonia Nicosia", Instant.parse("2026-07-29T12:05:00Z"),
+                        MappingStatusEnum.PENDING, new BigDecimal("0.7000"), List.of("KICKOFF_TIME"), "PENDING",
+                        Instant.parse("2026-07-29T12:00:00Z")
+                ))
+        ));
+
+        mockMvc.perform(post("/api/admin/provider/mappings/matches/detail")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new MappingReviewMatchDetailQueryDto(10L, "THE_ODDS_API", MappingStatusEnum.PENDING))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.match.lotteryMatchNo").value("周三001"))
+                .andExpect(jsonPath("$.data.externalCandidates[0].externalKickoffTime")
+                        .value("2026-07-29T12:05:00Z"));
     }
 
     @Test
@@ -124,6 +151,7 @@ class ProviderMappingReviewControllerTest {
                 null,
                 "Manchester United",
                 "Chelsea",
+                Instant.parse("2026-07-24T12:00:00Z"),
                 MappingStatusEnum.MANUAL_CONFIRMED,
                 new BigDecimal("0.7000"),
                 "MANUAL_REVIEW",
@@ -177,6 +205,7 @@ class ProviderMappingReviewControllerTest {
                 null,
                 "Manchester United",
                 "Chelsea",
+                Instant.parse("2026-07-24T12:00:00Z"),
                 MappingStatusEnum.PENDING,
                 new BigDecimal("0.5000"),
                 "SCORE_PENDING",

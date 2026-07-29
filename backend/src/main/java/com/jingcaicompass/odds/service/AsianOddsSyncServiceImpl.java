@@ -304,6 +304,8 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
                 matchOdds.providerLeagueId(),
                 externalHomeTeamId,
                 externalAwayTeamId,
+                matchOdds.homeTeamName(),
+                matchOdds.awayTeamName(),
                 null,
                 homeTeamId,
                 awayTeamId,

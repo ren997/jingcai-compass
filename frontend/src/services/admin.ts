@@ -249,6 +249,8 @@ export type MappingReviewDetail = {
   externalLeagueId: string | null;
   externalHomeTeamId: string | null;
   externalAwayTeamId: string | null;
+  externalHomeTeamName: string | null;
+  externalAwayTeamName: string | null;
   mappingStatus: MappingReviewStatus;
   mappingConfidence: number | null;
   mappingMethod: string | null;

@@ -293,6 +293,8 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                 mapping.getExternalLeagueId(),
                 mapping.getExternalHomeTeamId(),
                 mapping.getExternalAwayTeamId(),
+                mapping.getExternalHomeTeamName(),
+                mapping.getExternalAwayTeamName(),
                 mapping.getMappingStatus(),
                 mapping.getMappingConfidence(),
                 mapping.getMappingMethod(),

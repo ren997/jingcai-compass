@@ -518,6 +518,42 @@ describe('App routes', () => {
     expect(screen.getByRole('link', { name: '结算状态' })).toHaveAttribute('href', '/admin/settlements');
   });
 
+  it('shows readable The Odds API team names in protected mapping review', async () => {
+    setAdminSession({
+      accessToken: 'signed-jwt', tokenType: 'Bearer', expiresAt: '2099-01-01T00:00:00Z',
+      adminId: 7, username: 'operator', role: 'ADMIN',
+    });
+    vi.mocked(fetch).mockResolvedValue(apiResponse({
+      mappingId: 12,
+      matchId: 42,
+      providerCode: 'THE_ODDS_API',
+      externalMatchId: 'event-12',
+      externalLeagueId: 'soccer_epl',
+      externalHomeTeamId: 'NAME:home-hash',
+      externalAwayTeamId: 'NAME:away-hash',
+      externalHomeTeamName: 'Manchester United',
+      externalAwayTeamName: 'Chelsea',
+      mappingStatus: 'PENDING',
+      mappingConfidence: 0.5,
+      mappingMethod: 'SCORE_PENDING',
+      mappingExplanation: 'TIME_LE_180; PENDING',
+      candidates: [{
+        matchId: 42, score: 0.5, reasons: ['TIME_LE_180'], match: {
+          matchId: 42, lotteryMatchNo: '周三042', lotteryDate: '2026-07-22', leagueName: '英超',
+          homeTeamName: '曼彻斯特联', awayTeamName: '切尔西', kickoffTime: '2026-07-22T19:30:00+08:00',
+        },
+      }],
+      confirmedBy: null,
+      match: null,
+      updatedAt: '2026-07-22T10:00:00+08:00',
+    }));
+    renderApp('/admin/mappings/12');
+
+    expect(await screen.findByText('Manchester United')).toBeInTheDocument();
+    expect(screen.getByText('Chelsea')).toBeInTheDocument();
+    expect(screen.getByText(/稳定来源键：主队 NAME:home-hash/)).toBeInTheDocument();
+  });
+
   it('renders a stable 404 page for unmatched routes', async () => {
     renderApp('/missing-page');
 

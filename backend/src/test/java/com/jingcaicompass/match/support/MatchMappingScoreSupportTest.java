@@ -104,6 +104,8 @@ class MatchMappingScoreSupportTest {
                 "L1",
                 "H1",
                 "A1",
+                homeName,
+                awayName,
                 leagueId,
                 homeTeamId,
                 awayTeamId,

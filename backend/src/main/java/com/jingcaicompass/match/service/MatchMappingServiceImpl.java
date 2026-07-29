@@ -269,6 +269,8 @@ public class MatchMappingServiceImpl implements MatchMappingService {
             existing.setExternalLeagueId(request.externalLeagueId());
             existing.setExternalHomeTeamId(request.externalHomeTeamId());
             existing.setExternalAwayTeamId(request.externalAwayTeamId());
+            existing.setExternalHomeTeamName(request.externalHomeTeamName());
+            existing.setExternalAwayTeamName(request.externalAwayTeamName());
             existing.setMappingStatus(status);
             existing.setMappingConfidence(confidence);
             existing.setMappingMethod(method);
@@ -285,6 +287,8 @@ public class MatchMappingServiceImpl implements MatchMappingService {
         created.setExternalLeagueId(request.externalLeagueId());
         created.setExternalHomeTeamId(request.externalHomeTeamId());
         created.setExternalAwayTeamId(request.externalAwayTeamId());
+        created.setExternalHomeTeamName(request.externalHomeTeamName());
+        created.setExternalAwayTeamName(request.externalAwayTeamName());
         created.setMappingStatus(status);
         created.setMappingConfidence(confidence);
         created.setMappingMethod(method);

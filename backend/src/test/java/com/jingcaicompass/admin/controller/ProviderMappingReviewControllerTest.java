@@ -92,6 +92,8 @@ class ProviderMappingReviewControllerTest {
                 null,
                 null,
                 null,
+                "Manchester United",
+                "Chelsea",
                 MappingStatusEnum.MANUAL_CONFIRMED,
                 new BigDecimal("0.7000"),
                 "MANUAL_REVIEW",
@@ -143,6 +145,8 @@ class ProviderMappingReviewControllerTest {
                 null,
                 null,
                 null,
+                "Manchester United",
+                "Chelsea",
                 MappingStatusEnum.PENDING,
                 new BigDecimal("0.5000"),
                 "SCORE_PENDING",
@@ -157,6 +161,8 @@ class ProviderMappingReviewControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new MappingReviewDetailQueryDto(2L))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.mappingId").value(2));
+                .andExpect(jsonPath("$.data.mappingId").value(2))
+                .andExpect(jsonPath("$.data.externalHomeTeamName").value("Manchester United"))
+                .andExpect(jsonPath("$.data.externalAwayTeamName").value("Chelsea"));
     }
 }

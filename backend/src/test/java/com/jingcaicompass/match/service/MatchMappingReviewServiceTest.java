@@ -107,6 +107,8 @@ class MatchMappingReviewServiceTest {
         assertThat(detail.candidates()).hasSize(1);
         assertThat(detail.candidates().get(0).reasons()).contains("HOME_ID");
         assertThat(detail.candidates().get(0).match().homeTeamName()).isEqualTo("曼联");
+        assertThat(detail.externalHomeTeamName()).isEqualTo("Manchester United");
+        assertThat(detail.externalAwayTeamName()).isEqualTo("Chelsea");
     }
 
     @Test
@@ -261,6 +263,8 @@ class MatchMappingReviewServiceTest {
         mapping.setMatchId(matchId);
         mapping.setProviderCode("THE_ODDS_API");
         mapping.setExternalMatchId("ext-" + id);
+        mapping.setExternalHomeTeamName("Manchester United");
+        mapping.setExternalAwayTeamName("Chelsea");
         mapping.setMappingStatus(MappingStatusEnum.PENDING);
         mapping.setMappingConfidence(new BigDecimal("0.7000"));
         mapping.setMappingMethod("SCORE_PENDING");

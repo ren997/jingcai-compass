@@ -5,7 +5,7 @@
 - 文档版本：v0.4
 - 最后更新：2026-07-29
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无`
+- 当前活动任务：`T602 映射复核外部队名可读性修复`
 - 下一任务：`T106/T107 连续观测与 T108 数据源 Go / No-Go 决策`
 - 最近完成增量：`T602 公共导航后台登录入口补充`
 
@@ -1656,7 +1656,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T602 后台同步与映射复核页面
 
-- 状态：`DONE`
+- 状态：`IN_PROGRESS`
 - 优先级：P0
 - 依赖：T205、T502、T601
 - 交付物：
@@ -1669,6 +1669,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 原始响应只展示脱敏片段，不展示凭据、Cookie 或授权头。
   - [x] 编写权限、交互、冲突、错误和审计测试。
   - [x] 在公共导航提供受守卫的后台登录入口。
+  - [x] 为 The Odds API 映射复核返回可读的外部主客队名，并精确回填既有记录。
 - 验证命令：
 
   ```bash
@@ -1681,6 +1682,8 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 关键操作要求鉴权并写审计。
   - 不展示未脱敏的原始凭据。
 - 执行记录：
+  - 2026-07-29：开始映射复核可读队名修复。The Odds API 已解析 `home_team`/`away_team`，但同步把它们转换成 `NAME:<SHA-256>` 稳定键后，详情接口只返回该键，管理员无法核对英文队名。本次新增可读字段及受控回填：仅以 `THE_ODDS_API + external_match_id` 在已保存的亚盘原始响应中精确取出同一事件的主客队名；不展示原始 JSON、密钥、请求头或存储路径，不重新调用 Provider。计划执行后端/前端测试、`git diff --check`，并在 Draft PR 执行 PostgreSQL 16 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`。
+  - 2026-07-29：本地实现完成。V14 新增外部主/客队展示名，后续同步保留哈希稳定键给归一化服务，同时持久化原始英文展示名；后台详情返回并优先展示名称。已在本机配置的既有 PostgreSQL 16 数据库实际执行 V14：映射 #12 按 `THE_ODDS_API + ecdcdc8d31ce5829bc5ff0bc1023346e` 精确回填为 `ŠK Slovan Bratislava` vs `FC Iberia 1999`，未发起任何 Provider 请求。等待 Draft PR 的 PostgreSQL 16 空库 CI。
   - 2026-07-29：导航入口补充开始。用户确认公共首页顶部未显示后台入口；范围为在公共导航新增受守卫的“后台登录”链接并补充前端路由断言，不修改后台权限、接口、数据库或现有后台业务。计划执行 `cd frontend && npm run test && npm run build` 与 `git diff --check`。
   - 2026-07-29：完成公共导航“后台登录”入口，固定指向 `/admin/login`，保留既有 JWT 登录和路由守卫；未改后端、数据库或接口。
   - 2026-07-29：实现提交 `f841b2750732453b63e972eb884337bb70a7e194` 已推送至 `codex/t602-mapping-list-fix`。Draft [PR #18](https://github.com/ren997/jingcai-compass/pull/18) 的 [Actions #30434074735](https://github.com/ren997/jingcai-compass/actions/runs/30434074735) 在 Ubuntu Runner、Temurin Java 21 与 PostgreSQL 16 集成环境中成功执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`；持久化服务/无数据源占位装配回归和映射列表真实记录一致性均已验证。本次无 migration、无 Provider 调用、无真实映射写入；M6 仍为 `PARTIAL`，下一任务为 T106/T107 连续观测与 T108 Go / No-Go。
@@ -1691,6 +1694,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-28：实现提交 `f1b93513ae6b3016881f132eaf82dfae8fc42389` 已推送至 `codex/t602-admin-operations`，Draft [PR #17](https://github.com/ren997/jingcai-compass/pull/17) 的 [Actions #30348717331](https://github.com/ren997/jingcai-compass/actions/runs/30348717331) 通过，待本次任务板提交的最终检查通过后合并。
 
 - 验证记录：
+  - 2026-07-29：本地 `npm run backend:test` 通过 412 项；`cd frontend && npm run test` 通过 11 个文件/55 项；`npm run build` 通过；`git diff --check` 通过。独立后端重启后，Flyway 成功从 V13 迁移到 V14，`http://127.0.0.1:8081/actuator/health` 为 `UP`；尚待 Draft PR PostgreSQL 16 集成验证。
   - 2026-07-29：`cd frontend && npm run test` 通过（11 个文件、54 项）；`npm run build` 通过；`git diff --check` 通过。
   - 2026-07-29：Draft PR #18 的 Actions #30434074735 成功：Ubuntu Runner、Temurin Java 21、PostgreSQL 16 上的 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过；本地后端、前端和真实只读列表验收同样通过。
   - 2026-07-29：回归修复本地检查通过：`npm run backend:test`、前端 Vitest 11 个文件/54 项、前端生产构建和 `git diff --check` 均成功；真实本地后端实例的管理员映射列表由 0 条恢复为 12 条，等待 PostgreSQL 16 CI。

@@ -10,6 +10,8 @@ import java.time.Instant;
  * @param externalLeagueId 供应商侧联赛 ID，可空
  * @param externalHomeTeamId 供应商侧主队 ID，可空
  * @param externalAwayTeamId 供应商侧客队 ID，可空
+ * @param externalHomeTeamName 供应商侧主队展示名，可空
+ * @param externalAwayTeamName 供应商侧客队展示名，可空
  * @param leagueId 已解析标准联赛 ID，可空
  * @param homeTeamId 已解析标准主队 ID，可空
  * @param awayTeamId 已解析标准客队 ID，可空
@@ -24,6 +26,8 @@ public record MatchMapRequestDto(
         String externalLeagueId,
         String externalHomeTeamId,
         String externalAwayTeamId,
+        String externalHomeTeamName,
+        String externalAwayTeamName,
         Long leagueId,
         Long homeTeamId,
         Long awayTeamId,

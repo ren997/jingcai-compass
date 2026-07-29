@@ -89,6 +89,8 @@ class MatchMappingServiceTest {
         verify(matchSourceMappingMapper).insert(captor.capture());
         assertThat(captor.getValue().getMappingExplanation()).contains("HOME_ID");
         assertThat(captor.getValue().getMappingCandidates()).isNotEmpty();
+        assertThat(captor.getValue().getExternalHomeTeamName()).isEqualTo("Manchester United");
+        assertThat(captor.getValue().getExternalAwayTeamName()).isEqualTo("Chelsea");
     }
 
     @Test
@@ -183,6 +185,8 @@ class MatchMappingServiceTest {
         assertThat(result.mappingId()).isEqualTo(55L);
         verify(matchSourceMappingMapper, never()).insert(any(MatchSourceMapping.class));
         verify(matchSourceMappingMapper, times(1)).updateById(any(MatchSourceMapping.class));
+        assertThat(pending.getExternalHomeTeamName()).isEqualTo("Manchester United");
+        assertThat(pending.getExternalAwayTeamName()).isEqualTo("Chelsea");
     }
 
     @Test
@@ -212,6 +216,8 @@ class MatchMappingServiceTest {
                 "L1",
                 "H1",
                 "A1",
+                homeTeamId != null && homeTeamId == 30L ? "Chelsea" : "Manchester United",
+                awayTeamId != null && awayTeamId == 20L ? "Manchester United" : "Chelsea",
                 leagueId,
                 homeTeamId,
                 awayTeamId,

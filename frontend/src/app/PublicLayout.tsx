@@ -13,6 +13,7 @@ export default function PublicLayout() {
           <NavLink to="/matches">每日比赛</NavLink>
           <NavLink to="/history">预测历史</NavLink>
           <NavLink to="/statistics">表现统计</NavLink>
+          <NavLink to="/admin/login">后台登录</NavLink>
         </nav>
       </header>
       <Outlet />

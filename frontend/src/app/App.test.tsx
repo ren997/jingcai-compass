@@ -257,6 +257,7 @@ describe('App routes', () => {
     expect(await screen.findByRole('heading', { name: '公开事实，持续检验每一场预测' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '竞彩罗盘' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '首页' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: '后台登录' })).toHaveAttribute('href', '/admin/login');
     expect(await screen.findByRole('link', { name: '查看每日比赛' })).toHaveAttribute('href', '/matches');
     expect(window.location.pathname).toBe('/');
     expect(vi.mocked(fetch)).toHaveBeenCalledWith('/api/public/home/summary', expect.objectContaining({ method: 'GET' }));

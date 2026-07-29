@@ -5,9 +5,9 @@
 - 文档版本：v0.4
 - 最后更新：2026-07-29
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无（T602 后台映射待复核列表回归修复已完成，等待 T106/T107 连续观测授权）`
+- 当前活动任务：`无`
 - 下一任务：`T106/T107 连续观测与 T108 数据源 Go / No-Go 决策`
-- 最近完成增量：`T602 后台映射待复核列表回归修复`
+- 最近完成增量：`T602 公共导航后台登录入口补充`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -1668,6 +1668,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 关键操作增加二次确认、权限校验和追加式审计。
   - [x] 原始响应只展示脱敏片段，不展示凭据、Cookie 或授权头。
   - [x] 编写权限、交互、冲突、错误和审计测试。
+  - [x] 在公共导航提供受守卫的后台登录入口。
 - 验证命令：
 
   ```bash
@@ -1680,6 +1681,8 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 关键操作要求鉴权并写审计。
   - 不展示未脱敏的原始凭据。
 - 执行记录：
+  - 2026-07-29：导航入口补充开始。用户确认公共首页顶部未显示后台入口；范围为在公共导航新增受守卫的“后台登录”链接并补充前端路由断言，不修改后台权限、接口、数据库或现有后台业务。计划执行 `cd frontend && npm run test && npm run build` 与 `git diff --check`。
+  - 2026-07-29：完成公共导航“后台登录”入口，固定指向 `/admin/login`，保留既有 JWT 登录和路由守卫；未改后端、数据库或接口。
   - 2026-07-29：实现提交 `f841b2750732453b63e972eb884337bb70a7e194` 已推送至 `codex/t602-mapping-list-fix`。Draft [PR #18](https://github.com/ren997/jingcai-compass/pull/18) 的 [Actions #30434074735](https://github.com/ren997/jingcai-compass/actions/runs/30434074735) 在 Ubuntu Runner、Temurin Java 21 与 PostgreSQL 16 集成环境中成功执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`；持久化服务/无数据源占位装配回归和映射列表真实记录一致性均已验证。本次无 migration、无 Provider 调用、无真实映射写入；M6 仍为 `PARTIAL`，下一任务为 T106/T107 连续观测与 T108 Go / No-Go。
   - 2026-07-29：本地修复完成，根因是组件扫描阶段的 `NoOpMatchMappingReviewService` 会在 DataSource 完成自动配置前错误命中，遮蔽持久化服务；同时移除后台同步/预测状态 fallback 对 MyBatis Mapper 的时序条件。无 DataSource 场景改由 `NoPersistenceAdminAutoConfiguration` 显式提供同一占位实现。以真实本地库验证 `match_source_mappings` 的 12 条 `THE_ODDS_API/PENDING` 记录和受保护列表接口均返回 12 条；未确认、拒绝或修改任何真实映射。后端服务可正常启动。`npm run backend:test`、`cd frontend && npm run test && npm run build`、`git diff --check` 均通过，等待本修复分支的 PostgreSQL 16 CI。
   - 2026-07-29：回归修复开始。真实 The Odds 冒烟后，公开比赛详情可读到 `PENDING` 的 `match_source_mappings`，但管理员 `/api/admin/provider/mappings/list` 返回 0 条。范围限于定位并修复后台复核列表与同一持久化映射事实不一致的问题，补充回归测试并用本机真实记录验证；不确认、不拒绝或修改任何真实映射，不改 migration、Provider 或前端业务范围。计划执行 `npm run backend:test`、`cd frontend && npm run test && npm run build`、`git diff --check`，并在 Draft PR 使用 PostgreSQL 16 集成验证。
@@ -1688,6 +1691,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-28：实现提交 `f1b93513ae6b3016881f132eaf82dfae8fc42389` 已推送至 `codex/t602-admin-operations`，Draft [PR #17](https://github.com/ren997/jingcai-compass/pull/17) 的 [Actions #30348717331](https://github.com/ren997/jingcai-compass/actions/runs/30348717331) 通过，待本次任务板提交的最终检查通过后合并。
 
 - 验证记录：
+  - 2026-07-29：`cd frontend && npm run test` 通过（11 个文件、54 项）；`npm run build` 通过；`git diff --check` 通过。
   - 2026-07-29：Draft PR #18 的 Actions #30434074735 成功：Ubuntu Runner、Temurin Java 21、PostgreSQL 16 上的 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过；本地后端、前端和真实只读列表验收同样通过。
   - 2026-07-29：回归修复本地检查通过：`npm run backend:test`、前端 Vitest 11 个文件/54 项、前端生产构建和 `git diff --check` 均成功；真实本地后端实例的管理员映射列表由 0 条恢复为 12 条，等待 PostgreSQL 16 CI。
   - 2026-07-28：本地 `npm run backend:test` 通过（380 项）；`cd frontend && npm run test` 通过（10 个测试文件、49 项）；`cd frontend && npm run build` 通过；`git diff --check` 通过。CI 中仍需执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`，通过前任务保持 `IN_PROGRESS`。
@@ -1947,6 +1951,7 @@ T000 -> T403（已完成）
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-07-29 | T602 | `IN_PROGRESS -> DONE` | 公共导航新增“后台登录”，指向受守卫的 `/admin/login`；前端 Vitest 11 个文件/54 项、生产构建与差异格式检查通过。 |
 | 2026-07-29 | T602 / `f841b27` | `IN_PROGRESS -> DONE` | 修复组件扫描过早选中无数据源映射占位服务导致后台待复核列表为 0 的回归；真实本地库的 12 条 `THE_ODDS_API/PENDING` 记录与受保护 API 一致，后端测试、前端 54 项、生产构建与差异格式检查通过；[PR #18](https://github.com/ren997/jingcai-compass/pull/18) 的 [Actions #30434074735](https://github.com/ren997/jingcai-compass/actions/runs/30434074735) 在 Java 21、PostgreSQL 16 上通过。 |
 | 2026-07-29 | T107 | `IN_PROGRESS -> PARTIAL` | 本机受控真实冒烟完成：项目从未版本化 local profile 读取凭据；体彩池成功入库 6 场，The Odds 成功运行 ID 4 解析 12 条赛事、实际 2 credits、精确关联载荷 SHA-256 已记入 `data-sources.md`。修复 Duration 调度解析、后台持久化查询装配与 UTC 时间参数；队名映射仍待复核、未写亚洲盘快照，连续 14 天和书面授权尚未开始，因此 T108 仍为 No-Go、T604 继续阻塞。 |
 | 2026-07-29 | T106/T107 | `T107 DONE -> PARTIAL` | 恢复证据任务：完成 The Odds API `apiKey` 查询认证、受控多 sport key 原始载荷、严格 spreads 配对、联赛映射未覆盖计数、实际 credits 与 400 credits 验证期预检门禁；真实中国大陆节点、Key、14 天观测和书面许可仍缺失，因此 T106/T107 不得标记 `MONITORING/DONE`，当前结论 `NO-GO`，T604 被 T108 阻塞。 |

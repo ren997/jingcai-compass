@@ -7,10 +7,13 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.admin.mapper.AdminAccountMapper;
+import com.jingcaicompass.admin.mapper.AdminPredictionStatusMapper;
 import com.jingcaicompass.admin.service.AdminAccountBootstrapRunner;
 import com.jingcaicompass.admin.service.AdminAccountCredentialValidator;
 import com.jingcaicompass.admin.service.AdminAccountTokenValidator;
 import com.jingcaicompass.admin.service.AdminAuthService;
+import com.jingcaicompass.admin.service.AdminPredictionStatusQueryService;
+import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
 import com.jingcaicompass.audit.service.AuditLogService;
 import com.jingcaicompass.data.job.DataPipelineSyncJob;
@@ -36,9 +39,11 @@ import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import com.jingcaicompass.match.mapper.TeamAliasMapper;
 import com.jingcaicompass.match.mapper.TeamMapper;
 import com.jingcaicompass.match.service.MatchNormalizationBackfillService;
+import com.jingcaicompass.match.service.MatchMappingReviewService;
 import com.jingcaicompass.match.service.MatchResultSyncService;
 import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
+import com.jingcaicompass.match.client.SportteryProviderProperties;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.job.AsianOddsSyncJob;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
@@ -83,6 +88,7 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(SportteryPoolPayloadMapper.class, () -> new SportteryPoolPayloadMapper(new ObjectMapper()))
             .withBean(AsianOddsPayloadMapper.class, () -> new AsianOddsPayloadMapper(new ObjectMapper()))
             .withBean(SportteryProvider.class, () -> mock(SportteryProvider.class))
+            .withBean(SportteryProviderProperties.class, () -> mock(SportteryProviderProperties.class))
             .withBean(AsianOddsProvider.class, () -> mock(AsianOddsProvider.class))
             .withBean(
                     AsianOddsProviderProperties.class,
@@ -95,6 +101,7 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(PaginationProperties.class, () -> new PaginationProperties(100))
             .withBean(SimpleMeterRegistry.class, SimpleMeterRegistry::new)
             .withBean(AdminAccountMapper.class, PersistenceServicesAutoConfigurationTest::existingAdminMapper)
+            .withBean(AdminPredictionStatusMapper.class, () -> mock(AdminPredictionStatusMapper.class))
             .withBean(AuditLogMapper.class, () -> mock(AuditLogMapper.class))
             .withBean(DataProviderMapper.class, () -> mock(DataProviderMapper.class))
             .withBean(DataSyncRunMapper.class, () -> mock(DataSyncRunMapper.class))
@@ -161,6 +168,9 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(AdminAuthService.class);
                     assertThat(context).hasSingleBean(AdminAccountTokenValidator.class);
                     assertThat(context).hasSingleBean(AdminAccountBootstrapRunner.class);
+                    assertThat(context).hasSingleBean(AdminPredictionStatusQueryService.class);
+                    assertThat(context).hasSingleBean(AdminSyncRunQueryService.class);
+                    assertThat(context).hasSingleBean(MatchMappingReviewService.class);
                     assertThat(context).doesNotHaveBean(DataPipelineSyncJob.class);
                     assertThat(context).doesNotHaveBean(PredictionLockJob.class);
                     assertThat(context).doesNotHaveBean(SnapshotPublishJob.class);

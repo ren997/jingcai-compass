@@ -11,16 +11,10 @@ import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
 import java.util.List;
-import javax.sql.DataSource;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.stereotype.Service;
 
 /**
- * 无 DataSource 时的占位实现，保证 admin Controller 在排除数据源的 test profile 下可装配。
- * 使用 MissingBean(DataSource) 而非 MissingBean(接口)，避免与未生效的 Impl 定义互相挤掉。
+ * 无 DataSource 时的占位实现，由 NoPersistenceAdminAutoConfiguration 显式装配。
  */
-@Service
-@ConditionalOnMissingBean(DataSource.class)
 public class NoOpMatchMappingReviewService implements MatchMappingReviewService {
 
     @Override

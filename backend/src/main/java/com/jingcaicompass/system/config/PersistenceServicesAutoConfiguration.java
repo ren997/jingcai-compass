@@ -502,12 +502,6 @@ public class PersistenceServicesAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(AdminSyncRunQueryService.class)
-    @ConditionalOnBean({
-            DataSyncRunMapper.class,
-            RawDataPayloadMapper.class,
-            SportteryProviderProperties.class,
-            AsianOddsProviderProperties.class
-    })
     AdminSyncRunQueryService adminSyncRunQueryService(
             DataSyncRunMapper dataSyncRunMapper,
             RawDataPayloadMapper rawDataPayloadMapper,
@@ -530,7 +524,6 @@ public class PersistenceServicesAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(AdminPredictionStatusQueryService.class)
-    @ConditionalOnBean(AdminPredictionStatusMapper.class)
     AdminPredictionStatusQueryService adminPredictionStatusQueryService(
             AdminPredictionStatusMapper adminPredictionStatusMapper,
             HistoryRecordAssembler historyRecordAssembler,

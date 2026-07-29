@@ -4,6 +4,8 @@ import com.jingcaicompass.admin.service.AdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
 import com.jingcaicompass.admin.service.NoOpAdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.NoOpAdminSyncRunQueryService;
+import com.jingcaicompass.match.service.MatchMappingReviewService;
+import com.jingcaicompass.match.service.NoOpMatchMappingReviewService;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -24,5 +26,11 @@ public class NoPersistenceAdminAutoConfiguration {
     @ConditionalOnMissingBean(AdminPredictionStatusQueryService.class)
     AdminPredictionStatusQueryService unavailableAdminPredictionStatusQueryService() {
         return new NoOpAdminPredictionStatusQueryService();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(MatchMappingReviewService.class)
+    MatchMappingReviewService unavailableMatchMappingReviewService() {
+        return new NoOpMatchMappingReviewService();
     }
 }

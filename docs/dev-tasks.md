@@ -5,7 +5,7 @@
 - 文档版本：v0.4
 - 最后更新：2026-07-29
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无（T107 本地受控真实数据冒烟已完成，等待连续观测授权）`
+- 当前活动任务：`T602 后台映射待复核列表回归修复`
 - 下一任务：`T106/T107 连续观测与 T108 数据源 Go / No-Go 决策`
 - 最近完成增量：`T107 本地真实数据冒烟与配置/调度修复`
 
@@ -1656,7 +1656,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T602 后台同步与映射复核页面
 
-- 状态：`DONE`
+- 状态：`IN_PROGRESS`
 - 优先级：P0
 - 依赖：T205、T502、T601
 - 交付物：
@@ -1680,11 +1680,14 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 关键操作要求鉴权并写审计。
   - 不展示未脱敏的原始凭据。
 - 执行记录：
+  - 2026-07-29：本地修复完成，根因是组件扫描阶段的 `NoOpMatchMappingReviewService` 会在 DataSource 完成自动配置前错误命中，遮蔽持久化服务；同时移除后台同步/预测状态 fallback 对 MyBatis Mapper 的时序条件。无 DataSource 场景改由 `NoPersistenceAdminAutoConfiguration` 显式提供同一占位实现。以真实本地库验证 `match_source_mappings` 的 12 条 `THE_ODDS_API/PENDING` 记录和受保护列表接口均返回 12 条；未确认、拒绝或修改任何真实映射。后端服务可正常启动。`npm run backend:test`、`cd frontend && npm run test && npm run build`、`git diff --check` 均通过，等待本修复分支的 PostgreSQL 16 CI。
+  - 2026-07-29：回归修复开始。真实 The Odds 冒烟后，公开比赛详情可读到 `PENDING` 的 `match_source_mappings`，但管理员 `/api/admin/provider/mappings/list` 返回 0 条。范围限于定位并修复后台复核列表与同一持久化映射事实不一致的问题，补充回归测试并用本机真实记录验证；不确认、不拒绝或修改任何真实映射，不改 migration、Provider 或前端业务范围。计划执行 `npm run backend:test`、`cd frontend && npm run test && npm run build`、`git diff --check`，并在 Draft PR 使用 PostgreSQL 16 集成验证。
   - 2026-07-28：开始；范围为 V13 同步运行—原始载荷精确关联、受 JWT 保护的同步运行/错误/额度查询、递归脱敏片段、候选比赛对比与仅候选确认，以及后台懒加载页面和交互。验证计划：`npm run backend:test`、`cd frontend && npm run test && npm run build`、`git diff --check`、`mvn -B -ntp -f backend/pom.xml -Pintegration verify`。
   - 2026-07-28：本地实现完成，V13 只建立精确运行—载荷关联且不回填历史；后台 API 不调用 Provider，前端操作均经 Bearer 请求与二次确认。修正无法安全解析的嵌套 JSON 不回显后，等待 Draft PR 的 PostgreSQL 16 集成验证。
   - 2026-07-28：实现提交 `f1b93513ae6b3016881f132eaf82dfae8fc42389` 已推送至 `codex/t602-admin-operations`，Draft [PR #17](https://github.com/ren997/jingcai-compass/pull/17) 的 [Actions #30348717331](https://github.com/ren997/jingcai-compass/actions/runs/30348717331) 通过，待本次任务板提交的最终检查通过后合并。
 
 - 验证记录：
+  - 2026-07-29：回归修复本地检查通过：`npm run backend:test`、前端 Vitest 11 个文件/54 项、前端生产构建和 `git diff --check` 均成功；真实本地后端实例的管理员映射列表由 0 条恢复为 12 条，等待 PostgreSQL 16 CI。
   - 2026-07-28：本地 `npm run backend:test` 通过（380 项）；`cd frontend && npm run test` 通过（10 个测试文件、49 项）；`cd frontend && npm run build` 通过；`git diff --check` 通过。CI 中仍需执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`，通过前任务保持 `IN_PROGRESS`。
   - 2026-07-28：GitHub Actions 在 Ubuntu Runner、Temurin Java 21、`postgres:16-alpine`（PostgreSQL 16.14）执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过：380 个普通测试与 41 个 PostgreSQL 集成测试全部成功。V13 空库迁移、去重载荷关联多次运行、后台 JWT/脱敏/额度与映射候选限制均覆盖；M6 保持 `PARTIAL`，下一任务 T603。
 

@@ -41,8 +41,8 @@ public class SnapshotPublishJob {
     }
 
     @Scheduled(
-            fixedDelayString = "${app.tasks.snapshot-publish.fixed-delay}",
-            initialDelayString = "${app.tasks.snapshot-publish.initial-delay}"
+            fixedDelayString = "#{@syncTaskSchedule.snapshotPublishFixedDelayMillis()}",
+            initialDelayString = "#{@syncTaskSchedule.snapshotPublishInitialDelayMillis()}"
     )
     public void publishCurrentBusinessDate() {
         JobMetrics.JobExecution execution = jobMetrics.start("snapshot_publish");

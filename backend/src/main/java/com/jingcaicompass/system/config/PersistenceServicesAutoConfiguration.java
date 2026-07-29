@@ -9,7 +9,12 @@ import com.jingcaicompass.admin.service.AdminAuthService;
 import com.jingcaicompass.admin.service.AdminAuthServiceImpl;
 import com.jingcaicompass.admin.service.AdminJwtService;
 import com.jingcaicompass.admin.service.AdminLoginAttemptWriter;
+import com.jingcaicompass.admin.service.AdminPredictionStatusQueryService;
+import com.jingcaicompass.admin.service.AdminPredictionStatusQueryServiceImpl;
+import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
+import com.jingcaicompass.admin.service.AdminSyncRunQueryServiceImpl;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
+import com.jingcaicompass.admin.mapper.AdminPredictionStatusMapper;
 import com.jingcaicompass.audit.service.AuditLogService;
 import com.jingcaicompass.audit.service.AuditLogServiceImpl;
 import com.jingcaicompass.data.job.DataPipelineSyncJob;
@@ -36,6 +41,7 @@ import com.jingcaicompass.home.service.HomeSummaryQueryService;
 import com.jingcaicompass.home.service.HomeSummaryQueryServiceImpl;
 import com.jingcaicompass.match.job.SportteryPoolSyncJob;
 import com.jingcaicompass.match.job.MatchResultSyncJob;
+import com.jingcaicompass.match.client.SportteryProviderProperties;
 import com.jingcaicompass.match.mapper.LeagueAliasMapper;
 import com.jingcaicompass.match.mapper.LeagueMapper;
 import com.jingcaicompass.match.mapper.MatchMapper;
@@ -491,6 +497,47 @@ public class PersistenceServicesAutoConfiguration {
     ) {
         return new ProviderSyncTemplate(
                 dataSyncRunService, rawDataPayloadService, dataSyncRunPayloadLinkService, syncMetrics, sanitizer
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(AdminSyncRunQueryService.class)
+    @ConditionalOnBean({
+            DataSyncRunMapper.class,
+            RawDataPayloadMapper.class,
+            SportteryProviderProperties.class,
+            AsianOddsProviderProperties.class
+    })
+    AdminSyncRunQueryService adminSyncRunQueryService(
+            DataSyncRunMapper dataSyncRunMapper,
+            RawDataPayloadMapper rawDataPayloadMapper,
+            PaginationProperties paginationProperties,
+            SportteryProviderProperties sportteryProperties,
+            AsianOddsProviderProperties asianOddsProperties,
+            SensitiveDataSanitizer sanitizer,
+            Clock predictionImportClock
+    ) {
+        return new AdminSyncRunQueryServiceImpl(
+                dataSyncRunMapper,
+                rawDataPayloadMapper,
+                paginationProperties,
+                sportteryProperties,
+                asianOddsProperties,
+                sanitizer,
+                predictionImportClock
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(AdminPredictionStatusQueryService.class)
+    @ConditionalOnBean(AdminPredictionStatusMapper.class)
+    AdminPredictionStatusQueryService adminPredictionStatusQueryService(
+            AdminPredictionStatusMapper adminPredictionStatusMapper,
+            HistoryRecordAssembler historyRecordAssembler,
+            PaginationProperties paginationProperties
+    ) {
+        return new AdminPredictionStatusQueryServiceImpl(
+                adminPredictionStatusMapper, historyRecordAssembler, paginationProperties
         );
     }
 

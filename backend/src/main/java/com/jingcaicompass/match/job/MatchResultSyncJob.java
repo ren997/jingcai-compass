@@ -47,8 +47,8 @@ public class MatchResultSyncJob {
     }
 
     @Scheduled(
-            fixedDelayString = "${app.tasks.match-result.fixed-delay}",
-            initialDelayString = "${app.tasks.match-result.initial-delay}"
+            fixedDelayString = "#{@syncTaskSchedule.matchResultFixedDelayMillis()}",
+            initialDelayString = "#{@syncTaskSchedule.matchResultInitialDelayMillis()}"
     )
     public void syncRecentResults() {
         JobMetrics.JobExecution execution = jobMetrics.start("match_result_sync");

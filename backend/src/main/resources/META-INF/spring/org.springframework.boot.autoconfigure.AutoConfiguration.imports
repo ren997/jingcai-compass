@@ -1,2 +1,3 @@
 com.jingcaicompass.system.config.PersistenceServicesAutoConfiguration
 com.jingcaicompass.system.config.NoPersistenceHistoryStatisticsAutoConfiguration
+com.jingcaicompass.system.config.NoPersistenceAdminAutoConfiguration

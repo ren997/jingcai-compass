@@ -21,7 +21,6 @@ import com.jingcaicompass.system.provider.ProviderRetryPolicy;
 import com.jingcaicompass.system.provider.ProviderException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -199,10 +198,10 @@ public class TheOddsApiProvider implements AsianOddsProvider {
                 .queryParam("dateFormat", "iso")
                 .queryParam(API_KEY_PARAMETER, properties.apiKey());
         if (query.kickoffFrom() != null) {
-            builder.queryParam("commenceTimeFrom", query.kickoffFrom().withOffsetSameInstant(ZoneOffset.UTC));
+            builder.queryParam("commenceTimeFrom", query.kickoffFrom().toInstant().toString());
         }
         if (query.kickoffTo() != null) {
-            builder.queryParam("commenceTimeTo", query.kickoffTo().withOffsetSameInstant(ZoneOffset.UTC));
+            builder.queryParam("commenceTimeTo", query.kickoffTo().toInstant().toString());
         }
         return builder.buildAndExpand(sportKey).encode().toUriString();
     }

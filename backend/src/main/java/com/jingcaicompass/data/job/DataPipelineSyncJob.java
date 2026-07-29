@@ -35,8 +35,8 @@ public class DataPipelineSyncJob {
     }
 
     @Scheduled(
-            fixedDelayString = "${app.tasks.data-pipeline.fixed-delay}",
-            initialDelayString = "${app.tasks.data-pipeline.initial-delay}"
+            fixedDelayString = "#{@syncTaskSchedule.dataPipelineFixedDelayMillis()}",
+            initialDelayString = "#{@syncTaskSchedule.dataPipelineInitialDelayMillis()}"
     )
     public void syncTodayPipeline() {
         JobMetrics.JobExecution execution = jobMetrics.start("data_pipeline_sync");

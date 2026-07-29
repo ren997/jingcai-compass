@@ -11,13 +11,8 @@ import com.jingcaicompass.admin.vo.AdminSyncRunQuotaSummaryVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
-import javax.sql.DataSource;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.stereotype.Service;
 
 /** 无数据库时保持后台观测接口可装配，并返回统一数据源不可用错误。 */
-@Service
-@ConditionalOnMissingBean(DataSource.class)
 public class NoOpAdminSyncRunQueryService implements AdminSyncRunQueryService {
 
     @Override

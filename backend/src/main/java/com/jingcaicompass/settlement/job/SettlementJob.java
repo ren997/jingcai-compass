@@ -37,8 +37,8 @@ public class SettlementJob {
     }
 
     @Scheduled(
-            fixedDelayString = "${app.tasks.settlement.fixed-delay}",
-            initialDelayString = "${app.tasks.settlement.initial-delay}"
+            fixedDelayString = "#{@syncTaskSchedule.settlementFixedDelayMillis()}",
+            initialDelayString = "#{@syncTaskSchedule.settlementInitialDelayMillis()}"
     )
     public void settlePendingPredictions() {
         JobMetrics.JobExecution execution = jobMetrics.start("settlement");

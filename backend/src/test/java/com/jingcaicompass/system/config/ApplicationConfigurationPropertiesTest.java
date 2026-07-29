@@ -122,6 +122,17 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(tasks.settlement().initialDelay()).isEqualTo(Duration.ofSeconds(75));
             assertThat(tasks.settlement().batchSize()).isEqualTo(100);
 
+            SyncTaskSchedule schedule = new SyncTaskSchedule(tasks);
+            assertThat(schedule.sportteryPoolFixedDelayMillis()).isEqualTo(900_000L);
+            assertThat(schedule.sportteryPoolInitialDelayMillis()).isEqualTo(30_000L);
+            assertThat(schedule.matchResultInitialDelayMillis()).isEqualTo(60_000L);
+            assertThat(schedule.asianOddsFixedDelayMillis()).isEqualTo(1_200_000L);
+            assertThat(schedule.asianOddsInitialDelayMillis()).isEqualTo(45_000L);
+            assertThat(schedule.dataPipelineInitialDelayMillis()).isEqualTo(45_000L);
+            assertThat(schedule.predictionLockInitialDelayMillis()).isEqualTo(15_000L);
+            assertThat(schedule.snapshotPublishInitialDelayMillis()).isEqualTo(60_000L);
+            assertThat(schedule.settlementInitialDelayMillis()).isEqualTo(75_000L);
+
             SnapshotStorageProperties storage =
                     context.getBean(SnapshotStorageProperties.class);
             assertThat(storage.type()).isEqualTo(SnapshotStorageTypeEnum.LOCAL);

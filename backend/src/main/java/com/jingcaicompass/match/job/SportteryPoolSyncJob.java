@@ -39,8 +39,8 @@ public class SportteryPoolSyncJob {
     }
 
     @Scheduled(
-            fixedDelayString = "${app.tasks.sporttery-pool.fixed-delay}",
-            initialDelayString = "${app.tasks.sporttery-pool.initial-delay}"
+            fixedDelayString = "#{@syncTaskSchedule.sportteryPoolFixedDelayMillis()}",
+            initialDelayString = "#{@syncTaskSchedule.sportteryPoolInitialDelayMillis()}"
     )
     public void syncTodayPool() {
         JobMetrics.JobExecution execution = jobMetrics.start("sporttery_pool_sync");

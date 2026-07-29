@@ -104,6 +104,10 @@ class TheOddsApiProviderTest {
         assertThat(request.getRequestUrl().queryParameter("apiKey")).isEqualTo("odds-api-secret");
         assertThat(request.getRequestUrl().queryParameter("regions")).isEqualTo("eu");
         assertThat(request.getRequestUrl().queryParameter("markets")).isEqualTo("spreads");
+        assertThat(request.getRequestUrl().queryParameter("commenceTimeFrom"))
+                .isEqualTo("2026-08-01T00:00:00Z");
+        assertThat(request.getRequestUrl().queryParameter("commenceTimeTo"))
+                .isEqualTo("2026-08-02T00:00:00Z");
         assertThat(request.getHeader(HttpHeaders.AUTHORIZATION)).isNull();
     }
 

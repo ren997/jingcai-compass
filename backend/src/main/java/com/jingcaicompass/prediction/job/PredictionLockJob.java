@@ -31,8 +31,8 @@ public class PredictionLockJob {
     }
 
     @Scheduled(
-            fixedDelayString = "${app.tasks.prediction-lock.fixed-delay}",
-            initialDelayString = "${app.tasks.prediction-lock.initial-delay}"
+            fixedDelayString = "#{@syncTaskSchedule.predictionLockFixedDelayMillis()}",
+            initialDelayString = "#{@syncTaskSchedule.predictionLockInitialDelayMillis()}"
     )
     public void lockDuePredictions() {
         JobMetrics.JobExecution execution = jobMetrics.start("prediction_lock");

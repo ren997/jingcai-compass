@@ -36,8 +36,8 @@ public class AsianOddsSyncJob {
     }
 
     @Scheduled(
-            fixedDelayString = "${app.tasks.asian-odds.fixed-delay}",
-            initialDelayString = "${app.tasks.asian-odds.initial-delay}"
+            fixedDelayString = "#{@syncTaskSchedule.asianOddsFixedDelayMillis()}",
+            initialDelayString = "#{@syncTaskSchedule.asianOddsInitialDelayMillis()}"
     )
     public void syncTodayAsianOdds() {
         JobMetrics.JobExecution execution = jobMetrics.start("asian_odds_sync");

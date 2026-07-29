@@ -17,10 +17,17 @@ server:
   forward-headers-strategy: framework
 
 management:
+  server:
+    address: ${MANAGEMENT_BIND_ADDRESS:127.0.0.1}
+    port: ${MANAGEMENT_PORT:8081}
+  prometheus:
+    metrics:
+      export:
+        enabled: true
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
   endpoint:
     health:
       show-details: never

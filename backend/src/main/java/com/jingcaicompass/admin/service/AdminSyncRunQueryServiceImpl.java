@@ -18,6 +18,7 @@ import com.jingcaicompass.data.enums.ProviderDataTypeEnum;
 import com.jingcaicompass.data.enums.SyncStatusEnum;
 import com.jingcaicompass.data.mapper.DataSyncRunMapper;
 import com.jingcaicompass.data.mapper.RawDataPayloadMapper;
+import com.jingcaicompass.system.observability.SensitiveDataSanitizer;
 import com.jingcaicompass.match.client.SportteryProviderProperties;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.system.api.PageResult;
@@ -51,7 +52,7 @@ public class AdminSyncRunQueryServiceImpl implements AdminSyncRunQueryService {
     private final PaginationProperties paginationProperties;
     private final SportteryProviderProperties sportteryProperties;
     private final AsianOddsProviderProperties asianOddsProperties;
-    private final AdminSensitiveDataSanitizer sanitizer;
+    private final SensitiveDataSanitizer sanitizer;
     private final Clock clock;
 
     public AdminSyncRunQueryServiceImpl(
@@ -60,7 +61,7 @@ public class AdminSyncRunQueryServiceImpl implements AdminSyncRunQueryService {
             PaginationProperties paginationProperties,
             SportteryProviderProperties sportteryProperties,
             AsianOddsProviderProperties asianOddsProperties,
-            AdminSensitiveDataSanitizer sanitizer,
+            SensitiveDataSanitizer sanitizer,
             Clock clock
     ) {
         this.dataSyncRunMapper = dataSyncRunMapper;
@@ -182,7 +183,7 @@ public class AdminSyncRunQueryServiceImpl implements AdminSyncRunQueryService {
     }
 
     private AdminRawPayloadSnippetVo toPayloadSnippet(RawDataPayload payload) {
-        AdminSensitiveDataSanitizer.SanitizedText fragment = sanitizer.sanitizePayload(payload.getPayload());
+        SensitiveDataSanitizer.SanitizedText fragment = sanitizer.sanitizePayload(payload.getPayload());
         return new AdminRawPayloadSnippetVo(
                 payload.getId(), sanitizer.sanitizeText(payload.getRequestKey()), payload.getRequestedAt(),
                 payload.getProviderUpdatedAt(), payload.getHttpStatus(), payload.getPayloadHash(),

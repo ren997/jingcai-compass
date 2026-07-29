@@ -2,8 +2,10 @@ package com.jingcaicompass.match.job;
 
 import com.jingcaicompass.match.dto.SportteryPoolSyncRequestDto;
 import com.jingcaicompass.match.service.SportteryPoolSyncService;
+import com.jingcaicompass.system.observability.JobMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -24,9 +26,16 @@ public class SportteryPoolSyncJob {
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
 
     private final SportteryPoolSyncService sportteryPoolSyncService;
+    private final JobMetrics jobMetrics;
 
     public SportteryPoolSyncJob(SportteryPoolSyncService sportteryPoolSyncService) {
+        this(sportteryPoolSyncService, JobMetrics.noop());
+    }
+
+    @Autowired
+    public SportteryPoolSyncJob(SportteryPoolSyncService sportteryPoolSyncService, JobMetrics jobMetrics) {
         this.sportteryPoolSyncService = sportteryPoolSyncService;
+        this.jobMetrics = jobMetrics;
     }
 
     @Scheduled(
@@ -34,15 +43,22 @@ public class SportteryPoolSyncJob {
             initialDelayString = "${app.tasks.sporttery-pool.initial-delay}"
     )
     public void syncTodayPool() {
+        JobMetrics.JobExecution execution = jobMetrics.start("sporttery_pool_sync");
         LocalDate businessDate = LocalDate.now(SHANGHAI);
-        log.info("sporttery pool sync job started businessDate={}", businessDate);
-        var result = sportteryPoolSyncService.sync(new SportteryPoolSyncRequestDto(businessDate));
-        log.info(
-                "sporttery pool sync job finished businessDate={} status={} matches={} snapshots={}",
-                businessDate,
-                result.outcome().status(),
-                result.matchUpsertCount(),
-                result.snapshotInsertCount()
-        );
+        try {
+            log.info("event=job_started businessDate={}", businessDate);
+            var result = sportteryPoolSyncService.sync(new SportteryPoolSyncRequestDto(businessDate));
+            String status = result.outcome().status().getCode();
+            execution.recordOutcome(status);
+            log.info("event=job_finished businessDate={} status={} matches={} snapshots={} durationMs={}",
+                    businessDate, status, result.matchUpsertCount(), result.snapshotInsertCount(), execution.durationMs());
+            jobMetrics.record(execution, status);
+        } catch (RuntimeException exception) {
+            execution.recordOutcome("FAILED");
+            log.error("event=job_failed businessDate={} status=FAILED exceptionType={}",
+                    businessDate, exception.getClass().getSimpleName());
+            jobMetrics.record(execution, "FAILED");
+            throw exception;
+        }
     }
 }

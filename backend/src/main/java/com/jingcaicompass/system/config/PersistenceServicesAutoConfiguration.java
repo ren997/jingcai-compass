@@ -110,6 +110,11 @@ import com.jingcaicompass.snapshot.storage.SnapshotStorage;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
+import com.jingcaicompass.system.observability.MappingMetrics;
+import com.jingcaicompass.system.observability.JobMetrics;
+import com.jingcaicompass.system.observability.ProviderMetrics;
+import com.jingcaicompass.system.observability.SensitiveDataSanitizer;
+import com.jingcaicompass.system.observability.SyncMetrics;
 import com.jingcaicompass.statistics.service.StatisticsQueryService;
 import com.jingcaicompass.statistics.service.StatisticsQueryServiceImpl;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -141,6 +146,36 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean
     Clock predictionImportClock() {
         return Clock.systemUTC();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    SensitiveDataSanitizer sensitiveDataSanitizer(ObjectMapper objectMapper) {
+        return new SensitiveDataSanitizer(objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    ProviderMetrics providerMetrics(MeterRegistry meterRegistry) {
+        return new ProviderMetrics(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    SyncMetrics syncMetrics(MeterRegistry meterRegistry) {
+        return new SyncMetrics(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    MappingMetrics mappingMetrics(MeterRegistry meterRegistry) {
+        return new MappingMetrics(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    JobMetrics jobMetrics(MeterRegistry meterRegistry) {
+        return new JobMetrics(meterRegistry);
     }
 
     @Bean
@@ -441,9 +476,13 @@ public class PersistenceServicesAutoConfiguration {
     ProviderSyncTemplate providerSyncTemplate(
             DataSyncRunService dataSyncRunService,
             RawDataPayloadService rawDataPayloadService,
-            DataSyncRunPayloadLinkService dataSyncRunPayloadLinkService
+            DataSyncRunPayloadLinkService dataSyncRunPayloadLinkService,
+            SyncMetrics syncMetrics,
+            SensitiveDataSanitizer sanitizer
     ) {
-        return new ProviderSyncTemplate(dataSyncRunService, rawDataPayloadService, dataSyncRunPayloadLinkService);
+        return new ProviderSyncTemplate(
+                dataSyncRunService, rawDataPayloadService, dataSyncRunPayloadLinkService, syncMetrics, sanitizer
+        );
     }
 
     @Bean
@@ -606,9 +645,10 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean(MatchMappingService.class)
     MatchMappingService matchMappingService(
             MatchMapper matchMapper,
-            MatchSourceMappingMapper matchSourceMappingMapper
+            MatchSourceMappingMapper matchSourceMappingMapper,
+            MappingMetrics mappingMetrics
     ) {
-        return new MatchMappingServiceImpl(matchMapper, matchSourceMappingMapper);
+        return new MatchMappingServiceImpl(matchMapper, matchSourceMappingMapper, mappingMetrics);
     }
 
     @Bean
@@ -726,8 +766,11 @@ public class PersistenceServicesAutoConfiguration {
             name = {"enabled", "sporttery-pool.enabled"},
             havingValue = "true"
     )
-    SportteryPoolSyncJob sportteryPoolSyncJob(SportteryPoolSyncService sportteryPoolSyncService) {
-        return new SportteryPoolSyncJob(sportteryPoolSyncService);
+    SportteryPoolSyncJob sportteryPoolSyncJob(
+            SportteryPoolSyncService sportteryPoolSyncService,
+            JobMetrics jobMetrics
+    ) {
+        return new SportteryPoolSyncJob(sportteryPoolSyncService, jobMetrics);
     }
 
     @Bean
@@ -739,9 +782,10 @@ public class PersistenceServicesAutoConfiguration {
     )
     MatchResultSyncJob matchResultSyncJob(
             MatchResultSyncService matchResultSyncService,
-            SyncTaskProperties taskProperties
+            SyncTaskProperties taskProperties,
+            JobMetrics jobMetrics
     ) {
-        return new MatchResultSyncJob(matchResultSyncService, taskProperties);
+        return new MatchResultSyncJob(matchResultSyncService, taskProperties, jobMetrics);
     }
 
     @Bean
@@ -751,8 +795,8 @@ public class PersistenceServicesAutoConfiguration {
             name = {"enabled", "asian-odds.enabled"},
             havingValue = "true"
     )
-    AsianOddsSyncJob asianOddsSyncJob(AsianOddsSyncService asianOddsSyncService) {
-        return new AsianOddsSyncJob(asianOddsSyncService);
+    AsianOddsSyncJob asianOddsSyncJob(AsianOddsSyncService asianOddsSyncService, JobMetrics jobMetrics) {
+        return new AsianOddsSyncJob(asianOddsSyncService, jobMetrics);
     }
 
     @Bean
@@ -762,8 +806,8 @@ public class PersistenceServicesAutoConfiguration {
             name = {"enabled", "data-pipeline.enabled"},
             havingValue = "true"
     )
-    DataPipelineSyncJob dataPipelineSyncJob(DataPipelineService dataPipelineService) {
-        return new DataPipelineSyncJob(dataPipelineService);
+    DataPipelineSyncJob dataPipelineSyncJob(DataPipelineService dataPipelineService, JobMetrics jobMetrics) {
+        return new DataPipelineSyncJob(dataPipelineService, jobMetrics);
     }
 
     @Bean

@@ -14,6 +14,8 @@ import com.jingcaicompass.match.support.MatchMappingScoreSupport;
 import com.jingcaicompass.match.support.MatchMappingScoreSupport.ScoredCandidate;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
+import com.jingcaicompass.system.infrastructure.TraceIdContext;
+import com.jingcaicompass.system.observability.MappingMetrics;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -25,6 +27,10 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -34,6 +40,7 @@ import org.springframework.util.StringUtils;
 @ConditionalOnBean(DataSource.class)
 public class MatchMappingServiceImpl implements MatchMappingService {
 
+    private static final Logger log = LoggerFactory.getLogger(MatchMappingServiceImpl.class);
     static final String METHOD_EXTERNAL_ID_REUSE = "EXTERNAL_ID_REUSE";
     static final String METHOD_SCORE_AUTO = "SCORE_AUTO";
     static final String METHOD_SCORE_PENDING = "SCORE_PENDING";
@@ -41,13 +48,24 @@ public class MatchMappingServiceImpl implements MatchMappingService {
 
     private final MatchMapper matchMapper;
     private final MatchSourceMappingMapper matchSourceMappingMapper;
+    private final MappingMetrics mappingMetrics;
 
     public MatchMappingServiceImpl(
             MatchMapper matchMapper,
             MatchSourceMappingMapper matchSourceMappingMapper
     ) {
+        this(matchMapper, matchSourceMappingMapper, MappingMetrics.noop());
+    }
+
+    @Autowired
+    public MatchMappingServiceImpl(
+            MatchMapper matchMapper,
+            MatchSourceMappingMapper matchSourceMappingMapper,
+            MappingMetrics mappingMetrics
+    ) {
         this.matchMapper = matchMapper;
         this.matchSourceMappingMapper = matchSourceMappingMapper;
+        this.mappingMetrics = mappingMetrics;
     }
 
     @Override
@@ -83,7 +101,7 @@ public class MatchMappingServiceImpl implements MatchMappingService {
                 .toList();
 
         if (scored.isEmpty()) {
-            return new MatchMapResultDto(
+            return recordDecision(providerCode, new MatchMapResultDto(
                     null,
                     null,
                     MatchMapOutcomeEnum.NO_CANDIDATE,
@@ -92,7 +110,7 @@ public class MatchMappingServiceImpl implements MatchMappingService {
                     "NO_CANDIDATE",
                     METHOD_SCORE_PENDING,
                     List.of()
-            );
+            ));
         }
 
         ScoredCandidate top = scored.get(0);
@@ -123,7 +141,7 @@ public class MatchMappingServiceImpl implements MatchMappingService {
                 candidateDtos
         );
 
-        return new MatchMapResultDto(
+        return recordDecision(providerCode, new MatchMapResultDto(
                 saved.getId(),
                 saved.getMatchId(),
                 outcome,
@@ -132,7 +150,7 @@ public class MatchMappingServiceImpl implements MatchMappingService {
                 explanation,
                 method,
                 candidateDtos
-        );
+        ));
     }
 
     @Override
@@ -144,7 +162,7 @@ public class MatchMappingServiceImpl implements MatchMappingService {
         if (confirmed == null) {
             return null;
         }
-        return new MatchMapResultDto(
+        return recordDecision(providerCode.trim(), new MatchMapResultDto(
                 confirmed.getId(),
                 confirmed.getMatchId(),
                 MatchMapOutcomeEnum.REUSED,
@@ -153,7 +171,7 @@ public class MatchMappingServiceImpl implements MatchMappingService {
                 confirmed.getMappingExplanation(),
                 METHOD_EXTERNAL_ID_REUSE,
                 toCandidateDtos(confirmed.getMappingCandidates())
-        );
+        ));
     }
 
     @Override
@@ -177,6 +195,43 @@ public class MatchMappingServiceImpl implements MatchMappingService {
                         MappingStatusEnum.MANUAL_CONFIRMED
                 )
                 .last("LIMIT 1"));
+    }
+
+    private MatchMapResultDto recordDecision(String providerCode, MatchMapResultDto result) {
+        String outcome = result.outcome() == null ? "UNKNOWN" : result.outcome().name();
+        mappingMetrics.recordDecision(providerCode, outcome);
+        String priorTraceId = MDC.get(TraceIdContext.MDC_KEY);
+        String priorProviderCode = MDC.get("providerCode");
+        String priorMatchId = MDC.get("matchId");
+        String priorStatus = MDC.get("status");
+        if (priorTraceId == null || priorTraceId.isBlank()) {
+            MDC.put(TraceIdContext.MDC_KEY, TraceIdContext.currentOrCreate());
+        }
+        MDC.put("providerCode", providerCode);
+        if (result.matchId() != null) {
+            MDC.put("matchId", String.valueOf(result.matchId()));
+        } else {
+            MDC.remove("matchId");
+        }
+        MDC.put("status", result.mappingStatus() == null ? outcome : result.mappingStatus().getCode());
+        try {
+            log.info("event=mapping_decision outcome={} status={} method={}",
+                    outcome, result.mappingStatus(), result.method());
+            return result;
+        } finally {
+            restoreMdc(TraceIdContext.MDC_KEY, priorTraceId);
+            restoreMdc("providerCode", priorProviderCode);
+            restoreMdc("matchId", priorMatchId);
+            restoreMdc("status", priorStatus);
+        }
+    }
+
+    private void restoreMdc(String key, String previousValue) {
+        if (previousValue == null) {
+            MDC.remove(key);
+        } else {
+            MDC.put(key, previousValue);
+        }
     }
 
     private List<MatchEntity> loadCandidates(Instant kickoffTime) {

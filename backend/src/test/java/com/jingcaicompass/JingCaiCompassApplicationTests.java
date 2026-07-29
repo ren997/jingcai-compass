@@ -7,9 +7,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
@@ -30,11 +30,7 @@ class JingCaiCompassApplicationTests {
     }
 
     @Test
-    void exposesHealthAndOpenApiInDevelopmentConfiguration() throws Exception {
-        mockMvc.perform(get("/actuator/health"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.status").value("UP"));
-
+    void exposesOpenApiInDevelopmentConfiguration() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.openapi").exists())

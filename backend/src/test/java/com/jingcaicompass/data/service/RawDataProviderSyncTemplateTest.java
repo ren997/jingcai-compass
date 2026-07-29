@@ -116,7 +116,9 @@ class RawDataProviderSyncTemplateTest {
                 "STUB",
                 ProviderDataTypeEnum.ASIAN_ODDS,
                 () -> {
-                    throw new IllegalStateException("upstream down");
+                    throw new IllegalStateException(
+                            "Authorization: Bearer fetch-secret Cookie: sid=private https://provider.test/a?apiKey=hidden"
+                    );
                 },
                 (dataType, requestKey, saved) -> new ProviderParseResult(1, 0, null)
         );
@@ -125,6 +127,11 @@ class RawDataProviderSyncTemplateTest {
         assertThat(outcome.payload()).isNull();
         verify(rawDataPayloadService, never()).savePayload(any());
         verify(rawDataPayloadService, never()).markParseSuccess(any());
+        ArgumentCaptor<SyncRunFinishDto> captor = ArgumentCaptor.forClass(SyncRunFinishDto.class);
+        verify(dataSyncRunService).finishFailed(eq(3L), captor.capture());
+        assertThat(captor.getValue().errorMessage())
+                .contains("Authorization: Bearer ***", "https://provider.test/a")
+                .doesNotContain("fetch-secret", "sid=private", "apiKey=hidden");
     }
 
     @Test

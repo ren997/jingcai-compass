@@ -72,10 +72,9 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(BusinessException.class)
     ResponseEntity<ApiResponse<Void>> handleBusiness(BusinessException exception) {
         log.warn(
-                "业务请求失败，traceId={}，code={}，message={}",
+                "event=business_request_failed traceId={} code={}",
                 TraceIdContext.currentOrCreate(),
-                exception.errorCode().code(),
-                exception.getMessage()
+                exception.errorCode().code()
         );
         return failure(exception.errorCode(), exception.getMessage());
     }
@@ -83,9 +82,9 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(Exception.class)
     ResponseEntity<ApiResponse<Void>> handleUnknown(Exception exception) {
         log.error(
-                "未处理的服务异常，traceId={}",
+                "event=unhandled_request_failed traceId={} exceptionType={}",
                 TraceIdContext.currentOrCreate(),
-                exception
+                exception.getClass().getSimpleName()
         );
         return failure(ErrorCode.INTERNAL_ERROR, ErrorCode.INTERNAL_ERROR.defaultMessage());
     }

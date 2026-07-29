@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 import com.jingcaicompass.data.service.DataPipelineService;
+import com.jingcaicompass.system.observability.JobMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -11,6 +13,7 @@ class DataPipelineSyncJobTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
             .withBean(DataPipelineService.class, () -> mock(DataPipelineService.class))
+            .withBean(JobMetrics.class, () -> new JobMetrics(new SimpleMeterRegistry()))
             .withUserConfiguration(DataPipelineSyncJob.class);
 
     @Test

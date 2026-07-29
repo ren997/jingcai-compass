@@ -1,0 +1,19 @@
+groups:
+  - name: jingcai-compass-data-sources
+    rules:
+      - alert: JingcaiDataSourceAlert
+        expr: jingcai_datasource_alert_active == 1
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "竞彩罗盘数据源告警：{{ $labels.alert }}"
+          description: "Provider {{ $labels.provider }} 满足 {{ $labels.alert }} 条件；请先查看 /actuator/prometheus 与结构化日志。"
+      - alert: JingcaiScheduledJobFailed
+        expr: increase(jingcai_job_execution_total{status="FAILED"}[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "竞彩罗盘定时任务失败：{{ $labels.job }}"
+          description: "最近 15 分钟存在失败任务；按 traceId 和 jobName 查询结构化日志。"

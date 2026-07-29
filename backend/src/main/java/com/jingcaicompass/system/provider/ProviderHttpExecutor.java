@@ -1,7 +1,9 @@
 package com.jingcaicompass.system.provider;
 
+import com.jingcaicompass.system.observability.ProviderMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Component;
@@ -25,17 +27,24 @@ public class ProviderHttpExecutor {
     private static final Logger log = LoggerFactory.getLogger(ProviderHttpExecutor.class);
 
     private final ProviderSleeper sleeper;
+    private final ProviderMetrics providerMetrics;
 
     public ProviderHttpExecutor() {
-        this(duration -> {
-            if (duration != null && !duration.isZero() && !duration.isNegative()) {
-                Thread.sleep(duration.toMillis());
-            }
-        });
+        this(defaultSleeper(), ProviderMetrics.noop());
     }
 
     public ProviderHttpExecutor(ProviderSleeper sleeper) {
+        this(sleeper, ProviderMetrics.noop());
+    }
+
+    @Autowired
+    public ProviderHttpExecutor(ProviderMetrics providerMetrics) {
+        this(defaultSleeper(), providerMetrics);
+    }
+
+    public ProviderHttpExecutor(ProviderSleeper sleeper, ProviderMetrics providerMetrics) {
         this.sleeper = sleeper;
+        this.providerMetrics = providerMetrics;
     }
 
     /**
@@ -78,6 +87,7 @@ public class ProviderHttpExecutor {
                 }
 
                 int status = result.status();
+                providerMetrics.recordRequest(providerCode, resultForStatus(status));
                 if (status >= 200 && status < 300) {
                     return new ProviderHttpResponse(
                             status,
@@ -102,10 +112,12 @@ public class ProviderHttpExecutor {
                 }
 
                 Duration wait = resolveWait(status, result.headers(), policy.delay());
+                providerMetrics.recordRetry(providerCode);
                 sleepQuietly(wait);
             } catch (ProviderHttpException exception) {
                 throw exception;
             } catch (ResourceAccessException exception) {
+                providerMetrics.recordRequest(providerCode, isTimeout(exception) ? "timeout" : "network_error");
                 lastFailure = new ProviderHttpException(
                         providerCode,
                         ProviderErrorCategory.UPSTREAM_FAILURE,
@@ -118,8 +130,10 @@ public class ProviderHttpExecutor {
                 if (attempt >= policy.maxAttempts()) {
                     throw lastFailure;
                 }
+                providerMetrics.recordRetry(providerCode);
                 sleepQuietly(policy.delay());
             } catch (RuntimeException exception) {
+                providerMetrics.recordRequest(providerCode, "client_error");
                 throw new ProviderHttpException(
                         providerCode,
                         ProviderErrorCategory.UPSTREAM_FAILURE,
@@ -210,6 +224,35 @@ public class ProviderHttpExecutor {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("provider retry sleep interrupted", exception);
         }
+    }
+
+    private static ProviderSleeper defaultSleeper() {
+        return duration -> {
+            if (duration != null && !duration.isZero() && !duration.isNegative()) {
+                Thread.sleep(duration.toMillis());
+            }
+        };
+    }
+
+    private static String resultForStatus(int status) {
+        if (status >= 200 && status < 300) {
+            return "success";
+        }
+        if (status == 429) {
+            return "http_429";
+        }
+        if (status >= 400 && status < 500) {
+            return "http_4xx";
+        }
+        if (status >= 500 && status < 600) {
+            return "http_5xx";
+        }
+        return "http_other";
+    }
+
+    private static boolean isTimeout(ResourceAccessException exception) {
+        String text = exception.getMessage();
+        return text != null && text.toLowerCase(java.util.Locale.ROOT).contains("timeout");
     }
 
     private static String sanitizePath(String path) {

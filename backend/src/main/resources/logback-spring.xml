@@ -1,0 +1,17 @@
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <includeMdcKeyName>traceId</includeMdcKeyName>
+            <includeMdcKeyName>jobName</includeMdcKeyName>
+            <includeMdcKeyName>syncRunId</includeMdcKeyName>
+            <includeMdcKeyName>providerCode</includeMdcKeyName>
+            <includeMdcKeyName>matchId</includeMdcKeyName>
+            <includeMdcKeyName>predictionId</includeMdcKeyName>
+            <includeMdcKeyName>status</includeMdcKeyName>
+            <includeMdcKeyName>durationMs</includeMdcKeyName>
+        </encoder>
+    </appender>
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

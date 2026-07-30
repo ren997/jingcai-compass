@@ -25,10 +25,10 @@ describe('admin URL search state', () => {
 
   it('defaults mapping review to pending and preserves supported filters', () => {
     expect(parseMappingSearch(new URLSearchParams('status=BAD&page=-1'))).toMatchObject({
-      mappingStatus: 'PENDING', pageNo: 1,
+      mappingStatus: 'PENDING', reviewScope: 'ACTIVE', pageNo: 1,
     });
-    expect(toMappingQuery(parseMappingSearch(new URLSearchParams('providerCode=THE_ODDS_API&status=REJECTED&page=2'))))
-      .toEqual({ providerCode: 'THE_ODDS_API', mappingStatus: 'REJECTED', pageNo: 2, pageSize: 20 });
+    expect(toMappingQuery(parseMappingSearch(new URLSearchParams('providerCode=THE_ODDS_API&status=REJECTED&scope=HISTORY&page=2'))))
+      .toEqual({ providerCode: 'THE_ODDS_API', mappingStatus: 'REJECTED', reviewScope: 'HISTORY', pageNo: 2, pageSize: 20 });
   });
 
   it('restores safe prediction and settlement operation filters from URLs', () => {

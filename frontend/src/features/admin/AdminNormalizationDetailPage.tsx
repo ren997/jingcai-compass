@@ -55,13 +55,13 @@ export default function AdminNormalizationDetailPage({ entityType }: Props) {
 
   return <main className="admin-page admin-workspace">
     <section className="admin-page-heading"><div><p className="eyebrow">Operations · Provider normalization</p><h1>{typeLabel(entityType)}标准化详情</h1>
-      <p>只确认这一条 Provider 身份与内部标准实体的关系；不会确认赛事、写入全局别名或推断其他队伍。</p></div><Button loading={detailQuery.isFetching} onClick={() => void detailQuery.refetch()}>刷新</Button></section>
+      <p>仅将这一条外部 Provider 身份确认到竞彩内部标准实体；不会确认赛事、写入全局别名或推断其他队伍。</p></div><Button loading={detailQuery.isFetching} onClick={() => void detailQuery.refetch()}>刷新</Button></section>
     {(actions.confirm.error || actions.reject.error || actions.reopen.error) && <Alert type="error" showIcon message={`操作未完成：${(actions.confirm.error || actions.reject.error || actions.reopen.error)?.message}`} />}
     <section className="admin-panel"><header className="admin-panel-heading"><div><h2>{detail.externalDisplayName || detail.externalId}</h2><span>{detail.providerCode} · {detail.mappingStatus}</span></div></header>
       <dl className="admin-metadata"><div><dt>外部 ID</dt><dd>{detail.externalId}</dd></div><div><dt>作用域</dt><dd>{detail.externalScope || '无'}</dd></div><div><dt>规范化键</dt><dd>{detail.externalNormalizedKey || '历史记录未采集'}</dd></div><div><dt>当前暂存实体</dt><dd>{detail.currentEntity ? displayEntity(detail.currentEntity) : '无'}</dd></div></dl>
       <p className="admin-metadata-note">映射方法：{detail.mappingMethod || '—'} · 置信度：{detail.mappingConfidence ?? '—'} · 更新：{formatTimestamp(detail.updatedAt)}</p>
     </section>
-    {detail.mappingStatus === 'PENDING' && <section className="admin-panel"><header className="admin-panel-heading"><div><h2>选择内部{typeLabel(entityType)}实体</h2><span>必须明确选择，不接受赛事 ID</span></div></header>
+    {detail.mappingStatus === 'PENDING' && <section className="admin-panel"><header className="admin-panel-heading"><div><h2>选择竞彩内部{typeLabel(entityType)}实体</h2><span>必须明确选择，不接受赛事 ID</span></div></header>
       <label className="admin-modal-field">按中文或英文名称搜索<Input value={keyword} onChange={(event) => { setKeyword(event.target.value); setSelectedEntityId(undefined); }} placeholder="输入名称后刷新候选" /></label>
       {candidatesQuery.isError && <Alert type="error" showIcon message={`候选不可用：${candidatesQuery.error.message}`} />}
       {candidatesQuery.isPending ? <p className="admin-empty">正在搜索内部标准实体……</p> : <Radio.Group className="mapping-candidate-list" value={selectedEntityId} onChange={(event) => setSelectedEntityId(event.target.value)}>

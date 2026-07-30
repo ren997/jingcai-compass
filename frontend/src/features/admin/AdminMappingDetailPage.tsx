@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import type { MappingReviewCandidate } from '../../services/admin';
 import { formatTimestamp } from '../matches/matchPresentation';
+import { parseMappingSearch } from './adminSearch';
 import { useMappingReviewActions, useMappingReviewDetailQuery } from './useAdminQueries';
 
 type Action = 'confirm' | 'reject' | 'reopen' | null;
@@ -19,6 +20,7 @@ function MatchBrief({ candidate }: { candidate: MappingReviewCandidate }) {
 export default function AdminMappingDetailPage() {
   const { mappingId: rawId } = useParams();
   const [searchParams] = useSearchParams();
+  const filters = parseMappingSearch(searchParams);
   const mappingId = rawId && /^\d+$/.test(rawId) && Number(rawId) > 0 ? Number(rawId) : undefined;
   const detailQuery = useMappingReviewDetailQuery(mappingId);
   const actions = useMappingReviewActions();
@@ -36,7 +38,15 @@ export default function AdminMappingDetailPage() {
   };
   const candidates = [...(currentCandidate ? [currentCandidate] : []), ...detail.candidates.filter((candidate) => candidate.matchId !== detail.matchId)];
   const targetMatchId = chosenTarget ?? candidates[0]?.matchId;
+  const selectedTarget = candidates.find((candidate) => candidate.matchId === targetMatchId);
+  const targetKickoffTime = selectedTarget?.match?.kickoffTime;
+  const targetHasStarted = targetKickoffTime !== null
+    && targetKickoffTime !== undefined
+    && !Number.isNaN(Date.parse(targetKickoffTime))
+    && Date.parse(targetKickoffTime) <= Date.now();
   const pending = detail.mappingStatus === 'PENDING';
+  const readOnlyHistory = filters.reviewScope === 'HISTORY' || targetHasStarted;
+  const canConfirm = pending && targetMatchId !== undefined && !readOnlyHistory;
   const isMutating = actions.confirm.isPending || actions.reject.isPending || actions.reopen.isPending;
   const actionError = actions.confirm.error || actions.reject.error || actions.reopen.error;
 
@@ -52,6 +62,7 @@ export default function AdminMappingDetailPage() {
   return <main className="admin-page admin-workspace"><section className="admin-page-heading"><div><p className="eyebrow">Operations · Mapping #{detail.mappingId}</p>
     <h1>{detail.providerCode}</h1><p>外部比赛：{detail.externalMatchId} · 状态：<Tag>{detail.mappingStatus}</Tag></p></div>
     <div className="admin-actions"><Button onClick={() => void detailQuery.refetch()}>刷新</Button><Link to={backTo}>返回队列</Link></div></section>
+    {readOnlyHistory && <Alert type="info" showIcon message="候选竞彩比赛已开赛，仅保留历史证据，不可确认关联。" />}
     {actionError && <Alert type="error" showIcon message={actionError.message} />}
     <section className="admin-panel"><header className="admin-panel-heading"><div><h2>外部映射信息</h2><span>更新时间 {formatTimestamp(detail.updatedAt)}</span></div></header>
       <dl className="admin-metadata"><div><dt>外部联赛 ID</dt><dd>{detail.externalLeagueId || '—'}</dd></div><div><dt>外部主队</dt><dd>{detail.externalHomeTeamName || '暂未恢复'}</dd></div>
@@ -61,7 +72,7 @@ export default function AdminMappingDetailPage() {
     <section className="admin-panel"><header className="admin-panel-heading"><div><h2>候选比赛对比</h2><span>仅下列比赛可被人工确认</span></div></header>
       {candidates.length === 0 ? <p className="admin-empty">没有可确认的内部比赛候选；可拒绝后等待后续映射。</p> : <Radio.Group className="mapping-candidate-list" value={targetMatchId}
         onChange={(event) => setChosenTarget(event.target.value)}>{candidates.map((candidate) => <Radio key={candidate.matchId} value={candidate.matchId}><MatchBrief candidate={candidate} /></Radio>)}</Radio.Group>}
-      <div className="admin-actions">{pending && <><Button type="primary" disabled={targetMatchId === undefined} onClick={() => open('confirm')}>确认所选比赛</Button>
+      <div className="admin-actions">{pending && <><Button type="primary" disabled={!canConfirm} onClick={() => open('confirm')}>确认所选比赛</Button>
         <Button danger onClick={() => open('reject')}>拒绝映射</Button></>}{detail.mappingStatus === 'REJECTED' && <Button onClick={() => open('reopen')}>重新打开</Button>}</div>
     </section>
     <Modal title={action === 'confirm' ? '确认映射' : action === 'reject' ? '拒绝映射' : '重新打开映射'} open={action !== null}

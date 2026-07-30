@@ -1,5 +1,6 @@
 import {
   MAPPING_STATUSES,
+  MAPPING_REVIEW_SCOPES,
   LOCK_DIAGNOSTICS,
   PREDICTION_STATUSES,
   PROVIDER_DATA_TYPES,
@@ -12,6 +13,7 @@ import {
   type MappingReviewListQuery,
   type ProviderNormalizationListQuery,
   type MappingReviewStatus,
+  type MappingReviewScope,
   type PredictionStatus,
   type ProviderDataType,
   type SyncStatus,
@@ -79,6 +81,7 @@ export function parseMappingSearch(search: URLSearchParams) {
   return {
     providerCode: search.get('providerCode')?.trim() || undefined,
     mappingStatus: validEnum(search.get('status'), MAPPING_STATUSES) ?? 'PENDING' as MappingReviewStatus,
+    reviewScope: validEnum(search.get('scope'), MAPPING_REVIEW_SCOPES) ?? 'ACTIVE' as MappingReviewScope,
     pageNo: validPositive(search.get('page')),
   };
 }
@@ -86,6 +89,7 @@ export function parseMappingSearch(search: URLSearchParams) {
 export function toMappingQuery(filters: ReturnType<typeof parseMappingSearch>): MappingReviewListQuery {
   return {
     providerCode: filters.providerCode, mappingStatus: filters.mappingStatus,
+    reviewScope: filters.reviewScope,
     pageNo: filters.pageNo, pageSize: ADMIN_PAGE_SIZE,
   };
 }
@@ -94,6 +98,7 @@ export function toMappingSearch(filters: ReturnType<typeof parseMappingSearch>) 
   const params = new URLSearchParams();
   if (filters.providerCode) params.set('providerCode', filters.providerCode);
   if (filters.mappingStatus !== 'PENDING') params.set('status', filters.mappingStatus);
+  if (filters.reviewScope !== 'ACTIVE') params.set('scope', filters.reviewScope);
   if (filters.pageNo > 1) params.set('page', String(filters.pageNo));
   return params;
 }

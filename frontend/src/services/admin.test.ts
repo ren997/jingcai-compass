@@ -66,10 +66,10 @@ describe('admin API services', () => {
   it('posts lottery-match-oriented mapping candidates with cancellation', async () => {
     vi.mocked(fetch).mockResolvedValue(response({ records: [], pageNo: 1, pageSize: 20, total: 0 }));
     const controller = new AbortController();
-    await fetchMappingReviewMatches({ providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING', pageNo: 1, pageSize: 20 }, controller.signal);
+    await fetchMappingReviewMatches({ providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING', reviewScope: 'ACTIVE', pageNo: 1, pageSize: 20 }, controller.signal);
 
     expect(fetch).toHaveBeenCalledWith('/api/admin/provider/mappings/matches/list', expect.objectContaining({
-      method: 'POST', body: JSON.stringify({ providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING', pageNo: 1, pageSize: 20 }), signal: expect.any(AbortSignal),
+      method: 'POST', body: JSON.stringify({ providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING', reviewScope: 'ACTIVE', pageNo: 1, pageSize: 20 }), signal: expect.any(AbortSignal),
     }));
   });
 

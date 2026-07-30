@@ -40,7 +40,8 @@ export default function AdminMappingMatchDetailPage() {
 
   const detail = detailQuery.data!;
   const match = detail.match;
-  const canConfirm = selected?.mappingStatus === 'PENDING';
+  const matchHasStarted = !Number.isNaN(Date.parse(match.kickoffTime)) && Date.parse(match.kickoffTime) <= Date.now();
+  const canConfirm = filters.reviewScope === 'ACTIVE' && !matchHasStarted && selected?.mappingStatus === 'PENDING';
   const actionError = actions.confirm.error;
 
   async function confirm() {
@@ -57,6 +58,7 @@ export default function AdminMappingMatchDetailPage() {
       <p>{match.lotteryDate} · {match.leagueName || '联赛待标准化'} · 官方开赛：{formatTimestamp(match.kickoffTime)}</p></div>
       <div className="admin-actions"><Button loading={detailQuery.isFetching} onClick={() => void detailQuery.refetch()}>刷新</Button><Link to={backTo}>返回队列</Link></div>
     </section>
+    {(filters.reviewScope === 'HISTORY' || matchHasStarted) && <Alert type="info" showIcon message="该场已开赛，仅保留历史证据，不可确认关联。" />}
     {actionError && <Alert type="error" showIcon message={`关联未完成：${actionError.message}`} />}
     <section className="admin-panel"><header className="admin-panel-heading"><div><h2>外部赛事候选</h2><span>仅下列服务端保留的候选可被确认</span></div></header>
       {detailQuery.isStale && <p className="admin-metadata-note">缓存数据，正在更新。</p>}

@@ -5,9 +5,9 @@
 - 文档版本：v0.5
 - 最后更新：2026-07-30
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无（等待启动连续数据观测）`
-- 下一任务：`T106/T107 真实数据源连续观测启动`
-- 最近完成增量：`T602 竞彩比赛主体详情与外部开赛时间`
+- 当前活动任务：`T208 比赛映射复核时效修正`
+- 下一任务：`完成 T208 时效修正的本地与 PostgreSQL 验证`
+- 最近完成增量：`T208 联赛与球队标准化复核闭环`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -216,7 +216,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 | --- | --- | --- |
 | M0 工程基线 | `DONE` | T000～T006 已完成；GitHub Actions 已通过 PostgreSQL 16 空库迁移和完整数据库上下文验证 |
 | M1 Provider 基础 | `PARTIAL` | T101～T105 已完成；T106/T107 连续观测和授权结论尚未完成 |
-| M2 标准化与映射 | `DONE` | T201～T208 已完成；体彩与真实 Provider 的联赛、球队标准化须独立人工确认，未确认时不得由单场比赛映射反推别名 |
+| M2 标准化与映射 | `PARTIAL` | T201～T208 的联赛、球队独立复核已完成；比赛映射复核时效修正进行中，未确认时不得由单场比赛映射反推别名 |
 | M3 预测发布闭环 | `DONE` | T301～T305、T601 已完成；预测导入、发布、锁定和确定性公开快照闭环已通过验证 |
 | M4 赛果与结算 | `DONE` | T401～T405 已完成；公开修正标识由 T507/T504 基于结算版本链交付 |
 | M5 公共 API 与前端 | `DONE` | T501、T502、T503、T504、T505、T506、T507 已完成；公开比赛、预测、历史、统计与首页闭环均由持久化事实查询支撑 |
@@ -1016,7 +1016,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T208 联赛与球队标准化复核闭环
 
-- 状态：`DONE`
+- 状态：`IN_PROGRESS`
 - 优先级：P0
 - 依赖：T203、T205、T601、T602
 - 交付物：
@@ -1032,6 +1032,10 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 新增懒加载后台复核入口，分别展示“联赛复核”和“球队复核”；页面同时显示 Provider 外部标识、原始展示名、规范化键、内部候选摘要、现有确认关系和审计历史，并要求二次确认。
   - [x] 调整比赛候选评分：只有已确认的联赛/球队映射才能提高分数或缩小候选范围；仍须保留主客方向、开赛时间和外部事件唯一性硬约束，不能把一次 `match_source_mappings` 确认当作联赛或球队别名证据。
   - [x] 覆盖并发确认、拒绝/重新打开、跨联赛同名球队、主客反转、未配置联赛、无上游球队 ID、历史单场确认不传播别名、后续新比赛复用已确认映射，以及无 DataSource、JWT 401/403 与 traceId。
+  - [x] 比赛映射复核默认仅显示未开赛待复核项；已开赛项仅在明确的历史筛选中可见，保留审计但不作为当前运营待办。
+  - [x] 服务端在确认时二次校验目标竞彩比赛尚未开赛，防止列表读取与操作之间跨过开赛时间后仍可确认；过期操作返回稳定错误与 traceId。
+  - [x] 补齐前后端筛选、详情返回、过期禁用和 URL 可恢复测试；联赛、球队标准化复核不受该时效规则影响。
+  - [x] 将体彩作为内部标准实体的唯一基线：`CHINA_SPORTTERY` 不进入 Provider 联赛/球队复核队列；页面仅复核外部 Provider 到竞彩标准实体的映射，既有体彩来源记录保留但不展示或操作。
 - 验证命令：
 
   ```bash
@@ -1062,11 +1066,15 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-30：本机 Docker Desktop 4.84/Engine 29 已安装并通过 `hello-world` 验证。项目原 Testcontainers 1.19.8 无法与该引擎的 Windows 命名管道握手；临时使用 1.21.4 后已在本机启动 PostgreSQL 16 容器并执行 `DataPipelineApplicationIT`。该测试继续暴露最后一项旧 T207 口径：未确认亚盘球队不再自动新建标准实体，预期球队数由 6 对齐为 4；将在相同本机容器命令复验后再提交依赖升级与测试修正。
   - 2026-07-30：将测试依赖固定升级至 Testcontainers 1.21.4；本机 Docker Desktop 4.84/Engine 29 已可直接执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`，完整通过 425 个单测和 41 个 PostgreSQL 16 集成测试。`DataPipelineApplicationIT` 现同时覆盖：1 条预置人工赛事确认、7 条待复核外部事件、1 条亚盘快照、2 条体彩 `AUTO_CONFIRMED/EXACT_NAME` 队伍映射、4 支未由亚盘自动扩展的标准球队以及第二次运行幂等。待提交后由 Draft PR 复验。
   - 2026-07-30：Draft PR [#20](https://github.com/ren997/jingcai-compass/pull/20) 的 [GitHub Actions #89](https://github.com/ren997/jingcai-compass/actions/runs/30511946842) 在提交 `d3bfe1d0448fe6e8f56984bc8f4d8f8d66a6b003` 成功。Ubuntu Runner 使用 Java 21.0.11、Maven 3.9.16 和 Testcontainers `postgres:16-alpine`（PostgreSQL 16.14）执行空库 Flyway V1～V16；425 个普通测试与 41 个 PostgreSQL 集成测试均通过。T208 与 M2 收口为 `DONE`，下一步为 T106/T107 的真实数据源连续观测启动。
+  - 2026-07-30：根据项目负责人反馈恢复为时效修正。当前比赛映射页仅按 `PENDING` 查询，昨天已开赛的比赛仍占据运营队列；本次仅增加“当前/历史”复核范围与服务端过期开赛保护，不改 Provider、联赛/球队标准化、数据库结构或既有映射审计。计划运行后端、前端、差异检查和 PostgreSQL 16 集成验证。
+  - 2026-07-30：项目负责人补充确认联赛/球队复核的主体口径：竞彩侧已完成的内部标准实体是基线，`CHINA_SPORTTERY` 不应作为待复核 Provider 项再次出现；仅人工确认外部 Provider（当前为 The Odds）到竞彩标准实体的关系。既有体彩来源映射不删除、不回填，仅从复核队列和操作入口排除。
+  - 2026-07-30：时效与复核主体修正完成本地验证。比赛映射默认 `ACTIVE`（未开赛），`HISTORY` 仅保留证据且服务端拒绝确认已开赛目标；标准化队列与详情拒绝体彩来源，页面说明为“外部 Provider → 竞彩内部标准实体”。本机真实登录后的联赛复核接口和页面仅返回 1 条 `THE_ODDS_API` 项，`CHINA_SPORTTERY` 为 0。
 -- 验证记录：
   - 2026-07-30：本地普通测试与前端构建已通过；PostgreSQL 16 空库迁移、Mapper 行为和并发条件更新仍以 Draft PR 的 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 为准，成功前任务保持 `IN_PROGRESS`。
   - 2026-07-30：`mvn -B -ntp -f backend/pom.xml test` 通过（425 项）；本地 `local` profile 启动与独立 Actuator 健康检查通过；`git diff --check` 通过。前端未改动，沿用实现提交的 Vitest 60 项与生产构建通过记录。修正断言推送后必须等待新 head 的 PostgreSQL 16 CI。
   - 2026-07-30：Docker Desktop 4.84.0 / Engine 29.6.2 本机启动；`hello-world` 通过。Testcontainers 1.21.4 下，`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（425 个单测、41 个 PostgreSQL 16 IT）；`cd frontend && npm run test && npm run build` 通过（11 个文件、60 项）；`http://127.0.0.1:18083/actuator/health` 返回 `UP`；`git diff --check` 通过。仍须等待 Draft PR 对同一提交的 CI。
   - 2026-07-30：同一提交的 GitHub Actions #89 成功；PostgreSQL 16.14 空库迁移 V1～V16、425 个普通测试和 41 个集成测试均通过，满足本任务 Draft PR CI 收口条件。
+  - 2026-07-30：`npm run backend:test` 通过（430 项）；`cd frontend && npm run test && npm run build` 通过（11 个文件、60 项）；local profile 已在默认 `8080/8081` 启动并返回健康状态 `UP`。未运行本轮 PostgreSQL 集成测试，按项目负责人要求暂缓。
 
 ## 8. M3 预测发布、锁定和快照
 
@@ -1992,7 +2000,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ## 14. 推荐的下一步
 
-当前无活动开发任务；T208 已完成，M2 已收口为 `DONE`。下一项是启动 T106/T107 的真实数据源连续观测：先记录负责人、开始日、验证节点、密钥引用位置、400 credits 预算与第 14 天决策日，再开启每日采集并标记为 `MONITORING`。T401～T405、T501～T507、T602、T603、T606、T607 均已完成；M4/M5 已完成，M6 保持 `PARTIAL`。
+当前正在修正 T208 的比赛映射复核时效：默认待办只保留未开赛比赛，历史项保留审计但禁止确认；联赛与球队标准化复核仍可独立处理历史 Provider 身份。修正验收后，M2 恢复 `DONE`，下一项才是启动 T106/T107 的真实数据源连续观测：先记录负责人、开始日、验证节点、密钥引用位置、400 credits 预算与第 14 天决策日，再开启每日采集并标记为 `MONITORING`。T401～T405、T501～T507、T602、T603、T606、T607 均已完成；M4/M5 已完成，M6 保持 `PARTIAL`。
 
 T604 Docker 与 Nginx 部署被 T108 的 `GO` 结论硬性阻塞；在真实数据源上线条件满足后才提供容器化、网络隔离、备份与恢复演练。
 
@@ -2022,6 +2030,7 @@ T000 -> T403（已完成）
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-07-30 | T208 时效修正 | `DONE -> IN_PROGRESS` | 项目负责人确认已开赛比赛不应占用当前赛事映射复核队列。本次增加可恢复的当前/历史筛选，并在服务端确认动作实施开赛时效保护；联赛和球队标准化复核保持可处理历史身份。 |
 | 2026-07-30 | T208 / `d3bfe1d0448fe6e8f56984bc8f4d8f8d66a6b003` | `IN_PROGRESS -> DONE` | [PR #20](https://github.com/ren997/jingcai-compass/pull/20) 的 [Actions #30511946842](https://github.com/ren997/jingcai-compass/actions/runs/30511946842) 成功：Java 21.0.11、Maven 3.9.16、Testcontainers PostgreSQL 16.14 执行空库 Flyway V1～V16；425 个普通测试和 41 个 PostgreSQL 集成测试通过。M2 完成；下一步按受控前置启动 T106/T107 连续观测。 |
 | 2026-07-29 | T208 | `TODO` 新增并设为下一任务 | 补齐真实 Provider 的联赛与球队标准化人工复核闭环。体彩与 Provider 两侧须分别归一化；人工确认才写入 `provider_league_mappings`、`provider_team_mappings` 与审计，已确认赛事仅代表“外部事件 → 竞彩比赛”，严禁反推联赛或球队别名。M2 调整为 `PARTIAL`；T106/T107 连续观测等待此闭环后启动。 |
 | 2026-07-29 | T602 / `f34be25` | `IN_PROGRESS -> DONE` | The Odds API 映射复核详情新增可读外部主/客队名；V14 仅按既有 `THE_ODDS_API + external_match_id` 从受控已存载荷精确回填，不调用 Provider、不泄露原始载荷或凭据。本地后端 412 项、前端 Vitest 55 项、生产构建和差异格式检查通过；[PR #19](https://github.com/ren997/jingcai-compass/pull/19) 的 [Actions #30437153122](https://github.com/ren997/jingcai-compass/actions/runs/30437153122) 在 Java 21.0.11、Maven 3.9.16、PostgreSQL 16.14 上通过 412 个普通测试与 41 个 IT。 |

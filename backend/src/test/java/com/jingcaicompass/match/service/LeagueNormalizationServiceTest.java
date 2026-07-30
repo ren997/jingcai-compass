@@ -169,6 +169,26 @@ class LeagueNormalizationServiceTest {
     }
 
     @Test
+    void sportteryIsTheInternalBaselineAndDoesNotCreateProviderReviewMappings() {
+        when(providerLeagueMappingMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(leagueAliasMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        League existing = new League();
+        existing.setId(8L);
+        existing.setNameZh("巴甲");
+        when(leagueMapper.selectList(null)).thenReturn(List.of(existing));
+
+        EntityNormalizeResultDto result = service.resolve(
+                new EntityNormalizeRequestDto("CHINA_SPORTTERY", "NAME:brazil-serie-a", "巴甲")
+        );
+
+        assertThat(result.entityId()).isEqualTo(8L);
+        assertThat(result.outcome()).isEqualTo(EntityNormalizeOutcomeEnum.RESOLVED);
+        assertThat(result.mappingStatus()).isNull();
+        verify(providerLeagueMappingMapper, never()).insert(any(ProviderLeagueMapping.class));
+        verify(providerLeagueMappingMapper, never()).updateById(any(ProviderLeagueMapping.class));
+    }
+
+    @Test
     void similarButDifferentNamesCreateSeparateCandidates() {
         when(providerLeagueMappingMapper.selectOne(any(Wrapper.class))).thenReturn(null);
         when(leagueAliasMapper.selectOne(any(Wrapper.class))).thenReturn(null);

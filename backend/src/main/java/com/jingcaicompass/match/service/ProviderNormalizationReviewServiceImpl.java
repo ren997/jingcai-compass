@@ -51,6 +51,7 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
 
     static final String METHOD_MANUAL_NORMALIZATION_REVIEW = "MANUAL_NORMALIZATION_REVIEW";
     static final String METHOD_MANUAL_NORMALIZATION_REJECTED = "MANUAL_NORMALIZATION_REJECTED";
+    private static final String SPORTTERY_PROVIDER_CODE = "CHINA_SPORTTERY";
 
     private final ProviderLeagueMappingMapper providerLeagueMappingMapper;
     private final ProviderTeamMappingMapper providerTeamMappingMapper;
@@ -90,8 +91,12 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
 
         // 1) 两张映射表分开分页，避免联赛和球队身份混淆。
         if (type == ProviderNormalizationEntityTypeEnum.LEAGUE) {
+            if (isSportteryBaseProvider(providerCode)) {
+                return new PageResult<>(List.of(), pageNo, pageSize, 0);
+            }
             LambdaQueryWrapper<ProviderLeagueMapping> wrapper = new LambdaQueryWrapper<ProviderLeagueMapping>()
                     .eq(ProviderLeagueMapping::getMappingStatus, status)
+                    .ne(ProviderLeagueMapping::getProviderCode, SPORTTERY_PROVIDER_CODE)
                     .orderByDesc(ProviderLeagueMapping::getUpdatedAt)
                     .orderByDesc(ProviderLeagueMapping::getId);
             if (providerCode != null) {
@@ -103,8 +108,12 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
                     .toList(), page.getCurrent(), page.getSize(), page.getTotal());
         }
 
+        if (isSportteryBaseProvider(providerCode)) {
+            return new PageResult<>(List.of(), pageNo, pageSize, 0);
+        }
         LambdaQueryWrapper<ProviderTeamMapping> wrapper = new LambdaQueryWrapper<ProviderTeamMapping>()
                 .eq(ProviderTeamMapping::getMappingStatus, status)
+                .ne(ProviderTeamMapping::getProviderCode, SPORTTERY_PROVIDER_CODE)
                 .orderByDesc(ProviderTeamMapping::getUpdatedAt)
                 .orderByDesc(ProviderTeamMapping::getId);
         if (providerCode != null) {
@@ -120,9 +129,14 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
     public ProviderNormalizationReviewDetailVo detail(ProviderNormalizationReviewDetailQueryDto query) {
         ProviderNormalizationEntityTypeEnum type = requireType(query == null ? null : query.entityType());
         Long mappingId = requireId(query == null ? null : query.mappingId(), "mappingId");
-        return type == ProviderNormalizationEntityTypeEnum.LEAGUE
-                ? toDetail(requireLeagueMapping(mappingId))
-                : toDetail(requireTeamMapping(mappingId));
+        if (type == ProviderNormalizationEntityTypeEnum.LEAGUE) {
+            ProviderLeagueMapping mapping = requireLeagueMapping(mappingId);
+            requireReviewableProvider(mapping.getProviderCode());
+            return toDetail(mapping);
+        }
+        ProviderTeamMapping mapping = requireTeamMapping(mappingId);
+        requireReviewableProvider(mapping.getProviderCode());
+        return toDetail(mapping);
     }
 
     @Override
@@ -133,12 +147,14 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
 
         // 1) 只搜索内部标准字典；客户端不能提交裸 ID 以外的外部赛事或载荷数据。
         if (type == ProviderNormalizationEntityTypeEnum.LEAGUE) {
+            requireReviewableProvider(requireLeagueMapping(mappingId).getProviderCode());
             LambdaQueryWrapper<League> wrapper = new LambdaQueryWrapper<League>().orderByAsc(League::getId).last("LIMIT 20");
             if (keyword != null) {
                 wrapper.and(item -> item.like(League::getNameZh, keyword).or().like(League::getNameEn, keyword));
             }
             return leagueMapper.selectList(wrapper).stream().map(this::toEntity).toList();
         }
+        requireReviewableProvider(requireTeamMapping(mappingId).getProviderCode());
         LambdaQueryWrapper<Team> wrapper = new LambdaQueryWrapper<Team>().orderByAsc(Team::getId).last("LIMIT 20");
         if (keyword != null) {
             wrapper.and(item -> item.like(Team::getNameZh, keyword).or().like(Team::getNameEn, keyword));
@@ -157,6 +173,7 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
         // 1) 读取 PENDING 行，目标必须为已存在且与当前暂存候选不同的内部实体。
         if (type == ProviderNormalizationEntityTypeEnum.LEAGUE) {
             ProviderLeagueMapping current = requireLeagueMapping(mappingId);
+            requireReviewableProvider(current.getProviderCode());
             requirePending(current.getMappingStatus());
             requireLeagueTarget(targetEntityId, current.getLeagueId());
             String before = snapshot(current);
@@ -173,6 +190,7 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
         }
 
         ProviderTeamMapping current = requireTeamMapping(mappingId);
+        requireReviewableProvider(current.getProviderCode());
         requirePending(current.getMappingStatus());
         requireTeamTarget(targetEntityId, current.getTeamId());
         String before = snapshot(current);
@@ -197,6 +215,7 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
         String reason = trimToNull(request == null ? null : request.reason());
         if (type == ProviderNormalizationEntityTypeEnum.LEAGUE) {
             ProviderLeagueMapping current = requireLeagueMapping(mappingId);
+            requireReviewableProvider(current.getProviderCode());
             requirePending(current.getMappingStatus());
             String before = snapshot(current);
             int rows = providerLeagueMappingMapper.update(null, new UpdateWrapper<ProviderLeagueMapping>()
@@ -210,6 +229,7 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
             return toDetail(updated);
         }
         ProviderTeamMapping current = requireTeamMapping(mappingId);
+        requireReviewableProvider(current.getProviderCode());
         requirePending(current.getMappingStatus());
         String before = snapshot(current);
         int rows = providerTeamMappingMapper.update(null, new UpdateWrapper<ProviderTeamMapping>()
@@ -231,6 +251,7 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
         String operator = requireOperator(operatorUsername);
         if (type == ProviderNormalizationEntityTypeEnum.LEAGUE) {
             ProviderLeagueMapping current = requireLeagueMapping(mappingId);
+            requireReviewableProvider(current.getProviderCode());
             requireRejected(current.getMappingStatus());
             String before = snapshot(current);
             int rows = providerLeagueMappingMapper.update(null, new UpdateWrapper<ProviderLeagueMapping>()
@@ -243,6 +264,7 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
             return toDetail(updated);
         }
         ProviderTeamMapping current = requireTeamMapping(mappingId);
+        requireReviewableProvider(current.getProviderCode());
         requireRejected(current.getMappingStatus());
         String before = snapshot(current);
         int rows = providerTeamMappingMapper.update(null, new UpdateWrapper<ProviderTeamMapping>()
@@ -340,6 +362,16 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
     private static ProviderNormalizationEntityTypeEnum requireType(ProviderNormalizationEntityTypeEnum type) {
         if (type == null) throw new BusinessException(ErrorCode.INVALID_PARAMETER, "entityType must be LEAGUE or TEAM");
         return type;
+    }
+
+    private static boolean isSportteryBaseProvider(String providerCode) {
+        return SPORTTERY_PROVIDER_CODE.equals(providerCode);
+    }
+
+    private static void requireReviewableProvider(String providerCode) {
+        if (isSportteryBaseProvider(providerCode)) {
+            throw new BusinessException(ErrorCode.NORMALIZATION_PROVIDER_NOT_REVIEWABLE);
+        }
     }
 
     private static Long requireId(Long value, String name) {

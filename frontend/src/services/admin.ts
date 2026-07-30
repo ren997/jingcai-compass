@@ -15,6 +15,8 @@ export type SyncStatus = (typeof SYNC_STATUSES)[number];
 
 export const MAPPING_STATUSES = ['PENDING', 'AUTO_CONFIRMED', 'MANUAL_CONFIRMED', 'REJECTED'] as const;
 export type MappingReviewStatus = (typeof MAPPING_STATUSES)[number];
+export const MAPPING_REVIEW_SCOPES = ['ACTIVE', 'HISTORY'] as const;
+export type MappingReviewScope = (typeof MAPPING_REVIEW_SCOPES)[number];
 
 export const NORMALIZATION_ENTITY_TYPES = ['LEAGUE', 'TEAM'] as const;
 export type NormalizationEntityType = (typeof NORMALIZATION_ENTITY_TYPES)[number];
@@ -209,6 +211,7 @@ export type AdminPredictionStatusDetail = {
 export type MappingReviewListQuery = {
   providerCode?: string;
   mappingStatus?: MappingReviewStatus;
+  reviewScope?: MappingReviewScope;
   pageNo: number;
   pageSize: number;
 };

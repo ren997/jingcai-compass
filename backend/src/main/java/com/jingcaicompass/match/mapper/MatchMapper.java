@@ -101,6 +101,14 @@ public interface MatchMapper extends BaseMapper<MatchEntity> {
                     WHERE candidate -&gt;&gt; 'matchId' = m.id::text
                  )
             WHERE mapping.mapping_status = #{mappingStatus}
+            <choose>
+              <when test="reviewScope == 'HISTORY'">
+                AND m.kickoff_time IS NOT NULL AND m.kickoff_time &lt;= CURRENT_TIMESTAMP
+              </when>
+              <otherwise>
+                AND (m.kickoff_time IS NULL OR m.kickoff_time &gt; CURRENT_TIMESTAMP)
+              </otherwise>
+            </choose>
             <if test="providerCode != null and providerCode != ''">
               AND mapping.provider_code = #{providerCode}
             </if>
@@ -111,6 +119,7 @@ public interface MatchMapper extends BaseMapper<MatchEntity> {
     List<MatchEntity> selectMappingReviewMatchPage(
             @Param("providerCode") String providerCode,
             @Param("mappingStatus") String mappingStatus,
+            @Param("reviewScope") String reviewScope,
             @Param("offset") long offset,
             @Param("pageSize") long pageSize
     );
@@ -128,6 +137,14 @@ public interface MatchMapper extends BaseMapper<MatchEntity> {
                     WHERE candidate -&gt;&gt; 'matchId' = m.id::text
                  )
             WHERE mapping.mapping_status = #{mappingStatus}
+            <choose>
+              <when test="reviewScope == 'HISTORY'">
+                AND m.kickoff_time IS NOT NULL AND m.kickoff_time &lt;= CURRENT_TIMESTAMP
+              </when>
+              <otherwise>
+                AND (m.kickoff_time IS NULL OR m.kickoff_time &gt; CURRENT_TIMESTAMP)
+              </otherwise>
+            </choose>
             <if test="providerCode != null and providerCode != ''">
               AND mapping.provider_code = #{providerCode}
             </if>
@@ -135,6 +152,7 @@ public interface MatchMapper extends BaseMapper<MatchEntity> {
             """)
     long countMappingReviewMatches(
             @Param("providerCode") String providerCode,
-            @Param("mappingStatus") String mappingStatus
+            @Param("mappingStatus") String mappingStatus,
+            @Param("reviewScope") String reviewScope
     );
 }

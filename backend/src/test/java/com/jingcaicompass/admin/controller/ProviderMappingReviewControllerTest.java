@@ -77,7 +77,7 @@ class ProviderMappingReviewControllerTest {
 
         mockMvc.perform(post("/api/admin/provider/mappings/list")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new MappingReviewListQueryDto(null, null, 1, 20)))
+                        .content(objectMapper.writeValueAsString(new MappingReviewListQueryDto(null, null, null, 1, 20)))
                         .header(TraceIdContext.HEADER_NAME, "review-list"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(ErrorCode.SUCCESS.code()))
@@ -107,7 +107,7 @@ class ProviderMappingReviewControllerTest {
 
         mockMvc.perform(post("/api/admin/provider/mappings/matches/list")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(new MappingReviewListQueryDto(null, null, 1, 20))))
+                        .content(objectMapper.writeValueAsString(new MappingReviewListQueryDto(null, null, null, 1, 20))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.records[0].match.lotteryMatchNo").value("周三001"))
                         .andExpect(jsonPath("$.data.records[0].externalCandidates[0].externalHomeTeamName")

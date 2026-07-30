@@ -81,6 +81,27 @@ class ProviderNormalizationReviewServiceTest {
     }
 
     @Test
+    void sportteryMappingsAreNotListedOrOperableAsProviderReviews() {
+        var list = service.list(new ProviderNormalizationReviewListQueryDto(
+                ProviderNormalizationEntityTypeEnum.LEAGUE, "CHINA_SPORTTERY", MappingStatusEnum.PENDING, 1, 20));
+        assertThat(list.records()).isEmpty();
+        assertThat(list.total()).isZero();
+        verify(providerLeagueMappingMapper, never()).selectPage(any(Page.class), any(Wrapper.class));
+
+        ProviderLeagueMapping sporttery = pendingLeagueMapping(11L, 110L, "NAME:brazil-serie-a");
+        sporttery.setProviderCode("CHINA_SPORTTERY");
+        when(providerLeagueMappingMapper.selectById(11L)).thenReturn(sporttery);
+
+        assertThatThrownBy(() -> service.confirm(new ProviderNormalizationReviewConfirmDto(
+                ProviderNormalizationEntityTypeEnum.LEAGUE, 11L, 111L), "operator"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(com.jingcaicompass.system.exception.ErrorCode.NORMALIZATION_PROVIDER_NOT_REVIEWABLE);
+        verify(providerLeagueMappingMapper, never()).update(any(), any(Wrapper.class));
+        verify(auditLogService, never()).append(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
     void confirmChangesOnlyPendingProviderMappingAndAppendsAudit() {
         ProviderLeagueMapping pending = pendingLeagueMapping(2L, 20L, "soccer_epl");
         ProviderLeagueMapping confirmed = pendingLeagueMapping(2L, 99L, "soccer_epl");

@@ -34,6 +34,8 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
     static final String METHOD_NAME_CANDIDATE = "NAME_CANDIDATE";
     static final String METHOD_NAME_CANDIDATE_REUSE = "NAME_CANDIDATE_REUSE";
     static final String METHOD_REJECTED_REUSE = "REJECTED_REUSE";
+    static final String METHOD_SPORTTERY_BASE_REUSE = "SPORTTERY_BASE_REUSE";
+    private static final String SPORTTERY_PROVIDER_CODE = "CHINA_SPORTTERY";
 
     private final TeamMapper teamMapper;
     private final TeamAliasMapper teamAliasMapper;
@@ -69,6 +71,14 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
         ProviderTeamMapping externalMapping = null;
         if (providerCode != null && externalId != null) {
             externalMapping = findExternalMapping(providerCode, externalId);
+            if (isSportteryBaseProvider(providerCode) && externalMapping != null) {
+                return new EntityNormalizeResultDto(
+                        externalMapping.getTeamId(),
+                        EntityNormalizeOutcomeEnum.RESOLVED,
+                        null,
+                        METHOD_SPORTTERY_BASE_REUSE
+                );
+            }
             if (externalMapping != null && isConfirmed(externalMapping.getMappingStatus())) {
                 return new EntityNormalizeResultDto(
                         externalMapping.getTeamId(),
@@ -134,7 +144,7 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
             return new EntityNormalizeResultDto(
                     exactHits.get(0).getId(),
                     EntityNormalizeOutcomeEnum.RESOLVED,
-                    providerCode == null || externalId == null ? null : MappingStatusEnum.AUTO_CONFIRMED,
+                    shouldPersistProviderMapping(providerCode, externalId) ? MappingStatusEnum.AUTO_CONFIRMED : null,
                     METHOD_EXACT_NAME
             );
         }
@@ -146,7 +156,7 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
         teamMapper.insert(created);
 
         MappingStatusEnum mappingStatus = null;
-        if (providerCode != null && externalId != null) {
+        if (shouldPersistProviderMapping(providerCode, externalId)) {
             ProviderTeamMapping pending = new ProviderTeamMapping();
             pending.setTeamId(created.getId());
             pending.setProviderCode(providerCode);
@@ -237,7 +247,7 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
             String normalizedKey,
             String externalScope
     ) {
-        if (providerCode == null || externalId == null) {
+        if (!shouldPersistProviderMapping(providerCode, externalId)) {
             return;
         }
         if (existing != null) {
@@ -288,6 +298,14 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
 
     private static boolean requiresManualProviderReview(String providerCode) {
         return "THE_ODDS_API".equals(providerCode);
+    }
+
+    private static boolean isSportteryBaseProvider(String providerCode) {
+        return SPORTTERY_PROVIDER_CODE.equals(providerCode);
+    }
+
+    private static boolean shouldPersistProviderMapping(String providerCode, String externalId) {
+        return providerCode != null && externalId != null && !isSportteryBaseProvider(providerCode);
     }
 
     private static void applyReviewMetadata(

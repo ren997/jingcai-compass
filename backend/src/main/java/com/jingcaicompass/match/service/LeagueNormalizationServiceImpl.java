@@ -34,6 +34,8 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
     static final String METHOD_NAME_CANDIDATE = "NAME_CANDIDATE";
     static final String METHOD_NAME_CANDIDATE_REUSE = "NAME_CANDIDATE_REUSE";
     static final String METHOD_REJECTED_REUSE = "REJECTED_REUSE";
+    static final String METHOD_SPORTTERY_BASE_REUSE = "SPORTTERY_BASE_REUSE";
+    private static final String SPORTTERY_PROVIDER_CODE = "CHINA_SPORTTERY";
 
     private final LeagueMapper leagueMapper;
     private final LeagueAliasMapper leagueAliasMapper;
@@ -69,6 +71,14 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
         ProviderLeagueMapping externalMapping = null;
         if (providerCode != null && externalId != null) {
             externalMapping = findExternalMapping(providerCode, externalId);
+            if (isSportteryBaseProvider(providerCode) && externalMapping != null) {
+                return new EntityNormalizeResultDto(
+                        externalMapping.getLeagueId(),
+                        EntityNormalizeOutcomeEnum.RESOLVED,
+                        null,
+                        METHOD_SPORTTERY_BASE_REUSE
+                );
+            }
             if (externalMapping != null && isConfirmed(externalMapping.getMappingStatus())) {
                 return new EntityNormalizeResultDto(
                         externalMapping.getLeagueId(),
@@ -134,7 +144,7 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
             return new EntityNormalizeResultDto(
                     exactHits.get(0).getId(),
                     EntityNormalizeOutcomeEnum.RESOLVED,
-                    providerCode == null || externalId == null ? null : MappingStatusEnum.AUTO_CONFIRMED,
+                    shouldPersistProviderMapping(providerCode, externalId) ? MappingStatusEnum.AUTO_CONFIRMED : null,
                     METHOD_EXACT_NAME
             );
         }
@@ -146,7 +156,7 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
         leagueMapper.insert(created);
 
         MappingStatusEnum mappingStatus = null;
-        if (providerCode != null && externalId != null) {
+        if (shouldPersistProviderMapping(providerCode, externalId)) {
             ProviderLeagueMapping pending = new ProviderLeagueMapping();
             pending.setLeagueId(created.getId());
             pending.setProviderCode(providerCode);
@@ -237,7 +247,7 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
             String normalizedKey,
             String externalScope
     ) {
-        if (providerCode == null || externalId == null) {
+        if (!shouldPersistProviderMapping(providerCode, externalId)) {
             return;
         }
         if (existing != null) {
@@ -288,6 +298,14 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
 
     private static boolean requiresManualProviderReview(String providerCode) {
         return "THE_ODDS_API".equals(providerCode);
+    }
+
+    private static boolean isSportteryBaseProvider(String providerCode) {
+        return SPORTTERY_PROVIDER_CODE.equals(providerCode);
+    }
+
+    private static boolean shouldPersistProviderMapping(String providerCode, String externalId) {
+        return providerCode != null && externalId != null && !isSportteryBaseProvider(providerCode);
     }
 
     private static void applyReviewMetadata(

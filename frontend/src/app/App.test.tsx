@@ -569,7 +569,10 @@ describe('App routes', () => {
         },
       }],
       confirmedBy: null,
-      match: null,
+      match: {
+        matchId: 42, lotteryMatchNo: '周三042', lotteryDate: '2026-07-22', leagueName: '英超',
+        homeTeamName: '曼彻斯特联', awayTeamName: '切尔西', kickoffTime: '2026-07-22T19:30:00+08:00',
+      },
       updatedAt: '2026-07-22T10:00:00+08:00',
     }));
     renderApp('/admin/mappings/12');
@@ -577,6 +580,8 @@ describe('App routes', () => {
     expect(await screen.findByText('Manchester United')).toBeInTheDocument();
     expect(screen.getByText('Chelsea')).toBeInTheDocument();
     expect(screen.getByText(/稳定来源键：主队 NAME:home-hash/)).toBeInTheDocument();
+    expect(screen.getByText('候选竞彩比赛已开赛，仅保留历史证据，不可确认关联。')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '确认所选比赛' })).toBeDisabled();
   });
 
   it('shows lottery and external kickoff times in the lottery-match mapping detail', async () => {

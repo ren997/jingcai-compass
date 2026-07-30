@@ -16,6 +16,7 @@ import com.jingcaicompass.match.dto.MappingReviewReopenDto;
 import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.entity.MatchSourceMapping;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
+import com.jingcaicompass.match.enums.MappingReviewScopeEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
@@ -26,6 +27,7 @@ import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -76,7 +78,6 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
         MappingStatusEnum status = query == null || query.mappingStatus() == null
                 ? MappingStatusEnum.PENDING
                 : query.mappingStatus();
-
         LambdaQueryWrapper<MatchSourceMapping> wrapper = new LambdaQueryWrapper<MatchSourceMapping>()
                 .eq(MatchSourceMapping::getMappingStatus, status)
                 .orderByDesc(MatchSourceMapping::getUpdatedAt);
@@ -101,15 +102,17 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
         MappingStatusEnum status = query == null || query.mappingStatus() == null
                 ? MappingStatusEnum.PENDING
                 : query.mappingStatus();
+        MappingReviewScopeEnum reviewScope = reviewScope(query);
         String providerCode = query == null || !StringUtils.hasText(query.providerCode())
                 ? null
                 : query.providerCode().trim();
 
         // 1) 先按竞彩比赛分页，避免外部事件重复占据复核列表。
-        long total = matchMapper.countMappingReviewMatches(providerCode, status.getCode());
+        long total = matchMapper.countMappingReviewMatches(providerCode, status.getCode(), reviewScope.name());
         List<MatchEntity> matches = matchMapper.selectMappingReviewMatchPage(
                 providerCode,
                 status.getCode(),
+                reviewScope.name(),
                 (long) (pageNo - 1) * pageSize,
                 pageSize
         );
@@ -212,8 +215,12 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
         if (!allowedTargetMatchIds(current).contains(targetMatchId)) {
             throw new BusinessException(ErrorCode.INVALID_PARAMETER, "targetMatchId must be current match or persisted candidate");
         }
-        if (matchMapper.selectById(targetMatchId) == null) {
+        MatchEntity targetMatch = matchMapper.selectById(targetMatchId);
+        if (targetMatch == null) {
             throw new BusinessException(ErrorCode.INVALID_PARAMETER, "match not found: " + targetMatchId);
+        }
+        if (hasStarted(targetMatch)) {
+            throw new BusinessException(ErrorCode.MAPPING_REVIEW_EXPIRED);
         }
 
         String oldSnapshot = snapshot(current);
@@ -338,6 +345,18 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
             throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
         }
         return operatorUsername.trim();
+    }
+
+    private static MappingReviewScopeEnum reviewScope(MappingReviewListQueryDto query) {
+        return query == null || query.reviewScope() == null
+                ? MappingReviewScopeEnum.ACTIVE
+                : query.reviewScope();
+    }
+
+    private static boolean hasStarted(MatchEntity match) {
+        return match != null
+                && match.getKickoffTime() != null
+                && !match.getKickoffTime().isAfter(Instant.now());
     }
 
     private MatchSourceMapping requireMapping(Long mappingId) {

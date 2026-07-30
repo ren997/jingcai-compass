@@ -175,6 +175,26 @@ class TeamNormalizationServiceTest {
     }
 
     @Test
+    void sportteryIsTheInternalBaselineAndDoesNotCreateProviderReviewMappings() {
+        when(providerTeamMappingMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(teamAliasMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        Team existing = new Team();
+        existing.setId(8L);
+        existing.setNameZh("上海海港");
+        when(teamMapper.selectList(null)).thenReturn(List.of(existing));
+
+        EntityNormalizeResultDto result = service.resolve(
+                new EntityNormalizeRequestDto("CHINA_SPORTTERY", "NAME:shanghai-port", "上海海港")
+        );
+
+        assertThat(result.entityId()).isEqualTo(8L);
+        assertThat(result.outcome()).isEqualTo(EntityNormalizeOutcomeEnum.RESOLVED);
+        assertThat(result.mappingStatus()).isNull();
+        verify(providerTeamMappingMapper, never()).insert(any(ProviderTeamMapping.class));
+        verify(providerTeamMappingMapper, never()).updateById(any(ProviderTeamMapping.class));
+    }
+
+    @Test
     void similarButDifferentNamesCreateSeparateCandidates() {
         when(providerTeamMappingMapper.selectOne(any(Wrapper.class))).thenReturn(null);
         when(teamAliasMapper.selectOne(any(Wrapper.class))).thenReturn(null);

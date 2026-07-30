@@ -3,9 +3,11 @@ import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   MAPPING_STATUSES,
+  MAPPING_REVIEW_SCOPES,
   type MappingReviewExternalCandidate,
   type MappingReviewMatchListItem,
   type MappingReviewStatus,
+  type MappingReviewScope,
 } from '../../services/admin';
 import { formatTimestamp } from '../matches/matchPresentation';
 import { parseMappingSearch, toMappingQuery, toMappingSearch } from './adminSearch';
@@ -13,6 +15,9 @@ import { useMappingReviewActions, useMappingReviewMatchesQuery } from './useAdmi
 
 const labels: Record<MappingReviewStatus, string> = {
   PENDING: '待复核', AUTO_CONFIRMED: '自动确认', MANUAL_CONFIRMED: '人工确认', REJECTED: '已拒绝',
+};
+const scopeLabels: Record<MappingReviewScope, string> = {
+  ACTIVE: '当前未开赛', HISTORY: '历史已开赛',
 };
 
 type PendingConfirmation = {
@@ -69,16 +74,19 @@ export default function AdminMappingsPage() {
       <label><span>映射状态</span><Select aria-label="映射状态" value={filters.mappingStatus}
         onChange={(value) => update({ mappingStatus: value as MappingReviewStatus, pageNo: 1 })}
         options={MAPPING_STATUSES.map((value) => ({ value, label: labels[value] }))} /></label>
+      <label><span>复核范围</span><Select aria-label="复核范围" value={filters.reviewScope}
+        onChange={(value) => update({ reviewScope: value as MappingReviewScope, pageNo: 1 })}
+        options={MAPPING_REVIEW_SCOPES.map((value) => ({ value, label: scopeLabels[value] }))} /></label>
     </section>
     {query.isPending && <section className="admin-state-card">正在读取竞彩比赛与外部候选……</section>}
     {query.isError && <Alert type="error" showIcon message={`映射复核不可用：${query.error.message}`} />}
     {actionError && <Alert type="error" showIcon message={`关联未完成：${actionError.message}`} />}
-    {query.isSuccess && page && <section className="admin-panel"><header className="admin-panel-heading"><div><h2>{labels[filters.mappingStatus]}竞彩比赛</h2><span>共 {page.total} 场</span></div>
+    {query.isSuccess && page && <section className="admin-panel"><header className="admin-panel-heading"><div><h2>{filters.reviewScope === 'ACTIVE' ? `${labels[filters.mappingStatus]}当前竞彩比赛` : `${labels[filters.mappingStatus]}历史竞彩比赛`}</h2><span>共 {page.total} 场</span></div>
       {query.isStale && <span>缓存数据，正在更新</span>}</header>
       {page.records.length === 0 ? <p className="admin-empty">当前筛选没有可复核的竞彩比赛。</p> : <div className="admin-mapping-list">{page.records.map((item) => {
         const selectedId = selectedCandidate(item);
         const selected = item.externalCandidates.find((external) => external.mappingId === selectedId);
-        const canConfirm = filters.mappingStatus === 'PENDING' && selected !== undefined;
+        const canConfirm = filters.reviewScope === 'ACTIVE' && filters.mappingStatus === 'PENDING' && selected !== undefined;
         return <article className="admin-mapping-card lottery-mapping-card" key={item.match.matchId}>
           <header><div><strong>{item.match.lotteryMatchNo} · {item.match.homeTeamName} vs {item.match.awayTeamName}</strong>
             <p>{item.match.lotteryDate} · {item.match.leagueName || '联赛待标准化'} · {formatTimestamp(item.match.kickoffTime)}</p></div>
@@ -96,6 +104,7 @@ export default function AdminMappingsPage() {
             <Button type="primary" disabled={!canConfirm} onClick={() => selected && (setPendingConfirmation({ match: item.match, external: selected }), setConfirmation(''))}>确认关联</Button>
             <Link to={`/admin/mappings/matches/${item.match.matchId}${returnSearch ? `?${returnSearch}` : ''}`}>查看候选详情</Link>
           </div>
+          {filters.reviewScope === 'HISTORY' && <p className="admin-metadata-note">该场已开赛，仅保留历史证据，不可确认关联。</p>}
         </article>;
       })}</div>}
       <div className="pagination"><Button disabled={filters.pageNo <= 1} onClick={() => update({ pageNo: filters.pageNo - 1 })}>上一页</Button>

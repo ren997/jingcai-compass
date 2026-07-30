@@ -25,6 +25,7 @@ import com.jingcaicompass.match.dto.MappingReviewReopenDto;
 import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.entity.MatchSourceMapping;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
+import com.jingcaicompass.match.enums.MappingReviewScopeEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
@@ -78,7 +79,7 @@ class MatchMappingReviewServiceTest {
         when(matchSourceMappingMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
 
         PageResult<MappingReviewListItemVo> result = service.list(
-                new MappingReviewListQueryDto("THE_ODDS_API", null, 1, 500)
+                new MappingReviewListQueryDto("THE_ODDS_API", null, null, 1, 500)
         );
 
         assertThat(result.pageSize()).isEqualTo(100);
@@ -98,8 +99,8 @@ class MatchMappingReviewServiceTest {
                 "reasons", List.of("KICKOFF_TIME")
         )));
 
-        when(matchMapper.countMappingReviewMatches("THE_ODDS_API", "PENDING")).thenReturn(1L);
-        when(matchMapper.selectMappingReviewMatchPage("THE_ODDS_API", "PENDING", 0L, 20L))
+        when(matchMapper.countMappingReviewMatches("THE_ODDS_API", "PENDING", "ACTIVE")).thenReturn(1L);
+        when(matchMapper.selectMappingReviewMatchPage("THE_ODDS_API", "PENDING", "ACTIVE", 0L, 20L))
                 .thenReturn(List.of(lotteryMatch));
         when(matchSourceMappingMapper.selectReviewMappingIdsForMatches(
                 eq("THE_ODDS_API"), eq("PENDING"), anyList()
@@ -107,7 +108,7 @@ class MatchMappingReviewServiceTest {
         when(matchSourceMappingMapper.selectBatchIds(anyCollection())).thenReturn(List.of(mapping));
 
         PageResult<MappingReviewMatchListItemVo> result = service.listByMatch(
-                new MappingReviewListQueryDto("THE_ODDS_API", null, 1, 20)
+                new MappingReviewListQueryDto("THE_ODDS_API", null, null, 1, 20)
         );
 
         assertThat(result.total()).isEqualTo(1);
@@ -119,6 +120,21 @@ class MatchMappingReviewServiceTest {
             assertThat(candidate.score()).isEqualByComparingTo("0.8000");
             assertThat(candidate.externalKickoffTime()).isEqualTo(Instant.parse("2026-07-24T13:00:00Z"));
         });
+    }
+
+    @Test
+    void listByMatchPassesHistoryScopeToDatabasePagination() {
+        when(matchMapper.countMappingReviewMatches("THE_ODDS_API", "PENDING", "HISTORY")).thenReturn(0L);
+        when(matchMapper.selectMappingReviewMatchPage("THE_ODDS_API", "PENDING", "HISTORY", 0L, 20L))
+                .thenReturn(List.of());
+
+        PageResult<MappingReviewMatchListItemVo> result = service.listByMatch(
+                new MappingReviewListQueryDto("THE_ODDS_API", MappingStatusEnum.PENDING, MappingReviewScopeEnum.HISTORY, 1, 20)
+        );
+
+        assertThat(result.total()).isZero();
+        verify(matchMapper).countMappingReviewMatches("THE_ODDS_API", "PENDING", "HISTORY");
+        verify(matchMapper).selectMappingReviewMatchPage("THE_ODDS_API", "PENDING", "HISTORY", 0L, 20L);
     }
 
     @Test
@@ -216,6 +232,22 @@ class MatchMappingReviewServiceTest {
         ))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("confirm conflict");
+        verify(auditLogService, never()).append(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void confirmRejectsStartedLotteryMatch() {
+        MatchSourceMapping pending = pendingMapping(41L, 410L);
+        MatchEntity started = match(410L);
+        started.setKickoffTime(Instant.now().minusSeconds(60));
+        when(matchSourceMappingMapper.selectById(41L)).thenReturn(pending);
+        when(matchMapper.selectById(410L)).thenReturn(started);
+
+        assertThatThrownBy(() -> service.confirm(new MappingReviewConfirmDto(41L, null), "admin-1"))
+                .isInstanceOf(BusinessException.class)
+                .extracting("errorCode")
+                .isEqualTo(com.jingcaicompass.system.exception.ErrorCode.MAPPING_REVIEW_EXPIRED);
+        verify(matchSourceMappingMapper, never()).update(isNull(), any(Wrapper.class));
         verify(auditLogService, never()).append(any(), any(), any(), any(), any(), any(), any());
     }
 

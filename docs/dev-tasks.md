@@ -1069,12 +1069,14 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-30：根据项目负责人反馈恢复为时效修正。当前比赛映射页仅按 `PENDING` 查询，昨天已开赛的比赛仍占据运营队列；本次仅增加“当前/历史”复核范围与服务端过期开赛保护，不改 Provider、联赛/球队标准化、数据库结构或既有映射审计。计划运行后端、前端、差异检查和 PostgreSQL 16 集成验证。
   - 2026-07-30：项目负责人补充确认联赛/球队复核的主体口径：竞彩侧已完成的内部标准实体是基线，`CHINA_SPORTTERY` 不应作为待复核 Provider 项再次出现；仅人工确认外部 Provider（当前为 The Odds）到竞彩标准实体的关系。既有体彩来源映射不删除、不回填，仅从复核队列和操作入口排除。
   - 2026-07-30：时效与复核主体修正完成本地验证。比赛映射默认 `ACTIVE`（未开赛），`HISTORY` 仅保留证据且服务端拒绝确认已开赛目标；标准化队列与详情拒绝体彩来源，页面说明为“外部 Provider → 竞彩内部标准实体”。本机真实登录后的联赛复核接口和页面仅返回 1 条 `THE_ODDS_API` 项，`CHINA_SPORTTERY` 为 0。
+  - 2026-07-30：修复联赛/球队内部候选查询的运行时回归：`candidates` 漏接收已校验的 `mappingId`，增量编译未重建旧类导致本地页面返回 500。已补回局部变量并增加联赛候选服务回归测试；不改变候选范围或复核主体。
 -- 验证记录：
   - 2026-07-30：本地普通测试与前端构建已通过；PostgreSQL 16 空库迁移、Mapper 行为和并发条件更新仍以 Draft PR 的 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 为准，成功前任务保持 `IN_PROGRESS`。
   - 2026-07-30：`mvn -B -ntp -f backend/pom.xml test` 通过（425 项）；本地 `local` profile 启动与独立 Actuator 健康检查通过；`git diff --check` 通过。前端未改动，沿用实现提交的 Vitest 60 项与生产构建通过记录。修正断言推送后必须等待新 head 的 PostgreSQL 16 CI。
   - 2026-07-30：Docker Desktop 4.84.0 / Engine 29.6.2 本机启动；`hello-world` 通过。Testcontainers 1.21.4 下，`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（425 个单测、41 个 PostgreSQL 16 IT）；`cd frontend && npm run test && npm run build` 通过（11 个文件、60 项）；`http://127.0.0.1:18083/actuator/health` 返回 `UP`；`git diff --check` 通过。仍须等待 Draft PR 对同一提交的 CI。
   - 2026-07-30：同一提交的 GitHub Actions #89 成功；PostgreSQL 16.14 空库迁移 V1～V16、425 个普通测试和 41 个集成测试均通过，满足本任务 Draft PR CI 收口条件。
   - 2026-07-30：`npm run backend:test` 通过（430 项）；`cd frontend && npm run test && npm run build` 通过（11 个文件、60 项）；local profile 已在默认 `8080/8081` 启动并返回健康状态 `UP`。未运行本轮 PostgreSQL 集成测试，按项目负责人要求暂缓。
+  - 2026-07-30：为防止增量编译掩盖候选查询错误，执行 `mvn -B -ntp -f backend/pom.xml clean test`，431 项通过；`cd frontend && npm run test && npm run build` 为 11 个文件、60 项通过且构建成功。本地管理员受保护候选接口实测返回成功及 3 个内部联赛候选（含“巴甲”）。本轮 PostgreSQL 集成测试仍按项目负责人要求未执行。
 
 ## 8. M3 预测发布、锁定和快照
 

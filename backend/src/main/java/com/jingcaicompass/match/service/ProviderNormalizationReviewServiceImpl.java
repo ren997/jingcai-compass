@@ -142,7 +142,7 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
     @Override
     public List<ProviderNormalizationEntityVo> candidates(ProviderNormalizationCandidateQueryDto query) {
         ProviderNormalizationEntityTypeEnum type = requireType(query == null ? null : query.entityType());
-        requireId(query == null ? null : query.mappingId(), "mappingId");
+        Long mappingId = requireId(query == null ? null : query.mappingId(), "mappingId");
         String keyword = trimToNull(query == null ? null : query.keyword());
 
         // 1) 只搜索内部标准字典；客户端不能提交裸 ID 以外的外部赛事或载荷数据。

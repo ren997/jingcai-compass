@@ -14,6 +14,7 @@ import com.jingcaicompass.audit.enums.AuditActionTypeEnum;
 import com.jingcaicompass.audit.enums.AuditTargetTypeEnum;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
 import com.jingcaicompass.audit.service.AuditLogService;
+import com.jingcaicompass.match.dto.ProviderNormalizationCandidateQueryDto;
 import com.jingcaicompass.match.dto.ProviderNormalizationReviewConfirmDto;
 import com.jingcaicompass.match.dto.ProviderNormalizationReviewListQueryDto;
 import com.jingcaicompass.match.dto.ProviderNormalizationReviewRejectDto;
@@ -27,6 +28,7 @@ import com.jingcaicompass.match.mapper.ProviderLeagueMappingMapper;
 import com.jingcaicompass.match.mapper.ProviderTeamMappingMapper;
 import com.jingcaicompass.match.mapper.TeamMapper;
 import com.jingcaicompass.match.vo.ProviderNormalizationReviewDetailVo;
+import com.jingcaicompass.match.vo.ProviderNormalizationEntityVo;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
 import java.math.BigDecimal;
@@ -99,6 +101,19 @@ class ProviderNormalizationReviewServiceTest {
                 .isEqualTo(com.jingcaicompass.system.exception.ErrorCode.NORMALIZATION_PROVIDER_NOT_REVIEWABLE);
         verify(providerLeagueMappingMapper, never()).update(any(), any(Wrapper.class));
         verify(auditLogService, never()).append(any(), any(), any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void candidatesSearchTheInternalLeagueDictionaryForReviewableProviders() {
+        ProviderLeagueMapping mapping = pendingLeagueMapping(12L, 120L, "soccer_brazil_campeonato");
+        when(providerLeagueMappingMapper.selectById(12L)).thenReturn(mapping);
+        when(leagueMapper.selectList(any(Wrapper.class))).thenReturn(List.of(league(121L, "巴西甲级联赛")));
+
+        List<ProviderNormalizationEntityVo> result = service.candidates(new ProviderNormalizationCandidateQueryDto(
+                ProviderNormalizationEntityTypeEnum.LEAGUE, 12L, "巴西"));
+
+        assertThat(result).containsExactly(new ProviderNormalizationEntityVo(121L, "巴西甲级联赛", null));
+        verify(leagueMapper).selectList(any(Wrapper.class));
     }
 
     @Test

@@ -102,8 +102,8 @@ class DataPipelineApplicationIT {
         assertThat(singleLong("""
                 SELECT COUNT(*)
                 FROM provider_team_mappings
-                WHERE mapping_status = 'MANUAL_CONFIRMED'
-                  AND mapping_method = 'ALIAS'
+                WHERE mapping_status = 'AUTO_CONFIRMED'
+                  AND mapping_method = 'EXACT_NAME'
                 """)).isEqualTo(2);
         assertThat(singleLong("SELECT COUNT(*) FROM data_sync_run_payloads")).isEqualTo(2);
         assertThat(singleString("""
@@ -138,7 +138,7 @@ class DataPipelineApplicationIT {
         assertThat(afterSecond).isEqualTo(afterFirst);
         assertThat(afterSecond.matches()).isEqualTo(2);
         assertThat(afterSecond.leagues()).isEqualTo(1);
-        assertThat(afterSecond.teams()).isEqualTo(6);
+        assertThat(afterSecond.teams()).isEqualTo(4);
         assertThat(afterSecond.providerLeagueMappings()).isEqualTo(1);
         assertThat(afterSecond.providerTeamMappings()).isEqualTo(2);
         assertThat(afterSecond.matchSourceMappings()).isEqualTo(8);

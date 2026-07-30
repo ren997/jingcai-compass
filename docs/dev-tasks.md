@@ -1057,11 +1057,14 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-30：GitHub Actions [#83](https://github.com/ren997/jingcai-compass/actions/runs/30508911019) 已验证服务装配修复，但暴露两条随 V16 和“无/不完整盘口仅统计跳过”语义演进而过期的 IT 断言：空库迁移数仍写为 15，Stub 亚盘流水线仍预期 `PARTIAL` 并要求不存在的失败文本。已对齐为 V1～V16 和成功但含跳过记录的语义；提交前本地 `local` profile 已以替代端口 `18082` 完整启动，连接 PostgreSQL 并完成 Flyway V16 校验，`http://127.0.0.1:18083/actuator/health` 返回 `UP`；不停止占用默认 8080 的既有用户进程。
   - 2026-07-30：GitHub Actions [#84](https://github.com/ren997/jingcai-compass/actions/runs/30509482382) 成功执行 V1～V16 迁移和 40 个 IT，但 `DataPipelineApplicationIT` 仍把 T207 的 6 条已确认赛事映射当作预期；T208 现行约束下种子数据仅有 1 条人工赛事确认，其余 7 条外部事件保持 `PENDING`，不允许由球队/联赛别名反推。已将断言改为 `1/7`，待下一次 PostgreSQL 16 CI 验证。
   - 2026-07-30：GitHub Actions [#85](https://github.com/ren997/jingcai-compass/actions/runs/30509730515) 继续验证通过前述映射统计后，显示同一旧 T207 断言仍预期 5 条自动写入亚盘快照；T208 下仅预置的人工赛事确认可写入 1 条快照，另外 7 条因未确认标准化关系跳过，覆盖 1/2 场。已一并将快照、跳过数、覆盖率与幂等表计数对齐，待下一次 PostgreSQL 16 CI 验证。
-  - 2026-07-30：GitHub Actions [#86](https://github.com/ren997/jingcai-compass/actions/runs/30509986918) 继续验证后显示旧 T207 IT 仍预期 Stub 流水线按全局别名自动创建 `provider_team_mappings`。T208 禁止该推断，Provider 联赛/球队关系只能由独立管理员确认写入；测试现明确断言 Stub 流水线不生成 Provider 映射，同时保留单场人工赛事确认的断言，待下一次 PostgreSQL 16 CI 验证。
-  - 2026-07-30：GitHub Actions [#87](https://github.com/ren997/jingcai-compass/actions/runs/30510213234) 显示前述断言范围过宽：2 条 `STUB` 体彩侧既有 `MANUAL_CONFIRMED/ALIAS` 映射是独立标准化的合法结果，并非 The Odds 事件映射反推。已保留该体彩基线，移除的仅是亚盘自动扩散出的 Provider 映射计数；待下一次 PostgreSQL 16 CI 验证。
+  - 2026-07-30：GitHub Actions [#86](https://github.com/ren997/jingcai-compass/actions/runs/30509986918) 继续验证后显示旧 T207 IT 的 Provider 球队映射总数仍按亚盘自动扩散口径断言。T208 下只保留体彩独立标准化产生的两条映射，The Odds 未确认身份不产生自动复用关系；测试改为按映射来源和状态精确断言。
+  - 2026-07-30：GitHub Actions [#87](https://github.com/ren997/jingcai-compass/actions/runs/30510213234) 显示前一版把表总数 `2` 错误归类为人工别名。实际两条为体彩比赛 B 的 `AUTO_CONFIRMED/EXACT_NAME` 映射，人工别名映射为 0；已将断言限定为该稳定的合法体彩基线，待本机容器与下一次 PostgreSQL 16 CI 验证。
+  - 2026-07-30：本机 Docker Desktop 4.84/Engine 29 已安装并通过 `hello-world` 验证。项目原 Testcontainers 1.19.8 无法与该引擎的 Windows 命名管道握手；临时使用 1.21.4 后已在本机启动 PostgreSQL 16 容器并执行 `DataPipelineApplicationIT`。该测试继续暴露最后一项旧 T207 口径：未确认亚盘球队不再自动新建标准实体，预期球队数由 6 对齐为 4；将在相同本机容器命令复验后再提交依赖升级与测试修正。
+  - 2026-07-30：将测试依赖固定升级至 Testcontainers 1.21.4；本机 Docker Desktop 4.84/Engine 29 已可直接执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`，完整通过 425 个单测和 41 个 PostgreSQL 16 集成测试。`DataPipelineApplicationIT` 现同时覆盖：1 条预置人工赛事确认、7 条待复核外部事件、1 条亚盘快照、2 条体彩 `AUTO_CONFIRMED/EXACT_NAME` 队伍映射、4 支未由亚盘自动扩展的标准球队以及第二次运行幂等。待提交后由 Draft PR 复验。
 -- 验证记录：
   - 2026-07-30：本地普通测试与前端构建已通过；PostgreSQL 16 空库迁移、Mapper 行为和并发条件更新仍以 Draft PR 的 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 为准，成功前任务保持 `IN_PROGRESS`。
   - 2026-07-30：`mvn -B -ntp -f backend/pom.xml test` 通过（425 项）；本地 `local` profile 启动与独立 Actuator 健康检查通过；`git diff --check` 通过。前端未改动，沿用实现提交的 Vitest 60 项与生产构建通过记录。修正断言推送后必须等待新 head 的 PostgreSQL 16 CI。
+  - 2026-07-30：Docker Desktop 4.84.0 / Engine 29.6.2 本机启动；`hello-world` 通过。Testcontainers 1.21.4 下，`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（425 个单测、41 个 PostgreSQL 16 IT）；`cd frontend && npm run test && npm run build` 通过（11 个文件、60 项）；`http://127.0.0.1:18083/actuator/health` 返回 `UP`；`git diff --check` 通过。仍须等待 Draft PR 对同一提交的 CI。
 
 ## 8. M3 预测发布、锁定和快照
 

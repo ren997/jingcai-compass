@@ -41,6 +41,7 @@ import com.jingcaicompass.match.mapper.TeamMapper;
 import com.jingcaicompass.match.service.MatchNormalizationBackfillService;
 import com.jingcaicompass.match.service.MatchMappingReviewService;
 import com.jingcaicompass.match.service.MatchResultSyncService;
+import com.jingcaicompass.match.service.ProviderNormalizationReviewService;
 import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.match.client.SportteryProviderProperties;
@@ -171,6 +172,7 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(AdminPredictionStatusQueryService.class);
                     assertThat(context).hasSingleBean(AdminSyncRunQueryService.class);
                     assertThat(context).hasSingleBean(MatchMappingReviewService.class);
+                    assertThat(context).hasSingleBean(ProviderNormalizationReviewService.class);
                     assertThat(context).doesNotHaveBean(DataPipelineSyncJob.class);
                     assertThat(context).doesNotHaveBean(PredictionLockJob.class);
                     assertThat(context).doesNotHaveBean(SnapshotPublishJob.class);

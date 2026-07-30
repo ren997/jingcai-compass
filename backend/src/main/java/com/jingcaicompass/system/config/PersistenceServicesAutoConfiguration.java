@@ -66,6 +66,8 @@ import com.jingcaicompass.match.service.MatchMappingServiceImpl;
 import com.jingcaicompass.match.service.MatchNormalizationBackfillService;
 import com.jingcaicompass.match.service.MatchNormalizationBackfillServiceImpl;
 import com.jingcaicompass.match.service.MatchNormalizationWorker;
+import com.jingcaicompass.match.service.ProviderNormalizationReviewService;
+import com.jingcaicompass.match.service.ProviderNormalizationReviewServiceImpl;
 import com.jingcaicompass.match.service.SportteryPoolMatchWriter;
 import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
 import com.jingcaicompass.match.service.SportteryPoolSyncService;
@@ -811,6 +813,28 @@ public class PersistenceServicesAutoConfiguration {
         return new MatchMappingReviewServiceImpl(
                 matchSourceMappingMapper,
                 matchMapper,
+                auditLogService,
+                paginationProperties
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(ProviderNormalizationReviewService.class)
+    ProviderNormalizationReviewService providerNormalizationReviewService(
+            ProviderLeagueMappingMapper providerLeagueMappingMapper,
+            ProviderTeamMappingMapper providerTeamMappingMapper,
+            LeagueMapper leagueMapper,
+            TeamMapper teamMapper,
+            AuditLogMapper auditLogMapper,
+            AuditLogService auditLogService,
+            PaginationProperties paginationProperties
+    ) {
+        return new ProviderNormalizationReviewServiceImpl(
+                providerLeagueMappingMapper,
+                providerTeamMappingMapper,
+                leagueMapper,
+                teamMapper,
+                auditLogMapper,
                 auditLogService,
                 paginationProperties
         );

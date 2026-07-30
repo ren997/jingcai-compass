@@ -1053,6 +1053,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-30：实现完成，待 Draft PR 的 PostgreSQL 16 CI 收口。V16 只新增实时采集的展示名、规范化键与作用域字段，不反推旧记录；The Odds 新联赛/球队身份一律进入 PENDING，只有 `MANUAL_CONFIRMED` 映射才会传入赛事评分。`mvn -B -ntp -f backend/pom.xml clean test` 424 项通过；`cd frontend && npm run test && npm run build` 为 60 项通过并完成生产构建；`git diff --check` 通过。
   - 2026-07-30：提交 `6aed098` 已推送至 `origin/codex/t208-normalization-review`。创建 Draft PR 被外部权限阻塞：已授权 GitHub 连接器返回 `403 Resource not accessible by integration`（缺少 Pull requests 写权限），本机未安装 GitHub CLI，内置浏览器也尚未登录 GitHub。解除条件：项目负责人使用有仓库写权限的 GitHub 账号登录并创建 PR，或为连接器授予该仓库的 Pull requests 写权限；随后运行要求的 PostgreSQL 16 CI。任务改为 `BLOCKED`，不得启动 T106/T107 连续观测。
   - 2026-07-30：GitHub 授权刷新后，Draft PR [#20](https://github.com/ren997/jingcai-compass/pull/20) 已从 `codex/t208-normalization-review`（`f586276`）创建，权限阻塞解除。等待 GitHub Actions 执行 PostgreSQL 16/Testcontainers 验证；任务恢复为 `IN_PROGRESS`。用户现有 V15 注释空白改动未纳入 PR。
+  - 2026-07-30：GitHub Actions [#82](https://github.com/ren997/jingcai-compass/actions/runs/30508345307) 首次 PostgreSQL 16 验证失败；原因是组件扫描早于 DataSource 注册，`ProviderNormalizationReviewServiceImpl` 的 `@ConditionalOnBean(DataSource.class)` 未装配，导致后台 Controller 缺少依赖。已在 `PersistenceServicesAutoConfiguration` 补齐同类持久化服务兜底工厂，并以自动配置回归测试覆盖。`mvn -B -ntp -f backend/pom.xml test` 425 项通过，`git diff --check` 通过；本机未运行 Docker，Testcontainers 集成验证继续以 PR CI 为准。
 -- 验证记录：
   - 2026-07-30：本地普通测试与前端构建已通过；PostgreSQL 16 空库迁移、Mapper 行为和并发条件更新仍以 Draft PR 的 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 为准，成功前任务保持 `IN_PROGRESS`。
 

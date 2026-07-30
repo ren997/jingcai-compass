@@ -31,7 +31,6 @@ export default function AdminNormalizationDetailPage({ entityType }: Props) {
   const actions = useProviderNormalizationActions();
   const [selectedEntityId, setSelectedEntityId] = useState<number>();
   const [action, setAction] = useState<Action>(null);
-  const [confirmation, setConfirmation] = useState('');
   const [reason, setReason] = useState('');
   const listPath = entityType === 'LEAGUE' ? '/admin/normalizations/leagues' : '/admin/normalizations/teams';
   const backTo = `${listPath}${searchParams.toString() ? `?${searchParams}` : ''}`;
@@ -42,15 +41,15 @@ export default function AdminNormalizationDetailPage({ entityType }: Props) {
   const detail = detailQuery.data!;
   const currentMappingId = mappingId;
   const mutation = action === 'confirm' ? actions.confirm : action === 'reject' ? actions.reject : actions.reopen;
-  const requiredWord = action === 'confirm' ? '确认标准化' : action === 'reject' ? '确认拒绝' : '确认重新打开';
+  const actionLabel = action === 'confirm' ? '确认标准化' : action === 'reject' ? '确认拒绝' : '确认重新打开';
   const canConfirm = detail.mappingStatus === 'PENDING' && selectedEntityId !== undefined;
 
   async function submitAction() {
-    if (!action || confirmation !== requiredWord) return;
+    if (!action) return;
     if (action === 'confirm' && selectedEntityId !== undefined) await actions.confirm.mutateAsync({ entityType, mappingId: currentMappingId, targetEntityId: selectedEntityId });
     if (action === 'reject') await actions.reject.mutateAsync({ entityType, mappingId: currentMappingId, reason });
     if (action === 'reopen') await actions.reopen.mutateAsync({ entityType, mappingId: currentMappingId });
-    setAction(null); setConfirmation(''); setReason('');
+    setAction(null); setReason('');
   }
 
   return <main className="admin-page admin-workspace">
@@ -68,17 +67,16 @@ export default function AdminNormalizationDetailPage({ entityType }: Props) {
         {(candidatesQuery.data ?? []).filter((item) => item.entityId !== detail.currentEntity?.entityId).map((item) => <Radio key={item.entityId} value={item.entityId}><div className="mapping-candidate-content"><strong>{displayEntity(item)}</strong><span>内部 ID：{item.entityId} {item.nameEn && item.nameZh ? `· ${item.nameEn}` : ''}</span></div></Radio>)}
       </Radio.Group>}
       {!candidatesQuery.isPending && (candidatesQuery.data ?? []).filter((item) => item.entityId !== detail.currentEntity?.entityId).length === 0 && <p className="admin-empty">没有可选内部实体。请保持待复核，等待体彩侧建立对应标准实体。</p>}
-      <div className="admin-actions"><Button type="primary" disabled={!canConfirm} onClick={() => { setAction('confirm'); setConfirmation(''); }}>确认标准化</Button><Button danger onClick={() => { setAction('reject'); setConfirmation(''); }}>拒绝</Button></div>
+      <div className="admin-actions"><Button type="primary" disabled={!canConfirm} onClick={() => setAction('confirm')}>确认标准化</Button><Button danger onClick={() => setAction('reject')}>拒绝</Button></div>
     </section>}
-    {detail.mappingStatus === 'REJECTED' && <section className="admin-panel"><p className="admin-empty">该映射已拒绝，不会用于后续自动候选。</p><Button onClick={() => { setAction('reopen'); setConfirmation(''); }}>重新打开</Button></section>}
+    {detail.mappingStatus === 'REJECTED' && <section className="admin-panel"><p className="admin-empty">该映射已拒绝，不会用于后续自动候选。</p><Button onClick={() => setAction('reopen')}>重新打开</Button></section>}
     <section className="admin-panel"><header className="admin-panel-heading"><div><h2>审计历史</h2><span>只追加</span></div></header>
       {detail.auditHistory.length === 0 ? <p className="admin-empty">尚无人工操作。</p> : <ul className="admin-error-list">{detail.auditHistory.map((item, index) => <li key={`${item.createdAt}-${index}`}><strong>{item.actionType}</strong><span>{item.operatorId} · {formatTimestamp(item.createdAt)}</span></li>)}</ul>}
     </section>
     <Link className="admin-back-link" to={backTo}>返回{typeLabel(entityType)}复核列表</Link>
-    <Modal title={action === 'confirm' ? `确认${typeLabel(entityType)}标准化` : action === 'reject' ? `拒绝${typeLabel(entityType)}映射` : `重新打开${typeLabel(entityType)}映射`} open={action !== null} onCancel={() => setAction(null)} onOk={() => void submitAction()} confirmLoading={mutation.isPending} okText={requiredWord} okButtonProps={{ disabled: confirmation !== requiredWord }}>
+    <Modal title={action === 'confirm' ? `确认${typeLabel(entityType)}标准化` : action === 'reject' ? `拒绝${typeLabel(entityType)}映射` : `重新打开${typeLabel(entityType)}映射`} open={action !== null} onCancel={() => setAction(null)} onOk={() => void submitAction()} confirmLoading={mutation.isPending} okText={actionLabel} okButtonProps={{ disabled: action === 'confirm' && selectedEntityId === undefined }}>
       {action === 'confirm' && <p>将 Provider “{detail.externalDisplayName || detail.externalId}”确认映射为所选内部实体。此操作不会确认任何赛事或写入全局别名。</p>}
       {action === 'reject' && <label className="admin-modal-field">可选原因<Input value={reason} onChange={(event) => setReason(event.target.value)} /></label>}
-      <label className="admin-modal-field">输入“{requiredWord}”以进行二次确认<Input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
     </Modal>
   </main>;
 }

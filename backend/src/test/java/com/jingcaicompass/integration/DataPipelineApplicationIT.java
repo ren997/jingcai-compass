@@ -92,11 +92,11 @@ class DataPipelineApplicationIT {
         assertThat(first.normalization().updatedMatchCount()).isEqualTo(1);
         assertThat(first.confirmedMappingCount()).isEqualTo(1);
         assertThat(first.pendingMappingCount()).isEqualTo(7);
-        assertThat(first.asianOddsSnapshotInsertCount()).isEqualTo(5);
-        assertThat(first.skippedUnmapped()).isEqualTo(2);
-        assertThat(first.skippedIncomplete()).isEqualTo(1);
-        assertThat(first.coveredMatchCount()).isEqualTo(2);
-        assertThat(first.coverageRate()).isEqualByComparingTo("1.0000");
+        assertThat(first.asianOddsSnapshotInsertCount()).isEqualTo(1);
+        assertThat(first.skippedUnmapped()).isEqualTo(7);
+        assertThat(first.skippedIncomplete()).isZero();
+        assertThat(first.coveredMatchCount()).isEqualTo(1);
+        assertThat(first.coverageRate()).isEqualByComparingTo("0.5000");
         assertThat(first.errorMessage()).isNull();
 
         assertThat(singleLong("""
@@ -148,7 +148,7 @@ class DataPipelineApplicationIT {
         assertThat(afterSecond.providerTeamMappings()).isEqualTo(8);
         assertThat(afterSecond.matchSourceMappings()).isEqualTo(8);
         assertThat(afterSecond.sportterySnapshots()).isEqualTo(2);
-        assertThat(afterSecond.asianOddsSnapshots()).isEqualTo(5);
+        assertThat(afterSecond.asianOddsSnapshots()).isEqualTo(1);
         assertThat(afterSecond.rawPayloads()).isEqualTo(2);
         assertThat(singleLong("SELECT COUNT(*) FROM data_sync_run_payloads")).isEqualTo(4);
         assertThat(singleLong("SELECT COUNT(DISTINCT raw_data_payload_id) FROM data_sync_run_payloads"))

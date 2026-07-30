@@ -16,6 +16,9 @@ export type SyncStatus = (typeof SYNC_STATUSES)[number];
 export const MAPPING_STATUSES = ['PENDING', 'AUTO_CONFIRMED', 'MANUAL_CONFIRMED', 'REJECTED'] as const;
 export type MappingReviewStatus = (typeof MAPPING_STATUSES)[number];
 
+export const NORMALIZATION_ENTITY_TYPES = ['LEAGUE', 'TEAM'] as const;
+export type NormalizationEntityType = (typeof NORMALIZATION_ENTITY_TYPES)[number];
+
 export const PREDICTION_STATUSES = ['PUBLISHED', 'LOCKED'] as const;
 export type PredictionStatus = (typeof PREDICTION_STATUSES)[number];
 
@@ -290,6 +293,46 @@ export type MappingReviewDetail = {
   updatedAt: string;
 };
 
+export type ProviderNormalizationListQuery = {
+  entityType: NormalizationEntityType;
+  providerCode?: string;
+  mappingStatus?: MappingReviewStatus;
+  pageNo: number;
+  pageSize: number;
+};
+
+export type ProviderNormalizationEntity = {
+  entityId: number;
+  nameZh: string | null;
+  nameEn: string | null;
+};
+
+export type ProviderNormalizationAudit = {
+  operatorId: string;
+  actionType: 'CONFIRM' | 'REJECT' | 'REOPEN';
+  fieldName: string | null;
+  createdAt: string;
+};
+
+export type ProviderNormalizationReviewListItem = {
+  mappingId: number;
+  entityType: NormalizationEntityType;
+  providerCode: string;
+  externalId: string;
+  externalScope: string | null;
+  externalDisplayName: string | null;
+  externalNormalizedKey: string | null;
+  mappingStatus: MappingReviewStatus;
+  mappingConfidence: number | null;
+  mappingMethod: string | null;
+  currentEntity: ProviderNormalizationEntity | null;
+  updatedAt: string;
+};
+
+export type ProviderNormalizationReviewDetail = ProviderNormalizationReviewListItem & {
+  auditHistory: ProviderNormalizationAudit[];
+};
+
 /** 使用管理员账号换取短期 Bearer Token。 */
 export function loginAdmin(request: AdminLoginDto) {
   return requestApi<AdminSession>('/api/admin/auth/login', {
@@ -408,5 +451,56 @@ export function rejectMappingReview(mappingId: number, reason?: string) {
 export function reopenMappingReview(mappingId: number) {
   return requestApi<MappingReviewDetail>('/api/admin/provider/mappings/reopen', {
     method: 'POST', body: { mappingId }, authenticated: true,
+  });
+}
+
+/** 分页读取供应商联赛或球队标准化复核队列。 */
+export function fetchProviderNormalizations(query: ProviderNormalizationListQuery, signal?: AbortSignal) {
+  return requestApi<PageResult<ProviderNormalizationReviewListItem>>('/api/admin/provider/normalizations/list', {
+    method: 'POST', body: query, signal, authenticated: true,
+  });
+}
+
+/** 读取一条供应商标准化映射及其审计历史。 */
+export function fetchProviderNormalizationDetail(
+  entityType: NormalizationEntityType,
+  mappingId: number,
+  signal?: AbortSignal,
+) {
+  return requestApi<ProviderNormalizationReviewDetail>('/api/admin/provider/normalizations/detail', {
+    method: 'POST', body: { entityType, mappingId }, signal, authenticated: true,
+  });
+}
+
+/** 搜索确认时可选的内部标准联赛或球队。 */
+export function fetchProviderNormalizationCandidates(
+  entityType: NormalizationEntityType,
+  mappingId: number,
+  keyword?: string,
+  signal?: AbortSignal,
+) {
+  return requestApi<ProviderNormalizationEntity[]>('/api/admin/provider/normalizations/candidates/list', {
+    method: 'POST', body: { entityType, mappingId, keyword: keyword?.trim() || null }, signal, authenticated: true,
+  });
+}
+
+/** 人工确认供应商标准化映射。 */
+export function confirmProviderNormalization(entityType: NormalizationEntityType, mappingId: number, targetEntityId: number) {
+  return requestApi<ProviderNormalizationReviewDetail>('/api/admin/provider/normalizations/confirm', {
+    method: 'POST', body: { entityType, mappingId, targetEntityId }, authenticated: true,
+  });
+}
+
+/** 拒绝供应商标准化映射。 */
+export function rejectProviderNormalization(entityType: NormalizationEntityType, mappingId: number, reason?: string) {
+  return requestApi<ProviderNormalizationReviewDetail>('/api/admin/provider/normalizations/reject', {
+    method: 'POST', body: { entityType, mappingId, reason: reason?.trim() || null }, authenticated: true,
+  });
+}
+
+/** 将被拒绝映射重新打开。 */
+export function reopenProviderNormalization(entityType: NormalizationEntityType, mappingId: number) {
+  return requestApi<ProviderNormalizationReviewDetail>('/api/admin/provider/normalizations/reopen', {
+    method: 'POST', body: { entityType, mappingId }, authenticated: true,
   });
 }

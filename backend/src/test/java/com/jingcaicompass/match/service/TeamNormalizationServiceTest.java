@@ -25,6 +25,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -63,6 +64,32 @@ class TeamNormalizationServiceTest {
         assertThat(result.outcome()).isEqualTo(EntityNormalizeOutcomeEnum.RESOLVED);
         assertThat(result.method()).isEqualTo(TeamNormalizationServiceImpl.METHOD_EXTERNAL_ID);
         verify(teamMapper, never()).insert(any(Team.class));
+    }
+
+    @Test
+    void theOddsIdentityAlwaysCreatesScopedPendingReviewInsteadOfUsingGlobalAlias() {
+        TeamAlias alias = new TeamAlias();
+        alias.setTeamId(1L);
+        when(providerTeamMappingMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(teamMapper.insert(any(Team.class))).thenAnswer(invocation -> {
+            invocation.getArgument(0, Team.class).setId(301L);
+            return 1;
+        });
+
+        EntityNormalizeResultDto result = service.resolve(new EntityNormalizeRequestDto(
+                "THE_ODDS_API", "SCOPED_NAME:a1", "Manchester United", "soccer_epl"));
+
+        ArgumentCaptor<ProviderTeamMapping> captor = ArgumentCaptor.forClass(ProviderTeamMapping.class);
+        verify(providerTeamMappingMapper).insert(captor.capture());
+        assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.PENDING);
+        assertThat(result.entityId()).isEqualTo(301L);
+        assertThat(captor.getValue()).satisfies(mapping -> {
+            assertThat(mapping.getExternalScope()).isEqualTo("soccer_epl");
+            assertThat(mapping.getExternalDisplayName()).isEqualTo("Manchester United");
+            assertThat(mapping.getMappingStatus()).isEqualTo(MappingStatusEnum.PENDING);
+        });
+        verify(teamAliasMapper, never()).selectOne(any(Wrapper.class));
+        verify(teamMapper, never()).selectList(null);
     }
 
     @Test

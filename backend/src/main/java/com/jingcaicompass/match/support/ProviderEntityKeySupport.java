@@ -26,4 +26,17 @@ public final class ProviderEntityKeySupport {
         }
         return NAME_PREFIX + PayloadHashSupport.sha256Hex(normalized);
     }
+
+    /**
+     * 为缺少球队 ID 的 Provider 生成作用域名称键。
+     * 同一显示名在不同作用域不会复用；例如 The Odds 的不同 sport_key。
+     */
+    public static String scopedNameKey(String scope, String displayName) {
+        String normalizedScope = NameNormalizationSupport.normalizedKey(scope);
+        String normalizedName = NameNormalizationSupport.normalizedKey(displayName);
+        if (!StringUtils.hasText(normalizedScope) || !StringUtils.hasText(normalizedName)) {
+            throw new IllegalArgumentException("scope and displayName must normalize to non-empty keys");
+        }
+        return "SCOPED_NAME:" + PayloadHashSupport.sha256Hex(normalizedScope + "\u001f" + normalizedName);
+    }
 }

@@ -10,6 +10,7 @@ import {
   type AdminSettlementStatusListQuery,
   type LockDiagnostic,
   type MappingReviewListQuery,
+  type ProviderNormalizationListQuery,
   type MappingReviewStatus,
   type PredictionStatus,
   type ProviderDataType,
@@ -90,6 +91,35 @@ export function toMappingQuery(filters: ReturnType<typeof parseMappingSearch>): 
 }
 
 export function toMappingSearch(filters: ReturnType<typeof parseMappingSearch>) {
+  const params = new URLSearchParams();
+  if (filters.providerCode) params.set('providerCode', filters.providerCode);
+  if (filters.mappingStatus !== 'PENDING') params.set('status', filters.mappingStatus);
+  if (filters.pageNo > 1) params.set('page', String(filters.pageNo));
+  return params;
+}
+
+export function parseNormalizationSearch(search: URLSearchParams) {
+  return {
+    providerCode: search.get('providerCode')?.trim() || undefined,
+    mappingStatus: validEnum(search.get('status'), MAPPING_STATUSES) ?? 'PENDING' as MappingReviewStatus,
+    pageNo: validPositive(search.get('page')),
+  };
+}
+
+export function toNormalizationQuery(
+  entityType: 'LEAGUE' | 'TEAM',
+  filters: ReturnType<typeof parseNormalizationSearch>,
+): ProviderNormalizationListQuery {
+  return {
+    entityType,
+    providerCode: filters.providerCode,
+    mappingStatus: filters.mappingStatus,
+    pageNo: filters.pageNo,
+    pageSize: ADMIN_PAGE_SIZE,
+  };
+}
+
+export function toNormalizationSearch(filters: ReturnType<typeof parseNormalizationSearch>) {
   const params = new URLSearchParams();
   if (filters.providerCode) params.set('providerCode', filters.providerCode);
   if (filters.mappingStatus !== 'PENDING') params.set('status', filters.mappingStatus);

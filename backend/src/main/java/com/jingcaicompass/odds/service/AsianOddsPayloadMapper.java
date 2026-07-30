@@ -108,6 +108,9 @@ public class AsianOddsPayloadMapper {
         if (!StringUtils.hasText(providerMatchId)) {
             errors.add("MISSING_EVENT_ID");
         }
+        if (!StringUtils.hasText(sportKey)) {
+            errors.add("MISSING_SPORT_KEY");
+        }
         if (!StringUtils.hasText(homeTeamName) || !StringUtils.hasText(awayTeamName)) {
             errors.add("MISSING_TEAM_NAME");
         }

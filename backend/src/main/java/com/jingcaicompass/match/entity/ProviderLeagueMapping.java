@@ -27,6 +27,15 @@ public class ProviderLeagueMapping {
     /** 供应商侧联赛 ID */
     private String externalLeagueId;
 
+    /** 供应商原始展示名，仅在实时标准化时记录。 */
+    private String externalDisplayName;
+
+    /** 供应商名称的规范化键，仅供复核显示与检索。 */
+    private String externalNormalizedKey;
+
+    /** 可选的供应商内部身份作用域。 */
+    private String externalScope;
+
     /**
      * 映射确认状态
      *

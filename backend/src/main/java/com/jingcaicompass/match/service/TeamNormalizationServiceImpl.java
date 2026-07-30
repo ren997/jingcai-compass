@@ -59,6 +59,11 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
         String displayName = request.displayName().trim();
         String providerCode = blankToNull(request.providerCode());
         String externalId = blankToNull(request.externalId());
+        String externalScope = blankToNull(request.externalScope());
+        String normalizedKey = NameNormalizationSupport.normalizedKey(displayName);
+        if (!StringUtils.hasText(normalizedKey)) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "displayName normalizes to empty key");
+        }
 
         // 1) 外部 ID 映射优先；PENDING/REJECTED 也必须稳定复用，避免重跑静默确认
         ProviderTeamMapping externalMapping = null;
@@ -78,12 +83,12 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
             }
         }
 
-        String normalizedKey = NameNormalizationSupport.normalizedKey(displayName);
-        if (!StringUtils.hasText(normalizedKey)) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "displayName normalizes to empty key");
+        // 2) The Odds 的新外部身份必须进入人工队列，不能由全局别名或名称命中自动确认。
+        if (requiresManualProviderReview(providerCode) && externalMapping == null) {
+            return createPendingCandidate(providerCode, externalId, displayName, normalizedKey, externalScope);
         }
 
-        // 2) 已确认别名
+        // 3) 已确认别名
         TeamAlias alias = teamAliasMapper.selectOne(new LambdaQueryWrapper<TeamAlias>()
                 .eq(TeamAlias::getAliasNormalized, normalizedKey)
                 .last("LIMIT 1"));
@@ -94,7 +99,10 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
                     externalId,
                     alias.getTeamId(),
                     MappingStatusEnum.MANUAL_CONFIRMED,
-                    METHOD_ALIAS
+                    METHOD_ALIAS,
+                    displayName,
+                    normalizedKey,
+                    externalScope
             );
             return new EntityNormalizeResultDto(
                     alias.getTeamId(),
@@ -104,12 +112,12 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
             );
         }
 
-        // 3) 旧候选在人工确认前保持 PENDING，不被候选自身名称反向“精确命中”
+        // 4) 旧候选在人工确认前保持 PENDING，不被候选自身名称反向“精确命中”
         if (externalMapping != null) {
             return unresolvedExternalMapping(externalMapping, METHOD_NAME_CANDIDATE_REUSE);
         }
 
-        // 4) 标准名规范化后唯一精确命中
+        // 5) 标准名规范化后唯一精确命中
         List<Team> exactHits = findExactNameHits(normalizedKey);
         if (exactHits.size() == 1) {
             confirmExternalMapping(
@@ -118,7 +126,10 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
                     externalId,
                     exactHits.get(0).getId(),
                     MappingStatusEnum.AUTO_CONFIRMED,
-                    METHOD_EXACT_NAME
+                    METHOD_EXACT_NAME,
+                    displayName,
+                    normalizedKey,
+                    externalScope
             );
             return new EntityNormalizeResultDto(
                     exactHits.get(0).getId(),
@@ -128,7 +139,7 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
             );
         }
 
-        // 5) 新建候选；有 externalId 时写 PENDING 映射
+        // 6) 新建候选；有 externalId 时写 PENDING 映射
         Team created = new Team();
         created.setNameZh(displayName);
         created.setNameEn(looksPrimarilyLatin(displayName) ? displayName : null);
@@ -140,6 +151,9 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
             pending.setTeamId(created.getId());
             pending.setProviderCode(providerCode);
             pending.setExternalTeamId(externalId);
+            pending.setExternalDisplayName(displayName);
+            pending.setExternalNormalizedKey(normalizedKey);
+            pending.setExternalScope(externalScope);
             pending.setMappingStatus(MappingStatusEnum.PENDING);
             pending.setMappingMethod(METHOD_NAME_CANDIDATE);
             providerTeamMappingMapper.insert(pending);
@@ -218,7 +232,10 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
             String externalId,
             Long teamId,
             MappingStatusEnum status,
-            String method
+            String method,
+            String displayName,
+            String normalizedKey,
+            String externalScope
     ) {
         if (providerCode == null || externalId == null) {
             return;
@@ -227,6 +244,7 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
             existing.setTeamId(teamId);
             existing.setMappingStatus(status);
             existing.setMappingMethod(method);
+            applyReviewMetadata(existing, displayName, normalizedKey, externalScope);
             providerTeamMappingMapper.updateById(existing);
             return;
         }
@@ -234,9 +252,59 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
         mapping.setTeamId(teamId);
         mapping.setProviderCode(providerCode);
         mapping.setExternalTeamId(externalId);
+        mapping.setExternalDisplayName(displayName);
+        mapping.setExternalNormalizedKey(normalizedKey);
+        mapping.setExternalScope(externalScope);
         mapping.setMappingStatus(status);
         mapping.setMappingMethod(method);
         providerTeamMappingMapper.insert(mapping);
+    }
+
+    private EntityNormalizeResultDto createPendingCandidate(
+            String providerCode,
+            String externalId,
+            String displayName,
+            String normalizedKey,
+            String externalScope
+    ) {
+        Team created = new Team();
+        created.setNameZh(displayName);
+        created.setNameEn(looksPrimarilyLatin(displayName) ? displayName : null);
+        teamMapper.insert(created);
+
+        ProviderTeamMapping pending = new ProviderTeamMapping();
+        pending.setTeamId(created.getId());
+        pending.setProviderCode(providerCode);
+        pending.setExternalTeamId(externalId);
+        pending.setExternalDisplayName(displayName);
+        pending.setExternalNormalizedKey(normalizedKey);
+        pending.setExternalScope(externalScope);
+        pending.setMappingStatus(MappingStatusEnum.PENDING);
+        pending.setMappingMethod(METHOD_NAME_CANDIDATE);
+        providerTeamMappingMapper.insert(pending);
+        return new EntityNormalizeResultDto(created.getId(), EntityNormalizeOutcomeEnum.CANDIDATE_CREATED,
+                MappingStatusEnum.PENDING, METHOD_NAME_CANDIDATE);
+    }
+
+    private static boolean requiresManualProviderReview(String providerCode) {
+        return "THE_ODDS_API".equals(providerCode);
+    }
+
+    private static void applyReviewMetadata(
+            ProviderTeamMapping mapping,
+            String displayName,
+            String normalizedKey,
+            String externalScope
+    ) {
+        if (!StringUtils.hasText(mapping.getExternalDisplayName())) {
+            mapping.setExternalDisplayName(displayName);
+        }
+        if (!StringUtils.hasText(mapping.getExternalNormalizedKey())) {
+            mapping.setExternalNormalizedKey(normalizedKey);
+        }
+        if (!StringUtils.hasText(mapping.getExternalScope()) && StringUtils.hasText(externalScope)) {
+            mapping.setExternalScope(externalScope);
+        }
     }
 
     private static boolean isConfirmed(MappingStatusEnum status) {

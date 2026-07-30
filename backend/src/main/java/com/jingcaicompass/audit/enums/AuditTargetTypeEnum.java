@@ -12,6 +12,8 @@ import lombok.Getter;
 @Getter
 public enum AuditTargetTypeEnum {
     MATCH_SOURCE_MAPPING("MATCH_SOURCE_MAPPING", "比赛来源映射"),
+    PROVIDER_LEAGUE_MAPPING("PROVIDER_LEAGUE_MAPPING", "供应商联赛映射"),
+    PROVIDER_TEAM_MAPPING("PROVIDER_TEAM_MAPPING", "供应商球队映射"),
     ADMIN_ACCOUNT("ADMIN_ACCOUNT", "管理员账号"),
     SECURITY_REQUEST("SECURITY_REQUEST", "安全请求"),
     PREDICTION("PREDICTION", "预测"),
@@ -19,7 +21,8 @@ public enum AuditTargetTypeEnum {
     SETTLEMENT("SETTLEMENT", "结算");
 
     public static final String DESC =
-            "审计目标: MATCH_SOURCE_MAPPING-比赛来源映射, "
+            "审计目标: MATCH_SOURCE_MAPPING-比赛来源映射, PROVIDER_LEAGUE_MAPPING-供应商联赛映射, "
+                    + "PROVIDER_TEAM_MAPPING-供应商球队映射, "
                     + "ADMIN_ACCOUNT-管理员账号, SECURITY_REQUEST-安全请求, "
                     + "PREDICTION-预测, MATCH_RESULT_FACT-比赛赛果事实, "
                     + "SETTLEMENT-结算";

@@ -518,6 +518,31 @@ describe('App routes', () => {
     expect(screen.getByRole('link', { name: '结算状态' })).toHaveAttribute('href', '/admin/settlements');
   });
 
+  it('lazy loads protected provider normalization review with its scoped identity', async () => {
+    setAdminSession({
+      accessToken: 'signed-jwt', tokenType: 'Bearer', expiresAt: '2099-01-01T00:00:00Z',
+      adminId: 7, username: 'operator', role: 'ADMIN',
+    });
+    vi.mocked(fetch).mockResolvedValue(apiResponse({
+      records: [{
+        mappingId: 7, entityType: 'LEAGUE', providerCode: 'THE_ODDS_API', externalId: 'soccer_epl',
+        externalScope: 'soccer_epl', externalDisplayName: 'soccer_epl', externalNormalizedKey: 'soccerepl',
+        mappingStatus: 'PENDING', mappingConfidence: 0.5, mappingMethod: 'NAME_CANDIDATE',
+        currentEntity: { entityId: 70, nameZh: 'soccer_epl', nameEn: 'soccer_epl' }, updatedAt: '2026-07-30T01:00:00Z',
+      }], pageNo: 1, pageSize: 20, total: 1,
+    }));
+    renderApp('/admin/normalizations/leagues?providerCode=THE_ODDS_API&mappingStatus=PENDING&page=1');
+
+    expect(await screen.findByRole('heading', { name: '联赛标准化复核' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '标准化复核' })).toHaveAttribute('href', '/admin/normalizations/leagues');
+    expect(await screen.findByText('共 1 项')).toBeInTheDocument();
+    expect(screen.getByText('作用域')).toBeInTheDocument();
+    expect(screen.getAllByText('soccer_epl').length).toBeGreaterThan(1);
+    expect(fetch).toHaveBeenCalledWith('/api/admin/provider/normalizations/list', expect.objectContaining({
+      body: JSON.stringify({ entityType: 'LEAGUE', providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING', pageNo: 1, pageSize: 20 }),
+    }));
+  });
+
   it('shows readable The Odds API team names in protected mapping review', async () => {
     setAdminSession({
       accessToken: 'signed-jwt', tokenType: 'Bearer', expiresAt: '2099-01-01T00:00:00Z',

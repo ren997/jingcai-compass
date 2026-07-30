@@ -23,11 +23,15 @@ import com.jingcaicompass.data.service.ProviderPayloadFetcher;
 import com.jingcaicompass.data.service.ProviderPayloadParser;
 import com.jingcaicompass.data.service.ProviderSyncTemplate;
 import com.jingcaicompass.match.dto.MatchMapResultDto;
+import com.jingcaicompass.match.dto.EntityNormalizeResultDto;
+import com.jingcaicompass.match.dto.MatchMapRequestDto;
 import com.jingcaicompass.match.entity.MatchEntity;
+import com.jingcaicompass.match.enums.EntityNormalizeOutcomeEnum;
 import com.jingcaicompass.match.enums.MatchMapOutcomeEnum;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.service.MatchMappingService;
+import com.jingcaicompass.match.service.LeagueNormalizationService;
 import com.jingcaicompass.match.service.TeamNormalizationService;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.dto.AsianOddsSyncRequestDto;
@@ -47,6 +51,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -66,6 +71,9 @@ class AsianOddsSyncServiceTest {
 
     @Mock
     private TeamNormalizationService teamNormalizationService;
+
+    @Mock
+    private LeagueNormalizationService leagueNormalizationService;
 
     @Mock
     private MatchMapper matchMapper;
@@ -97,6 +105,7 @@ class AsianOddsSyncServiceTest {
                 new AsianOddsPayloadMapper(objectMapper),
                 snapshotWriter,
                 matchMappingService,
+                leagueNormalizationService,
                 teamNormalizationService,
                 matchMapper,
                 asianOddsSnapshotMapper,
@@ -124,6 +133,7 @@ class AsianOddsSyncServiceTest {
                 new AsianOddsPayloadMapper(objectMapper),
                 snapshotWriter,
                 matchMappingService,
+                leagueNormalizationService,
                 teamNormalizationService,
                 matchMapper,
                 asianOddsSnapshotMapper,
@@ -192,6 +202,7 @@ class AsianOddsSyncServiceTest {
                 new AsianOddsPayloadMapper(objectMapper),
                 snapshotWriter,
                 matchMappingService,
+                leagueNormalizationService,
                 teamNormalizationService,
                 matchMapper,
                 asianOddsSnapshotMapper,
@@ -213,6 +224,60 @@ class AsianOddsSyncServiceTest {
         assertThat(result.unconfiguredLeagueMatchCount()).isEqualTo(1);
         assertThat(result.coverageRate()).isEqualByComparingTo("0.0000");
         verify(asianOddsProvider).estimateQuotaCost(argThat(query -> query.sportKeys().isEmpty()));
+    }
+
+    @Test
+    void theOddsPassesOnlyManuallyConfirmedScopedIdentitiesToMatchMapping() throws Exception {
+        AsianOddsProviderProperties properties = new AsianOddsProviderProperties(
+                AsianOddsProviderTypeEnum.THE_ODDS_API, URI.create("https://api.the-odds-api.com"), "",
+                Duration.ofSeconds(5), Duration.ofSeconds(10),
+                new AsianOddsProviderProperties.RetryProperties(2, Duration.ofMillis(500)), 0,
+                new AsianOddsProviderProperties.TheOddsProperties(Map.of("英超", "soccer_epl"), 400));
+        service = new AsianOddsSyncServiceImpl(asianOddsProvider, providerSyncTemplate,
+                new AsianOddsPayloadMapper(objectMapper), snapshotWriter, matchMappingService,
+                leagueNormalizationService, teamNormalizationService, matchMapper, asianOddsSnapshotMapper,
+                dataSyncRunMapper, properties, objectMapper);
+        MatchEntity lotteryMatch = new MatchEntity();
+        lotteryMatch.setLeagueName("英超");
+        lotteryMatch.setKickoffTime(Instant.parse("2026-07-30T12:00:00Z"));
+        when(asianOddsProvider.providerCode()).thenReturn("THE_ODDS_API");
+        when(asianOddsProvider.estimateQuotaCost(any())).thenReturn(1);
+        when(matchMapper.selectList(any(Wrapper.class))).thenReturn(List.of(lotteryMatch));
+        when(dataSyncRunMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(leagueNormalizationService.resolve(any())).thenReturn(new EntityNormalizeResultDto(
+                11L, EntityNormalizeOutcomeEnum.RESOLVED, MappingStatusEnum.MANUAL_CONFIRMED, "EXTERNAL_ID"));
+        when(teamNormalizationService.resolve(any())).thenReturn(
+                new EntityNormalizeResultDto(12L, EntityNormalizeOutcomeEnum.RESOLVED, MappingStatusEnum.MANUAL_CONFIRMED, "EXTERNAL_ID"),
+                new EntityNormalizeResultDto(13L, EntityNormalizeOutcomeEnum.RESOLVED, MappingStatusEnum.MANUAL_CONFIRMED, "EXTERNAL_ID"));
+        when(matchMappingService.resolve(any())).thenReturn(new MatchMapResultDto(
+                1L, null, MatchMapOutcomeEnum.PENDING, MappingStatusEnum.PENDING,
+                new BigDecimal("0.5000"), "PENDING", "SCORE_PENDING", List.of()));
+        String payloadJson = """
+                {"provider":"THE_ODDS_API","kickoffFrom":"2026-07-30T00:00:00Z","kickoffTo":"2026-07-30T23:59:59Z","responses":[
+                  {"sportKey":"soccer_epl","body":[{"id":"event-1","sport_key":"soccer_epl","home_team":"Manchester United","away_team":"Chelsea","commence_time":"2026-07-30T12:00:00Z","bookmakers":[]}]}
+                ]}
+                """;
+        when(providerSyncTemplate.execute(any(), any(), any(), any())).thenAnswer(invocation -> {
+            ProviderPayloadParser parser = invocation.getArgument(3);
+            RawDataPayload payload = new RawDataPayload();
+            payload.setPayloadHash("a".repeat(64));
+            payload.setPayload(objectMapper.readValue(payloadJson, Map.class));
+            parser.parse(ProviderDataTypeEnum.ASIAN_ODDS, "the-odds:test", payload);
+            return new ProviderSyncOutcome(new DataSyncRun(), payload, SyncStatusEnum.SUCCESS, false);
+        });
+
+        service.sync(new AsianOddsSyncRequestDto(LocalDate.of(2026, 7, 30)));
+
+        ArgumentCaptor<MatchMapRequestDto> requestCaptor = ArgumentCaptor.forClass(MatchMapRequestDto.class);
+        verify(matchMappingService).resolve(requestCaptor.capture());
+        assertThat(requestCaptor.getValue()).satisfies(request -> {
+            assertThat(request.externalLeagueId()).isEqualTo("soccer_epl");
+            assertThat(request.externalHomeTeamId()).startsWith("SCOPED_NAME:");
+            assertThat(request.externalAwayTeamId()).startsWith("SCOPED_NAME:");
+            assertThat(request.leagueId()).isEqualTo(11L);
+            assertThat(request.homeTeamId()).isEqualTo(12L);
+            assertThat(request.awayTeamId()).isEqualTo(13L);
+        });
     }
 
     @Test

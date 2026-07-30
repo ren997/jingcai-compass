@@ -262,6 +262,23 @@ export type MappingReviewExternalCandidate = {
   updatedAt: string;
 };
 
+export type AdminSportteryResultSync = {
+  syncRunId: number;
+  startDate: string;
+  endDate: string;
+  syncStatus: SyncStatus;
+  fetchedCount: number;
+  successCount: number;
+  failureCount: number;
+  retryCount: number;
+  quotaCost: number;
+  appendedFactCount: number;
+  supersededFactCount: number;
+  unchangedFactCount: number;
+  duplicatePayload: boolean;
+  errorSummary: string | null;
+};
+
 export type MappingReviewNormalizationRole = 'LEAGUE' | 'HOME_TEAM' | 'AWAY_TEAM';
 
 /** 与某一外部赛事候选绑定的联赛或球队标准化确认建议。 */
@@ -456,6 +473,15 @@ export function fetchMappingReviewDetail(mappingId: number, signal?: AbortSignal
 export function confirmMappingReview(mappingId: number, targetMatchId: number) {
   return requestApi<MappingReviewDetail>('/api/admin/provider/mappings/confirm', {
     method: 'POST', body: { mappingId, targetMatchId }, authenticated: true,
+  });
+}
+
+/** 手动同步指定竞彩业务日范围的官方赛果；服务端不会自动结算。 */
+export function syncAdminSportteryResults(
+  request: { startDate?: string; endDate?: string }, signal?: AbortSignal,
+) {
+  return requestApi<AdminSportteryResultSync>('/api/admin/provider/sporttery/results/sync', {
+    method: 'POST', body: request, signal, authenticated: true,
   });
 }
 

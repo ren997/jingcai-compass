@@ -2,6 +2,7 @@ package com.jingcaicompass.system.config;
 
 import com.jingcaicompass.admin.service.AdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
+import com.jingcaicompass.admin.service.AdminSportteryResultSyncService;
 import com.jingcaicompass.admin.service.NoOpAdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.NoOpAdminSyncRunQueryService;
 import com.jingcaicompass.match.service.MatchMappingReviewService;
@@ -9,6 +10,8 @@ import com.jingcaicompass.match.service.NoOpMatchMappingReviewService;
 import com.jingcaicompass.match.service.NoOpProviderNormalizationReviewService;
 import com.jingcaicompass.match.service.ProviderNormalizationReviewService;
 import javax.sql.DataSource;
+import com.jingcaicompass.system.exception.BusinessException;
+import com.jingcaicompass.system.exception.ErrorCode;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.context.annotation.Bean;
@@ -22,6 +25,14 @@ public class NoPersistenceAdminAutoConfiguration {
     @ConditionalOnMissingBean(AdminSyncRunQueryService.class)
     AdminSyncRunQueryService unavailableAdminSyncRunQueryService() {
         return new NoOpAdminSyncRunQueryService();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(AdminSportteryResultSyncService.class)
+    AdminSportteryResultSyncService unavailableAdminSportteryResultSyncService() {
+        return request -> {
+            throw new BusinessException(ErrorCode.DATA_SOURCE_UNAVAILABLE);
+        };
     }
 
     @Bean

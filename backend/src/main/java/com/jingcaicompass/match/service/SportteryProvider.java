@@ -2,6 +2,7 @@ package com.jingcaicompass.match.service;
 
 import com.jingcaicompass.data.dto.ProviderFetchResult;
 import com.jingcaicompass.match.dto.SportteryMatchDto;
+import com.jingcaicompass.match.dto.SportteryMatchResultDto;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -26,4 +27,11 @@ public interface SportteryProvider {
      * 按竞彩销售日区间拉取官方赛果原始响应，供同步模板存档和解析。
      */
     ProviderFetchResult fetchMatchResultsRaw(LocalDate startDate, LocalDate endDate);
+
+    /** 将已归档的供应商原始赛果响应解析为内部事实输入，绝不改写 raw。 */
+    List<SportteryMatchResultDto> parseMatchResults(
+            String rawJson,
+            LocalDate startDate,
+            LocalDate endDate
+    );
 }

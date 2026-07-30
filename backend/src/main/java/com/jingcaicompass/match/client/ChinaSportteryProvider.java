@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.data.dto.ProviderFetchResult;
 import com.jingcaicompass.match.dto.ChinaSportteryResponseDto;
 import com.jingcaicompass.match.dto.SportteryMatchDto;
+import com.jingcaicompass.match.dto.SportteryMatchResultDto;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.exception.SportteryDataAccessException;
 import com.jingcaicompass.match.service.SportteryProvider;
@@ -123,6 +124,18 @@ public class ChinaSportteryProvider implements SportteryProvider {
         throw new SportteryDataAccessException(
                 ProviderErrorCategory.UPSTREAM_FAILURE,
                 "中国体彩网赛果接口尚未完成验证，无法同步官方赛果"
+        );
+    }
+
+    @Override
+    public List<SportteryMatchResultDto> parseMatchResults(
+            String rawJson,
+            LocalDate startDate,
+            LocalDate endDate
+    ) {
+        throw new SportteryDataAccessException(
+                ProviderErrorCategory.PARSE_FAILURE,
+                "中国体彩网赛果响应契约尚未完成验证，无法解析官方赛果"
         );
     }
 

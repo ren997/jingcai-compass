@@ -13,6 +13,8 @@ import com.jingcaicompass.admin.service.AdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.AdminPredictionStatusQueryServiceImpl;
 import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
 import com.jingcaicompass.admin.service.AdminSyncRunQueryServiceImpl;
+import com.jingcaicompass.admin.service.AdminSportteryResultSyncService;
+import com.jingcaicompass.admin.service.AdminSportteryResultSyncServiceImpl;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
 import com.jingcaicompass.admin.mapper.AdminPredictionStatusMapper;
 import com.jingcaicompass.audit.service.AuditLogService;
@@ -60,6 +62,7 @@ import com.jingcaicompass.match.service.MatchQueryServiceImpl;
 import com.jingcaicompass.match.service.MatchResultFactWriter;
 import com.jingcaicompass.match.service.MatchResultSyncService;
 import com.jingcaicompass.match.service.MatchResultSyncServiceImpl;
+import com.jingcaicompass.match.service.MatchResultSyncCoordinator;
 import com.jingcaicompass.match.service.MatchMappingReviewServiceImpl;
 import com.jingcaicompass.match.service.MatchMappingService;
 import com.jingcaicompass.match.service.MatchMappingServiceImpl;
@@ -585,21 +588,35 @@ public class PersistenceServicesAutoConfiguration {
     }
 
     @Bean
+    @ConditionalOnMissingBean
+    MatchResultSyncCoordinator matchResultSyncCoordinator() {
+        return new MatchResultSyncCoordinator();
+    }
+
+    @Bean
     @ConditionalOnMissingBean(MatchResultSyncService.class)
     MatchResultSyncService matchResultSyncService(
             SportteryProvider sportteryProvider,
             ProviderSyncTemplate providerSyncTemplate,
-            SportteryMatchResultPayloadMapper sportteryMatchResultPayloadMapper,
             MatchResultFactWriter matchResultFactWriter,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            MatchResultSyncCoordinator matchResultSyncCoordinator
     ) {
         return new MatchResultSyncServiceImpl(
                 sportteryProvider,
                 providerSyncTemplate,
-                sportteryMatchResultPayloadMapper,
                 matchResultFactWriter,
-                objectMapper
+                objectMapper,
+                matchResultSyncCoordinator
         );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(AdminSportteryResultSyncService.class)
+    AdminSportteryResultSyncService adminSportteryResultSyncService(
+            MatchResultSyncService matchResultSyncService
+    ) {
+        return new AdminSportteryResultSyncServiceImpl(matchResultSyncService);
     }
 
     @Bean

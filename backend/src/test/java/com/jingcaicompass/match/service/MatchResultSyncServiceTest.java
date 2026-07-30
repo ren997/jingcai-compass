@@ -59,9 +59,9 @@ class MatchResultSyncServiceTest {
         service = new MatchResultSyncServiceImpl(
                 sportteryProvider,
                 providerSyncTemplate,
-                new SportteryMatchResultPayloadMapper(objectMapper),
                 factWriter,
-                objectMapper
+                objectMapper,
+                new MatchResultSyncCoordinator()
         );
     }
 
@@ -84,6 +84,11 @@ class MatchResultSyncServiceTest {
         );
         when(sportteryProvider.providerCode()).thenReturn("STUB");
         when(sportteryProvider.fetchMatchResultsRaw(LOTTERY_DATE, LOTTERY_DATE)).thenReturn(fetchResult);
+        when(sportteryProvider.parseMatchResults(any(), eq(LOTTERY_DATE), eq(LOTTERY_DATE))).thenReturn(List.of(
+                result("周三001", MatchStatusEnum.FINISHED, 2, 1, false, false, "2026-07-22T23:30:00+08:00"),
+                result("周三001", MatchStatusEnum.FINISHED, 1, 1, true, false, "2026-07-23T10:00:00+08:00"),
+                result("周三002", MatchStatusEnum.POSTPONED, null, null, false, false, "2026-07-22T20:00:00+08:00")
+        ));
         when(factWriter.write(any(), eq(71L))).thenAnswer(invocation -> {
             SportteryMatchResultDto item = invocation.getArgument(0);
             return "周三001".equals(item.lotteryMatchNo())
@@ -125,6 +130,10 @@ class MatchResultSyncServiceTest {
         );
         when(sportteryProvider.providerCode()).thenReturn("STUB");
         when(sportteryProvider.fetchMatchResultsRaw(LOTTERY_DATE, LOTTERY_DATE)).thenReturn(fetchResult);
+        when(sportteryProvider.parseMatchResults(any(), eq(LOTTERY_DATE), eq(LOTTERY_DATE))).thenReturn(List.of(
+                result("周三001", MatchStatusEnum.FINISHED, 2, 1, false, false, "2026-07-22T23:30:00+08:00"),
+                result("周三002", MatchStatusEnum.CANCELLED, null, null, false, false, "2026-07-22T20:00:00+08:00")
+        ));
         when(factWriter.write(any(), eq(71L))).thenAnswer(invocation -> {
             SportteryMatchResultDto item = invocation.getArgument(0);
             if ("周三001".equals(item.lotteryMatchNo())) {

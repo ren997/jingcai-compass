@@ -7,6 +7,7 @@ import com.jingcaicompass.data.dto.ProviderFetchResult;
 import com.jingcaicompass.match.dto.SportteryMatchDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultPayloadDto;
+import com.jingcaicompass.match.service.SportteryMatchResultPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.system.stub.StubFixtureLoader;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -130,6 +131,15 @@ public class StubSportteryProvider implements SportteryProvider {
                 0,
                 0
         );
+    }
+
+    @Override
+    public List<SportteryMatchResultDto> parseMatchResults(String rawJson, LocalDate startDate, LocalDate endDate) {
+        return new SportteryMatchResultPayloadMapper(objectMapper).parseItems(rawJson).stream()
+                .filter(item -> item.lotteryDate() != null
+                        && !item.lotteryDate().isBefore(startDate)
+                        && !item.lotteryDate().isAfter(endDate))
+                .toList();
     }
 
     private SportteryMatchDto remapMatch(SportteryMatchDto template, LocalDate lotteryDate, String weekday) {

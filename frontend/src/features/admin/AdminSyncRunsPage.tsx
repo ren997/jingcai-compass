@@ -1,4 +1,5 @@
-import { Alert, Button, Checkbox, Input, Select } from 'antd';
+import { Alert, Button, Checkbox, Input, Modal, Select } from 'antd';
+import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   PROVIDER_DATA_TYPES,
@@ -7,11 +8,12 @@ import {
   type SyncStatus,
 } from '../../services/admin';
 import { formatTimestamp } from '../matches/matchPresentation';
-import { parseSyncRunSearch, toSyncRunQuery, toSyncRunSearch } from './adminSearch';
+import { parseSyncRunSearch, todayInShanghai, toSyncRunQuery, toSyncRunSearch } from './adminSearch';
 import {
   useAdminSyncRunErrorsQuery,
   useAdminSyncRunQuotaSummaryQuery,
   useAdminSyncRunsQuery,
+  useAdminSportteryResultSyncAction,
 } from './useAdminQueries';
 
 const statusLabels: Record<SyncStatus, string> = {
@@ -27,6 +29,13 @@ export default function AdminSyncRunsPage() {
     providerCode: filters.providerCode, dataType: filters.dataType, pageNo: 1, pageSize: 5,
   });
   const quotaQuery = useAdminSyncRunQuotaSummaryQuery(filters.businessDate);
+  const yesterday = new Date(`${todayInShanghai()}T00:00:00Z`);
+  yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+  const defaultResultDate = yesterday.toISOString().slice(0, 10);
+  const [resultStartDate, setResultStartDate] = useState(defaultResultDate);
+  const [resultEndDate, setResultEndDate] = useState(defaultResultDate);
+  const [resultConfirmOpen, setResultConfirmOpen] = useState(false);
+  const resultSync = useAdminSportteryResultSyncAction();
   const page = runsQuery.data;
   const pageCount = page ? Math.max(1, Math.ceil(page.total / page.pageSize)) : 1;
 
@@ -39,6 +48,9 @@ export default function AdminSyncRunsPage() {
   }
 
   const returnSearch = searchParams.toString();
+  const dayCount = resultStartDate && resultEndDate
+    ? Math.floor((Date.parse(`${resultEndDate}T00:00:00Z`) - Date.parse(`${resultStartDate}T00:00:00Z`)) / 86_400_000) + 1 : 0;
+  const resultRangeValid = dayCount >= 1 && dayCount <= 7 && resultEndDate <= todayInShanghai();
   return (
     <main className="admin-page admin-workspace">
       <section className="admin-page-heading">
@@ -49,6 +61,24 @@ export default function AdminSyncRunsPage() {
         </div>
         <Button loading={runsQuery.isFetching} onClick={refresh}>刷新</Button>
       </section>
+
+      <section className="admin-panel" aria-label="手动同步体彩赛果">
+        <header className="admin-panel-heading"><div><h2>手动同步体彩赛果</h2><span>默认上海昨日，最多连续 7 天</span></div></header>
+        <p>只写入官方赛果事实，不会自动结算预测。</p>
+        <div className="admin-filters"><label><span>开始日期</span><input aria-label="赛果开始日期" type="date" value={resultStartDate} onChange={(event) => setResultStartDate(event.target.value)} /></label>
+          <label><span>结束日期</span><input aria-label="赛果结束日期" type="date" value={resultEndDate} onChange={(event) => setResultEndDate(event.target.value)} /></label>
+          <Button type="primary" disabled={!resultRangeValid} onClick={() => setResultConfirmOpen(true)}>同步赛果</Button></div>
+        {!resultRangeValid && <Alert type="warning" showIcon message="日期范围必须是截至上海今天的连续 1 至 7 天。" />}
+        {resultSync.isError && <Alert type="error" showIcon message={`同步请求失败：${resultSync.error.message}`} />}
+        {resultSync.data && <Alert type={resultSync.data.syncStatus === 'SUCCESS' ? 'success' : 'warning'} showIcon
+          message={`运行 #${resultSync.data.syncRunId} · ${statusLabels[resultSync.data.syncStatus]}`}
+          description={<span>拉取 {resultSync.data.fetchedCount}，成功/失败 {resultSync.data.successCount}/{resultSync.data.failureCount}，追加/替代/跳过 {resultSync.data.appendedFactCount}/{resultSync.data.supersededFactCount}/{resultSync.data.unchangedFactCount}。{resultSync.data.errorSummary ? ` ${resultSync.data.errorSummary}` : ' '}<Link to={`/admin/sync-runs/${resultSync.data.syncRunId}`}>查看运行详情</Link></span>} />}
+      </section>
+
+      <Modal title="确认同步体彩赛果" open={resultConfirmOpen} onCancel={() => setResultConfirmOpen(false)}
+        confirmLoading={resultSync.isPending} okText="确认同步" onOk={() => resultSync.mutate({ startDate: resultStartDate, endDate: resultEndDate }, { onSuccess: () => setResultConfirmOpen(false) })}>
+        <p>将同步 {resultStartDate} 至 {resultEndDate} 的体彩官方赛果。此操作不会自动结算预测。</p>
+      </Modal>
 
       <section className="admin-filters" aria-label="同步运行筛选">
         <label><span>Provider</span><Input aria-label="Provider" value={filters.providerCode ?? ''}

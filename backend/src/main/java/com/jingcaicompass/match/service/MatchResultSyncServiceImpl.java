@@ -1,7 +1,7 @@
 package com.jingcaicompass.match.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.jingcaicompass.data.dto.ProviderParseResult;
 import com.jingcaicompass.data.dto.ProviderSyncOutcome;
 import com.jingcaicompass.data.enums.ProviderDataTypeEnum;
@@ -27,26 +27,30 @@ public class MatchResultSyncServiceImpl implements MatchResultSyncService {
 
     private final SportteryProvider sportteryProvider;
     private final ProviderSyncTemplate providerSyncTemplate;
-    private final SportteryMatchResultPayloadMapper payloadMapper;
     private final MatchResultFactWriter factWriter;
     private final ObjectMapper objectMapper;
+    private final MatchResultSyncCoordinator coordinator;
 
     public MatchResultSyncServiceImpl(
             SportteryProvider sportteryProvider,
             ProviderSyncTemplate providerSyncTemplate,
-            SportteryMatchResultPayloadMapper payloadMapper,
             MatchResultFactWriter factWriter,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            MatchResultSyncCoordinator coordinator
     ) {
         this.sportteryProvider = sportteryProvider;
         this.providerSyncTemplate = providerSyncTemplate;
-        this.payloadMapper = payloadMapper;
         this.factWriter = factWriter;
         this.objectMapper = objectMapper;
+        this.coordinator = coordinator;
     }
 
     @Override
     public MatchResultSyncResultDto sync(MatchResultSyncRequestDto request) {
+        return coordinator.execute(() -> syncExclusively(request));
+    }
+
+    private MatchResultSyncResultDto syncExclusively(MatchResultSyncRequestDto request) {
         LocalDate startDate = requireStartDate(request);
         LocalDate endDate = requireEndDate(request, startDate);
         SyncCounters counters = new SyncCounters();
@@ -58,7 +62,8 @@ public class MatchResultSyncServiceImpl implements MatchResultSyncService {
                 () -> sportteryProvider.fetchMatchResultsRaw(startDate, endDate),
                 (dataType, requestKey, payload) -> {
                     // 2) 从已存档 raw 解析，并将每条赛果交给独立事务写入器。
-                    List<SportteryMatchResultDto> items = payloadMapper.parseItems(toJson(payload.getPayload()));
+                    List<SportteryMatchResultDto> items = sportteryProvider.parseMatchResults(
+                            toJson(payload.getPayload()), startDate, endDate);
                     return writeItems(latestItemsByLotteryIdentity(items), payload.getId(), counters);
                 }
         );

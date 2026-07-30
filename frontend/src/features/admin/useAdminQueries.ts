@@ -8,6 +8,7 @@ import {
   fetchAdminSyncRunDetail,
   fetchAdminSyncRunErrors,
   fetchAdminSyncRunQuotaSummary,
+  syncAdminSportteryResults,
   fetchAdminSyncRuns,
   fetchMappingReviewDetail,
   fetchMappingReviewMatchDetail,
@@ -120,6 +121,17 @@ export function useAdminSyncRunQuotaSummaryQuery(businessDate: string) {
   return useQuery({
     queryKey: adminSyncRunQuotaQueryKey(businessDate),
     queryFn: ({ signal }) => fetchAdminSyncRunQuotaSummary(businessDate, signal),
+  });
+}
+
+/** 手动赛果同步成功或失败后均刷新可追溯的运行视图。 */
+export function useAdminSportteryResultSyncAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: { startDate?: string; endDate?: string }) => syncAdminSportteryResults(request),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin', 'sync-runs'] });
+    },
   });
 }
 

@@ -1058,6 +1058,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-30：GitHub Actions [#84](https://github.com/ren997/jingcai-compass/actions/runs/30509482382) 成功执行 V1～V16 迁移和 40 个 IT，但 `DataPipelineApplicationIT` 仍把 T207 的 6 条已确认赛事映射当作预期；T208 现行约束下种子数据仅有 1 条人工赛事确认，其余 7 条外部事件保持 `PENDING`，不允许由球队/联赛别名反推。已将断言改为 `1/7`，待下一次 PostgreSQL 16 CI 验证。
   - 2026-07-30：GitHub Actions [#85](https://github.com/ren997/jingcai-compass/actions/runs/30509730515) 继续验证通过前述映射统计后，显示同一旧 T207 断言仍预期 5 条自动写入亚盘快照；T208 下仅预置的人工赛事确认可写入 1 条快照，另外 7 条因未确认标准化关系跳过，覆盖 1/2 场。已一并将快照、跳过数、覆盖率与幂等表计数对齐，待下一次 PostgreSQL 16 CI 验证。
   - 2026-07-30：GitHub Actions [#86](https://github.com/ren997/jingcai-compass/actions/runs/30509986918) 继续验证后显示旧 T207 IT 仍预期 Stub 流水线按全局别名自动创建 `provider_team_mappings`。T208 禁止该推断，Provider 联赛/球队关系只能由独立管理员确认写入；测试现明确断言 Stub 流水线不生成 Provider 映射，同时保留单场人工赛事确认的断言，待下一次 PostgreSQL 16 CI 验证。
+  - 2026-07-30：GitHub Actions [#87](https://github.com/ren997/jingcai-compass/actions/runs/30510213234) 显示前述断言范围过宽：2 条 `STUB` 体彩侧既有 `MANUAL_CONFIRMED/ALIAS` 映射是独立标准化的合法结果，并非 The Odds 事件映射反推。已保留该体彩基线，移除的仅是亚盘自动扩散出的 Provider 映射计数；待下一次 PostgreSQL 16 CI 验证。
 -- 验证记录：
   - 2026-07-30：本地普通测试与前端构建已通过；PostgreSQL 16 空库迁移、Mapper 行为和并发条件更新仍以 Draft PR 的 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 为准，成功前任务保持 `IN_PROGRESS`。
   - 2026-07-30：`mvn -B -ntp -f backend/pom.xml test` 通过（425 项）；本地 `local` profile 启动与独立 Actuator 健康检查通过；`git diff --check` 通过。前端未改动，沿用实现提交的 Vitest 60 项与生产构建通过记录。修正断言推送后必须等待新 head 的 PostgreSQL 16 CI。

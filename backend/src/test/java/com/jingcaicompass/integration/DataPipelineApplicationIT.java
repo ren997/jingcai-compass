@@ -99,7 +99,12 @@ class DataPipelineApplicationIT {
         assertThat(first.coverageRate()).isEqualByComparingTo("0.5000");
         assertThat(first.errorMessage()).isNull();
 
-        assertThat(singleLong("SELECT COUNT(*) FROM provider_team_mappings")).isZero();
+        assertThat(singleLong("""
+                SELECT COUNT(*)
+                FROM provider_team_mappings
+                WHERE mapping_status = 'MANUAL_CONFIRMED'
+                  AND mapping_method = 'ALIAS'
+                """)).isEqualTo(2);
         assertThat(singleLong("SELECT COUNT(*) FROM data_sync_run_payloads")).isEqualTo(2);
         assertThat(singleString("""
                 SELECT mapping_status
@@ -134,8 +139,8 @@ class DataPipelineApplicationIT {
         assertThat(afterSecond.matches()).isEqualTo(2);
         assertThat(afterSecond.leagues()).isEqualTo(1);
         assertThat(afterSecond.teams()).isEqualTo(6);
-        assertThat(afterSecond.providerLeagueMappings()).isZero();
-        assertThat(afterSecond.providerTeamMappings()).isZero();
+        assertThat(afterSecond.providerLeagueMappings()).isEqualTo(1);
+        assertThat(afterSecond.providerTeamMappings()).isEqualTo(2);
         assertThat(afterSecond.matchSourceMappings()).isEqualTo(8);
         assertThat(afterSecond.sportterySnapshots()).isEqualTo(2);
         assertThat(afterSecond.asianOddsSnapshots()).isEqualTo(1);

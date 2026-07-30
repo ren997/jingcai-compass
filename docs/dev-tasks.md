@@ -1054,8 +1054,10 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-30：提交 `6aed098` 已推送至 `origin/codex/t208-normalization-review`。创建 Draft PR 被外部权限阻塞：已授权 GitHub 连接器返回 `403 Resource not accessible by integration`（缺少 Pull requests 写权限），本机未安装 GitHub CLI，内置浏览器也尚未登录 GitHub。解除条件：项目负责人使用有仓库写权限的 GitHub 账号登录并创建 PR，或为连接器授予该仓库的 Pull requests 写权限；随后运行要求的 PostgreSQL 16 CI。任务改为 `BLOCKED`，不得启动 T106/T107 连续观测。
   - 2026-07-30：GitHub 授权刷新后，Draft PR [#20](https://github.com/ren997/jingcai-compass/pull/20) 已从 `codex/t208-normalization-review`（`f586276`）创建，权限阻塞解除。等待 GitHub Actions 执行 PostgreSQL 16/Testcontainers 验证；任务恢复为 `IN_PROGRESS`。用户现有 V15 注释空白改动未纳入 PR。
   - 2026-07-30：GitHub Actions [#82](https://github.com/ren997/jingcai-compass/actions/runs/30508345307) 首次 PostgreSQL 16 验证失败；原因是组件扫描早于 DataSource 注册，`ProviderNormalizationReviewServiceImpl` 的 `@ConditionalOnBean(DataSource.class)` 未装配，导致后台 Controller 缺少依赖。已在 `PersistenceServicesAutoConfiguration` 补齐同类持久化服务兜底工厂，并以自动配置回归测试覆盖。`mvn -B -ntp -f backend/pom.xml test` 425 项通过，`git diff --check` 通过；本机未运行 Docker，Testcontainers 集成验证继续以 PR CI 为准。
+  - 2026-07-30：GitHub Actions [#83](https://github.com/ren997/jingcai-compass/actions/runs/30508911019) 已验证服务装配修复，但暴露两条随 V16 和“无/不完整盘口仅统计跳过”语义演进而过期的 IT 断言：空库迁移数仍写为 15，Stub 亚盘流水线仍预期 `PARTIAL` 并要求不存在的失败文本。已对齐为 V1～V16 和成功但含跳过记录的语义；提交前本地 `local` profile 已以替代端口 `18082` 完整启动，连接 PostgreSQL 并完成 Flyway V16 校验，`http://127.0.0.1:18083/actuator/health` 返回 `UP`；不停止占用默认 8080 的既有用户进程。
 -- 验证记录：
   - 2026-07-30：本地普通测试与前端构建已通过；PostgreSQL 16 空库迁移、Mapper 行为和并发条件更新仍以 Draft PR 的 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 为准，成功前任务保持 `IN_PROGRESS`。
+  - 2026-07-30：`mvn -B -ntp -f backend/pom.xml test` 通过（425 项）；本地 `local` profile 启动与独立 Actuator 健康检查通过；`git diff --check` 通过。前端未改动，沿用实现提交的 Vitest 60 项与生产构建通过记录。修正断言推送后必须等待新 head 的 PostgreSQL 16 CI。
 
 ## 8. M3 预测发布、锁定和快照
 

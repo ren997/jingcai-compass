@@ -38,7 +38,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V15 与数据库原生行为。
+ * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V16 与数据库原生行为。
  */
 @Testcontainers
 @ActiveProfiles("integration")
@@ -102,8 +102,8 @@ class PostgresApplicationIT {
                 .filter(info -> info.getVersion() != null)
                 .toArray(MigrationInfo[]::new);
 
-        assertThat(applied).hasSize(15);
-        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("15");
+        assertThat(applied).hasSize(16);
+        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("16");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
@@ -148,6 +148,29 @@ class PostgresApplicationIT {
                 String.class
         );
         assertThat(mappingColumns).contains("mapping_explanation", "mapping_candidates", "external_kickoff_time");
+
+        List<String> providerLeagueMappingColumns = jdbcTemplate.queryForList(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'provider_league_mappings'
+                """,
+                String.class
+        );
+        List<String> providerTeamMappingColumns = jdbcTemplate.queryForList(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'provider_team_mappings'
+                """,
+                String.class
+        );
+        assertThat(providerLeagueMappingColumns).contains(
+                "external_display_name", "external_normalized_key", "external_scope");
+        assertThat(providerTeamMappingColumns).contains(
+                "external_display_name", "external_normalized_key", "external_scope");
     }
 
     @Test

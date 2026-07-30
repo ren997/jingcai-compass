@@ -80,9 +80,9 @@ class DataPipelineApplicationIT {
 
         DataPipelineResultDto first = dataPipelineService.run(BUSINESS_DATE);
 
-        assertThat(first.status()).isEqualTo(DataPipelineStatusEnum.PARTIAL);
+        assertThat(first.status()).isEqualTo(DataPipelineStatusEnum.SUCCESS);
         assertThat(first.sportteryStatus()).isEqualTo(SyncStatusEnum.SUCCESS);
-        assertThat(first.asianOddsStatus()).isEqualTo(SyncStatusEnum.PARTIAL);
+        assertThat(first.asianOddsStatus()).isEqualTo(SyncStatusEnum.SUCCESS);
         assertThat(first.sportteryMatchUpsertCount()).isEqualTo(2);
         assertThat(first.sportterySnapshotInsertCount()).isEqualTo(2);
         assertThat(first.normalization().totalMatchCount()).isEqualTo(2);
@@ -97,7 +97,7 @@ class DataPipelineApplicationIT {
         assertThat(first.skippedIncomplete()).isEqualTo(1);
         assertThat(first.coveredMatchCount()).isEqualTo(2);
         assertThat(first.coverageRate()).isEqualByComparingTo("1.0000");
-        assertThat(first.errorMessage()).contains("failurebook");
+        assertThat(first.errorMessage()).isNull();
 
         assertThat(singleLong("""
                 SELECT COUNT(*)
@@ -134,7 +134,7 @@ class DataPipelineApplicationIT {
         DataPipelineResultDto second = dataPipelineService.run(BUSINESS_DATE);
         PipelineCounts afterSecond = counts();
 
-        assertThat(second.status()).isEqualTo(DataPipelineStatusEnum.PARTIAL);
+        assertThat(second.status()).isEqualTo(DataPipelineStatusEnum.SUCCESS);
         assertThat(second.sportterySnapshotInsertCount()).isZero();
         assertThat(second.asianOddsSnapshotInsertCount()).isZero();
         assertThat(second.normalization().updatedMatchCount()).isZero();

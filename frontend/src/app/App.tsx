@@ -15,6 +15,8 @@ const AdminSyncRunDetailPage = lazy(() => import('../features/admin/AdminSyncRun
 const AdminMappingsPage = lazy(() => import('../features/admin/AdminMappingsPage'));
 const AdminMappingMatchDetailPage = lazy(() => import('../features/admin/AdminMappingMatchDetailPage'));
 const AdminMappingDetailPage = lazy(() => import('../features/admin/AdminMappingDetailPage'));
+const AdminNormalizationsPage = lazy(() => import('../features/admin/AdminNormalizationsPage'));
+const AdminNormalizationDetailPage = lazy(() => import('../features/admin/AdminNormalizationDetailPage'));
 const AdminPredictionLocksPage = lazy(() => import('../features/admin/AdminPredictionLocksPage'));
 const AdminSettlementStatusesPage = lazy(() => import('../features/admin/AdminSettlementStatusesPage'));
 const AdminPredictionStatusDetailPage = lazy(() => import('../features/admin/AdminPredictionStatusDetailPage'));
@@ -42,6 +44,10 @@ export default function App() {
             <Route path="mappings" element={<AdminMappingsPage />} />
             <Route path="mappings/matches/:matchId" element={<AdminMappingMatchDetailPage />} />
             <Route path="mappings/:mappingId" element={<AdminMappingDetailPage />} />
+            <Route path="normalizations/leagues" element={<AdminNormalizationsPage entityType="LEAGUE" />} />
+            <Route path="normalizations/leagues/:mappingId" element={<AdminNormalizationDetailPage entityType="LEAGUE" />} />
+            <Route path="normalizations/teams" element={<AdminNormalizationsPage entityType="TEAM" />} />
+            <Route path="normalizations/teams/:mappingId" element={<AdminNormalizationDetailPage entityType="TEAM" />} />
             <Route path="predictions" element={<AdminPredictionLocksPage />} />
             <Route path="predictions/:predictionId" element={<AdminPredictionStatusDetailPage />} />
             <Route path="settlements" element={<AdminSettlementStatusesPage />} />

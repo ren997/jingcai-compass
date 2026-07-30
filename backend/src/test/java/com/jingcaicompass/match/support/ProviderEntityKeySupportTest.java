@@ -1,25 +1,18 @@
 package com.jingcaicompass.match.support;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 
 class ProviderEntityKeySupportTest {
 
     @Test
-    void equivalentNamesProduceSameBoundedKey() {
-        String first = ProviderEntityKeySupport.nameKey(" Manchester  United ");
-        String second = ProviderEntityKeySupport.nameKey("manchester united");
+    void keepsSameTeamNameIsolatedAcrossTheOddsSportKeys() {
+        String premierLeague = ProviderEntityKeySupport.scopedNameKey("soccer_epl", "United");
+        String championsLeague = ProviderEntityKeySupport.scopedNameKey("soccer_uefa_champs_league", "United");
 
-        assertThat(first).isEqualTo(second);
-        assertThat(first).startsWith("NAME:");
-        assertThat(first).hasSize(69);
-    }
-
-    @Test
-    void blankNameIsRejected() {
-        assertThatThrownBy(() -> ProviderEntityKeySupport.nameKey("  "))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(premierLeague).startsWith("SCOPED_NAME:");
+        assertThat(championsLeague).startsWith("SCOPED_NAME:");
+        assertThat(premierLeague).isNotEqualTo(championsLeague);
     }
 }

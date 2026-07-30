@@ -80,9 +80,9 @@ class DataPipelineApplicationIT {
 
         DataPipelineResultDto first = dataPipelineService.run(BUSINESS_DATE);
 
-        assertThat(first.status()).isEqualTo(DataPipelineStatusEnum.PARTIAL);
+        assertThat(first.status()).isEqualTo(DataPipelineStatusEnum.SUCCESS);
         assertThat(first.sportteryStatus()).isEqualTo(SyncStatusEnum.SUCCESS);
-        assertThat(first.asianOddsStatus()).isEqualTo(SyncStatusEnum.PARTIAL);
+        assertThat(first.asianOddsStatus()).isEqualTo(SyncStatusEnum.SUCCESS);
         assertThat(first.sportteryMatchUpsertCount()).isEqualTo(2);
         assertThat(first.sportterySnapshotInsertCount()).isEqualTo(2);
         assertThat(first.normalization().totalMatchCount()).isEqualTo(2);
@@ -90,27 +90,22 @@ class DataPipelineApplicationIT {
         assertThat(first.normalization().pendingMatchCount()).isZero();
         assertThat(first.normalization().failureCount()).isZero();
         assertThat(first.normalization().updatedMatchCount()).isEqualTo(1);
-        assertThat(first.confirmedMappingCount()).isEqualTo(6);
-        assertThat(first.pendingMappingCount()).isEqualTo(2);
-        assertThat(first.asianOddsSnapshotInsertCount()).isEqualTo(5);
-        assertThat(first.skippedUnmapped()).isEqualTo(2);
-        assertThat(first.skippedIncomplete()).isEqualTo(1);
-        assertThat(first.coveredMatchCount()).isEqualTo(2);
-        assertThat(first.coverageRate()).isEqualByComparingTo("1.0000");
-        assertThat(first.errorMessage()).contains("failurebook");
+        assertThat(first.confirmedMappingCount()).isEqualTo(1);
+        assertThat(first.pendingMappingCount()).isEqualTo(7);
+        assertThat(first.asianOddsSnapshotInsertCount()).isEqualTo(1);
+        assertThat(first.skippedUnmapped()).isEqualTo(7);
+        assertThat(first.skippedIncomplete()).isZero();
+        assertThat(first.coveredMatchCount()).isEqualTo(1);
+        assertThat(first.coverageRate()).isEqualByComparingTo("0.5000");
+        assertThat(first.errorMessage()).isNull();
 
         assertThat(singleLong("""
                 SELECT COUNT(*)
                 FROM provider_team_mappings
-                WHERE mapping_status = 'MANUAL_CONFIRMED'
-                  AND mapping_method = 'ALIAS'
+                WHERE mapping_status = 'AUTO_CONFIRMED'
+                  AND mapping_method = 'EXACT_NAME'
                 """)).isEqualTo(2);
         assertThat(singleLong("SELECT COUNT(*) FROM data_sync_run_payloads")).isEqualTo(2);
-        assertThat(singleLong("""
-                SELECT COUNT(*)
-                FROM provider_team_mappings
-                WHERE mapping_status = 'PENDING'
-                """)).isEqualTo(2);
         assertThat(singleString("""
                 SELECT mapping_status
                 FROM match_source_mappings
@@ -134,21 +129,21 @@ class DataPipelineApplicationIT {
         DataPipelineResultDto second = dataPipelineService.run(BUSINESS_DATE);
         PipelineCounts afterSecond = counts();
 
-        assertThat(second.status()).isEqualTo(DataPipelineStatusEnum.PARTIAL);
+        assertThat(second.status()).isEqualTo(DataPipelineStatusEnum.SUCCESS);
         assertThat(second.sportterySnapshotInsertCount()).isZero();
         assertThat(second.asianOddsSnapshotInsertCount()).isZero();
         assertThat(second.normalization().updatedMatchCount()).isZero();
-        assertThat(second.confirmedMappingCount()).isEqualTo(6);
-        assertThat(second.pendingMappingCount()).isEqualTo(2);
+        assertThat(second.confirmedMappingCount()).isEqualTo(1);
+        assertThat(second.pendingMappingCount()).isEqualTo(7);
         assertThat(afterSecond).isEqualTo(afterFirst);
         assertThat(afterSecond.matches()).isEqualTo(2);
         assertThat(afterSecond.leagues()).isEqualTo(1);
-        assertThat(afterSecond.teams()).isEqualTo(6);
+        assertThat(afterSecond.teams()).isEqualTo(4);
         assertThat(afterSecond.providerLeagueMappings()).isEqualTo(1);
-        assertThat(afterSecond.providerTeamMappings()).isEqualTo(8);
+        assertThat(afterSecond.providerTeamMappings()).isEqualTo(2);
         assertThat(afterSecond.matchSourceMappings()).isEqualTo(8);
         assertThat(afterSecond.sportterySnapshots()).isEqualTo(2);
-        assertThat(afterSecond.asianOddsSnapshots()).isEqualTo(5);
+        assertThat(afterSecond.asianOddsSnapshots()).isEqualTo(1);
         assertThat(afterSecond.rawPayloads()).isEqualTo(2);
         assertThat(singleLong("SELECT COUNT(*) FROM data_sync_run_payloads")).isEqualTo(4);
         assertThat(singleLong("SELECT COUNT(DISTINCT raw_data_payload_id) FROM data_sync_run_payloads"))

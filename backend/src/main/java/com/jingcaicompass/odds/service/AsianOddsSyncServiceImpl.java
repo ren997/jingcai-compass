@@ -19,6 +19,7 @@ import com.jingcaicompass.match.enums.MatchMapOutcomeEnum;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.service.MatchMappingService;
+import com.jingcaicompass.match.service.LeagueNormalizationService;
 import com.jingcaicompass.match.service.TeamNormalizationService;
 import com.jingcaicompass.match.support.ProviderEntityKeySupport;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
@@ -64,6 +65,7 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
     private final AsianOddsPayloadMapper payloadMapper;
     private final AsianOddsSnapshotWriter snapshotWriter;
     private final MatchMappingService matchMappingService;
+    private final LeagueNormalizationService leagueNormalizationService;
     private final TeamNormalizationService teamNormalizationService;
     private final MatchMapper matchMapper;
     private final AsianOddsSnapshotMapper asianOddsSnapshotMapper;
@@ -77,6 +79,7 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
             AsianOddsPayloadMapper payloadMapper,
             AsianOddsSnapshotWriter snapshotWriter,
             MatchMappingService matchMappingService,
+            LeagueNormalizationService leagueNormalizationService,
             TeamNormalizationService teamNormalizationService,
             MatchMapper matchMapper,
             AsianOddsSnapshotMapper asianOddsSnapshotMapper,
@@ -89,6 +92,7 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
         this.payloadMapper = payloadMapper;
         this.snapshotWriter = snapshotWriter;
         this.matchMappingService = matchMappingService;
+        this.leagueNormalizationService = leagueNormalizationService;
         this.teamNormalizationService = teamNormalizationService;
         this.matchMapper = matchMapper;
         this.asianOddsSnapshotMapper = asianOddsSnapshotMapper;
@@ -294,39 +298,63 @@ public class AsianOddsSyncServiceImpl implements AsianOddsSyncService {
 
     private MatchMapRequestDto toMapRequest(AsianOddsMatchOddsDto matchOdds) {
         Instant kickoff = matchOdds.kickoffTime() == null ? null : matchOdds.kickoffTime().toInstant();
-        String externalHomeTeamId = ProviderEntityKeySupport.nameKey(matchOdds.homeTeamName());
-        String externalAwayTeamId = ProviderEntityKeySupport.nameKey(matchOdds.awayTeamName());
-        Long homeTeamId = resolveTeamId(externalHomeTeamId, matchOdds.homeTeamName());
-        Long awayTeamId = resolveTeamId(externalAwayTeamId, matchOdds.awayTeamName());
+        boolean theOdds = asianOddsProviderProperties.provider() == AsianOddsProviderTypeEnum.THE_ODDS_API;
+        String sportKey = theOdds ? matchOdds.providerLeagueId() : null;
+        String externalHomeTeamId = theOdds
+                ? ProviderEntityKeySupport.scopedNameKey(sportKey, matchOdds.homeTeamName())
+                : ProviderEntityKeySupport.nameKey(matchOdds.homeTeamName());
+        String externalAwayTeamId = theOdds
+                ? ProviderEntityKeySupport.scopedNameKey(sportKey, matchOdds.awayTeamName())
+                : ProviderEntityKeySupport.nameKey(matchOdds.awayTeamName());
+        Long leagueId = theOdds ? resolveLeagueId(sportKey) : null;
+        Long homeTeamId = theOdds ? resolveTeamId(externalHomeTeamId, matchOdds.homeTeamName(), sportKey) : null;
+        Long awayTeamId = theOdds ? resolveTeamId(externalAwayTeamId, matchOdds.awayTeamName(), sportKey) : null;
         return new MatchMapRequestDto(
                 asianOddsProvider.providerCode(),
                 matchOdds.providerMatchId(),
-                matchOdds.providerLeagueId(),
+                theOdds ? sportKey : matchOdds.providerLeagueId(),
                 externalHomeTeamId,
                 externalAwayTeamId,
                 matchOdds.homeTeamName(),
                 matchOdds.awayTeamName(),
-                null,
+                leagueId,
                 homeTeamId,
                 awayTeamId,
-                null,
+                sportKey,
                 matchOdds.homeTeamName(),
                 matchOdds.awayTeamName(),
                 kickoff
         );
     }
 
-    private Long resolveTeamId(String externalTeamId, String displayName) {
+    private Long resolveLeagueId(String sportKey) {
+        if (!StringUtils.hasText(sportKey)) {
+            return null;
+        }
+        EntityNormalizeResultDto result = leagueNormalizationService.resolve(new EntityNormalizeRequestDto(
+                asianOddsProvider.providerCode(),
+                sportKey,
+                sportKey,
+                null
+        ));
+        return confirmedEntityId(result);
+    }
+
+    private Long resolveTeamId(String externalTeamId, String displayName, String sportKey) {
         EntityNormalizeResultDto result = teamNormalizationService.resolve(new EntityNormalizeRequestDto(
                 asianOddsProvider.providerCode(),
                 externalTeamId,
-                displayName
+                displayName,
+                sportKey
         ));
+        return confirmedEntityId(result);
+    }
+
+    private static Long confirmedEntityId(EntityNormalizeResultDto result) {
         if (result == null
                 || result.entityId() == null
                 || result.outcome() != EntityNormalizeOutcomeEnum.RESOLVED
-                || result.mappingStatus() == MappingStatusEnum.PENDING
-                || result.mappingStatus() == MappingStatusEnum.REJECTED) {
+                || result.mappingStatus() != MappingStatusEnum.MANUAL_CONFIRMED) {
             return null;
         }
         return result.entityId();

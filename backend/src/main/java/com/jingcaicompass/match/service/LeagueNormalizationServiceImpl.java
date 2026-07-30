@@ -59,6 +59,11 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
         String displayName = request.displayName().trim();
         String providerCode = blankToNull(request.providerCode());
         String externalId = blankToNull(request.externalId());
+        String externalScope = blankToNull(request.externalScope());
+        String normalizedKey = NameNormalizationSupport.normalizedKey(displayName);
+        if (!StringUtils.hasText(normalizedKey)) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "displayName normalizes to empty key");
+        }
 
         // 1) 外部 ID 映射优先；PENDING/REJECTED 也必须稳定复用，避免重跑静默确认
         ProviderLeagueMapping externalMapping = null;
@@ -78,12 +83,12 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
             }
         }
 
-        String normalizedKey = NameNormalizationSupport.normalizedKey(displayName);
-        if (!StringUtils.hasText(normalizedKey)) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "displayName normalizes to empty key");
+        // 2) The Odds 的新外部身份必须进入人工队列，不能由全局别名或名称命中自动确认。
+        if (requiresManualProviderReview(providerCode) && externalMapping == null) {
+            return createPendingCandidate(providerCode, externalId, displayName, normalizedKey, externalScope);
         }
 
-        // 2) 已确认别名
+        // 3) 已确认别名
         LeagueAlias alias = leagueAliasMapper.selectOne(new LambdaQueryWrapper<LeagueAlias>()
                 .eq(LeagueAlias::getAliasNormalized, normalizedKey)
                 .last("LIMIT 1"));
@@ -94,7 +99,10 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
                     externalId,
                     alias.getLeagueId(),
                     MappingStatusEnum.MANUAL_CONFIRMED,
-                    METHOD_ALIAS
+                    METHOD_ALIAS,
+                    displayName,
+                    normalizedKey,
+                    externalScope
             );
             return new EntityNormalizeResultDto(
                     alias.getLeagueId(),
@@ -104,12 +112,12 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
             );
         }
 
-        // 3) 旧候选在人工确认前保持 PENDING，不被候选自身名称反向“精确命中”
+        // 4) 旧候选在人工确认前保持 PENDING，不被候选自身名称反向“精确命中”
         if (externalMapping != null) {
             return unresolvedExternalMapping(externalMapping, METHOD_NAME_CANDIDATE_REUSE);
         }
 
-        // 4) 标准名规范化后唯一精确命中
+        // 5) 标准名规范化后唯一精确命中
         List<League> exactHits = findExactNameHits(normalizedKey);
         if (exactHits.size() == 1) {
             confirmExternalMapping(
@@ -118,7 +126,10 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
                     externalId,
                     exactHits.get(0).getId(),
                     MappingStatusEnum.AUTO_CONFIRMED,
-                    METHOD_EXACT_NAME
+                    METHOD_EXACT_NAME,
+                    displayName,
+                    normalizedKey,
+                    externalScope
             );
             return new EntityNormalizeResultDto(
                     exactHits.get(0).getId(),
@@ -128,7 +139,7 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
             );
         }
 
-        // 5) 新建候选；有 externalId 时写 PENDING 映射
+        // 6) 新建候选；有 externalId 时写 PENDING 映射
         League created = new League();
         created.setNameZh(displayName);
         created.setNameEn(looksPrimarilyLatin(displayName) ? displayName : null);
@@ -140,6 +151,9 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
             pending.setLeagueId(created.getId());
             pending.setProviderCode(providerCode);
             pending.setExternalLeagueId(externalId);
+            pending.setExternalDisplayName(displayName);
+            pending.setExternalNormalizedKey(normalizedKey);
+            pending.setExternalScope(externalScope);
             pending.setMappingStatus(MappingStatusEnum.PENDING);
             pending.setMappingMethod(METHOD_NAME_CANDIDATE);
             providerLeagueMappingMapper.insert(pending);
@@ -218,7 +232,10 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
             String externalId,
             Long leagueId,
             MappingStatusEnum status,
-            String method
+            String method,
+            String displayName,
+            String normalizedKey,
+            String externalScope
     ) {
         if (providerCode == null || externalId == null) {
             return;
@@ -227,6 +244,7 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
             existing.setLeagueId(leagueId);
             existing.setMappingStatus(status);
             existing.setMappingMethod(method);
+            applyReviewMetadata(existing, displayName, normalizedKey, externalScope);
             providerLeagueMappingMapper.updateById(existing);
             return;
         }
@@ -234,9 +252,59 @@ public class LeagueNormalizationServiceImpl implements LeagueNormalizationServic
         mapping.setLeagueId(leagueId);
         mapping.setProviderCode(providerCode);
         mapping.setExternalLeagueId(externalId);
+        mapping.setExternalDisplayName(displayName);
+        mapping.setExternalNormalizedKey(normalizedKey);
+        mapping.setExternalScope(externalScope);
         mapping.setMappingStatus(status);
         mapping.setMappingMethod(method);
         providerLeagueMappingMapper.insert(mapping);
+    }
+
+    private EntityNormalizeResultDto createPendingCandidate(
+            String providerCode,
+            String externalId,
+            String displayName,
+            String normalizedKey,
+            String externalScope
+    ) {
+        League created = new League();
+        created.setNameZh(displayName);
+        created.setNameEn(looksPrimarilyLatin(displayName) ? displayName : null);
+        leagueMapper.insert(created);
+
+        ProviderLeagueMapping pending = new ProviderLeagueMapping();
+        pending.setLeagueId(created.getId());
+        pending.setProviderCode(providerCode);
+        pending.setExternalLeagueId(externalId);
+        pending.setExternalDisplayName(displayName);
+        pending.setExternalNormalizedKey(normalizedKey);
+        pending.setExternalScope(externalScope);
+        pending.setMappingStatus(MappingStatusEnum.PENDING);
+        pending.setMappingMethod(METHOD_NAME_CANDIDATE);
+        providerLeagueMappingMapper.insert(pending);
+        return new EntityNormalizeResultDto(created.getId(), EntityNormalizeOutcomeEnum.CANDIDATE_CREATED,
+                MappingStatusEnum.PENDING, METHOD_NAME_CANDIDATE);
+    }
+
+    private static boolean requiresManualProviderReview(String providerCode) {
+        return "THE_ODDS_API".equals(providerCode);
+    }
+
+    private static void applyReviewMetadata(
+            ProviderLeagueMapping mapping,
+            String displayName,
+            String normalizedKey,
+            String externalScope
+    ) {
+        if (!StringUtils.hasText(mapping.getExternalDisplayName())) {
+            mapping.setExternalDisplayName(displayName);
+        }
+        if (!StringUtils.hasText(mapping.getExternalNormalizedKey())) {
+            mapping.setExternalNormalizedKey(normalizedKey);
+        }
+        if (!StringUtils.hasText(mapping.getExternalScope()) && StringUtils.hasText(externalScope)) {
+            mapping.setExternalScope(externalScope);
+        }
     }
 
     private static boolean isConfirmed(MappingStatusEnum status) {

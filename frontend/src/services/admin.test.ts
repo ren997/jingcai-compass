@@ -9,6 +9,9 @@ import {
   fetchMappingReviewDetail,
   fetchMappingReviewMatchDetail,
   fetchMappingReviewMatches,
+  fetchProviderNormalizationCandidates,
+  fetchProviderNormalizationDetail,
+  fetchProviderNormalizations,
 } from './admin';
 
 function response(data: unknown, options: { status?: number; code?: string; message?: string; traceId?: string } = {}) {
@@ -100,5 +103,29 @@ describe('admin API services', () => {
       body: JSON.stringify({ diagnostics: ['SETTLEMENT_MISSING_HAD'], pageNo: 2, pageSize: 20 }),
     }));
     expect(fetch).toHaveBeenCalledWith('/api/admin/prediction-status/detail', expect.objectContaining({ body: JSON.stringify({ predictionId: 77 }) }));
+  });
+
+  it('posts protected normalization list, detail and internal candidate requests with trace errors', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ records: [], pageNo: 1, pageSize: 20, total: 0 }))
+      .mockResolvedValueOnce(response({ mappingId: 8, entityType: 'TEAM', auditHistory: [] }))
+      .mockResolvedValueOnce(response(null, { status: 404, code: 'NORMALIZATION_MAPPING_NOT_FOUND', message: '标准化映射不存在', traceId: 'normalization-404' }));
+    const controller = new AbortController();
+
+    await fetchProviderNormalizations({ entityType: 'TEAM', providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING', pageNo: 1, pageSize: 20 }, controller.signal);
+    await fetchProviderNormalizationDetail('TEAM', 8);
+    await expect(fetchProviderNormalizationCandidates('TEAM', 8, 'United')).rejects.toMatchObject({
+      code: 'NORMALIZATION_MAPPING_NOT_FOUND', traceId: 'normalization-404',
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/admin/provider/normalizations/list', expect.objectContaining({
+      method: 'POST', signal: expect.any(AbortSignal),
+      body: JSON.stringify({ entityType: 'TEAM', providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING', pageNo: 1, pageSize: 20 }),
+    }));
+    expect(fetch).toHaveBeenCalledWith('/api/admin/provider/normalizations/detail', expect.objectContaining({
+      body: JSON.stringify({ entityType: 'TEAM', mappingId: 8 }),
+    }));
+    expect(fetch).toHaveBeenCalledWith('/api/admin/provider/normalizations/candidates/list', expect.objectContaining({
+      body: JSON.stringify({ entityType: 'TEAM', mappingId: 8, keyword: 'United' }),
+    }));
   });
 });

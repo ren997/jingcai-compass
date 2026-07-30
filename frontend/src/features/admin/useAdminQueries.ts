@@ -14,10 +14,18 @@ import {
   fetchMappingReviews,
   rejectMappingReview,
   reopenMappingReview,
+  confirmProviderNormalization,
+  fetchProviderNormalizationCandidates,
+  fetchProviderNormalizationDetail,
+  fetchProviderNormalizations,
+  rejectProviderNormalization,
+  reopenProviderNormalization,
   type AdminSyncRunListQuery,
   type AdminPredictionLockListQuery,
   type AdminSettlementStatusListQuery,
   type MappingReviewListQuery,
+  type NormalizationEntityType,
+  type ProviderNormalizationListQuery,
 } from '../../services/admin';
 
 export function adminSyncRunsQueryKey(query: AdminSyncRunListQuery) {
@@ -53,6 +61,18 @@ export function mappingReviewMatchDetailQueryKey(
   query: Pick<MappingReviewListQuery, 'providerCode' | 'mappingStatus'>,
 ) {
   return ['admin', 'mappings', 'matches', 'detail', matchId, query] as const;
+}
+
+export function providerNormalizationsQueryKey(query: ProviderNormalizationListQuery) {
+  return ['admin', 'normalizations', 'list', query] as const;
+}
+
+export function providerNormalizationDetailQueryKey(entityType: NormalizationEntityType, mappingId: number) {
+  return ['admin', 'normalizations', 'detail', entityType, mappingId] as const;
+}
+
+export function providerNormalizationCandidatesQueryKey(entityType: NormalizationEntityType, mappingId: number, keyword?: string) {
+  return ['admin', 'normalizations', 'candidates', entityType, mappingId, keyword?.trim() || ''] as const;
 }
 
 export function adminPredictionLocksQueryKey(query: AdminPredictionLockListQuery) {
@@ -139,6 +159,36 @@ export function useMappingReviewMatchDetailQuery(
   });
 }
 
+/** 分页读取供应商联赛或球队标准化复核项。 */
+export function useProviderNormalizationsQuery(query: ProviderNormalizationListQuery) {
+  return useQuery({
+    queryKey: providerNormalizationsQueryKey(query),
+    queryFn: ({ signal }) => fetchProviderNormalizations(query, signal),
+  });
+}
+
+/** 读取一条供应商标准化映射。 */
+export function useProviderNormalizationDetailQuery(entityType: NormalizationEntityType, mappingId: number | undefined) {
+  return useQuery({
+    queryKey: providerNormalizationDetailQueryKey(entityType, mappingId ?? 0),
+    queryFn: ({ signal }) => fetchProviderNormalizationDetail(entityType, mappingId!, signal),
+    enabled: mappingId !== undefined,
+  });
+}
+
+/** 搜索管理员可明确选择的内部标准实体。 */
+export function useProviderNormalizationCandidatesQuery(
+  entityType: NormalizationEntityType,
+  mappingId: number | undefined,
+  keyword?: string,
+) {
+  return useQuery({
+    queryKey: providerNormalizationCandidatesQueryKey(entityType, mappingId ?? 0, keyword),
+    queryFn: ({ signal }) => fetchProviderNormalizationCandidates(entityType, mappingId!, keyword, signal),
+    enabled: mappingId !== undefined,
+  });
+}
+
 /** 读取预测锁定运营列表。 */
 export function useAdminPredictionLocksQuery(query: AdminPredictionLockListQuery) {
   return useQuery({
@@ -176,5 +226,25 @@ export function useMappingReviewActions() {
     reject: useMutation({ mutationFn: ({ mappingId, reason }: { mappingId: number; reason?: string }) =>
       rejectMappingReview(mappingId, reason), onSuccess: refresh }),
     reopen: useMutation({ mutationFn: (mappingId: number) => reopenMappingReview(mappingId), onSuccess: refresh }),
+  };
+}
+
+/** 标准化复核写操作成功后刷新列表、详情与候选缓存。 */
+export function useProviderNormalizationActions() {
+  const queryClient = useQueryClient();
+  const refresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['admin', 'normalizations'] });
+    await queryClient.invalidateQueries({ queryKey: ['admin', 'mappings'] });
+  };
+  return {
+    confirm: useMutation({ mutationFn: ({ entityType, mappingId, targetEntityId }: {
+      entityType: NormalizationEntityType; mappingId: number; targetEntityId: number;
+    }) => confirmProviderNormalization(entityType, mappingId, targetEntityId), onSuccess: refresh }),
+    reject: useMutation({ mutationFn: ({ entityType, mappingId, reason }: {
+      entityType: NormalizationEntityType; mappingId: number; reason?: string;
+    }) => rejectProviderNormalization(entityType, mappingId, reason), onSuccess: refresh }),
+    reopen: useMutation({ mutationFn: ({ entityType, mappingId }: {
+      entityType: NormalizationEntityType; mappingId: number;
+    }) => reopenProviderNormalization(entityType, mappingId), onSuccess: refresh }),
   };
 }

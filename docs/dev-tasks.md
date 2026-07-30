@@ -5,8 +5,8 @@
 - 文档版本：v0.5
 - 最后更新：2026-07-30
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T208 联赛与球队标准化复核闭环`
-- 下一任务：`T208 完成后启动 T106/T107 连续观测`
+- 当前活动任务：`无（T208 等待 GitHub PR/CI 权限）`
+- 下一任务：`解除 T208 GitHub PR/CI 权限后完成验收`
 - 最近完成增量：`T602 竞彩比赛主体详情与外部开赛时间`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
@@ -1016,7 +1016,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T208 联赛与球队标准化复核闭环
 
-- 状态：`IN_PROGRESS`
+- 状态：`BLOCKED`
 - 优先级：P0
 - 依赖：T203、T205、T601、T602
 - 交付物：
@@ -1051,6 +1051,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-29：项目负责人确认作为下一项开发任务。背景：`provider_league_mappings` 当前为空，The Odds 的 `sportKey` 已保存为外部联赛标识但尚未经过联赛归一化；既有比赛确认仅确认“外部事件 → 竞彩比赛”，不自动写入联赛或球队别名。
   - 2026-07-30：开始执行；范围为受控外部身份元数据、The Odds `sport_key + 规范化队名` 球队键、独立标准化复核 API/后台页面、审计和映射评分复用。计划运行后端、前端、差异检查及 PostgreSQL 16 CI；保留用户现有 V15 注释空白改动，不纳入本任务。
   - 2026-07-30：实现完成，待 Draft PR 的 PostgreSQL 16 CI 收口。V16 只新增实时采集的展示名、规范化键与作用域字段，不反推旧记录；The Odds 新联赛/球队身份一律进入 PENDING，只有 `MANUAL_CONFIRMED` 映射才会传入赛事评分。`mvn -B -ntp -f backend/pom.xml clean test` 424 项通过；`cd frontend && npm run test && npm run build` 为 60 项通过并完成生产构建；`git diff --check` 通过。
+  - 2026-07-30：提交 `6aed098` 已推送至 `origin/codex/t208-normalization-review`。创建 Draft PR 被外部权限阻塞：已授权 GitHub 连接器返回 `403 Resource not accessible by integration`（缺少 Pull requests 写权限），本机未安装 GitHub CLI，内置浏览器也尚未登录 GitHub。解除条件：项目负责人使用有仓库写权限的 GitHub 账号登录并创建 PR，或为连接器授予该仓库的 Pull requests 写权限；随后运行要求的 PostgreSQL 16 CI。任务改为 `BLOCKED`，不得启动 T106/T107 连续观测。
 -- 验证记录：
   - 2026-07-30：本地普通测试与前端构建已通过；PostgreSQL 16 空库迁移、Mapper 行为和并发条件更新仍以 Draft PR 的 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 为准，成功前任务保持 `IN_PROGRESS`。
 

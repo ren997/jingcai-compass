@@ -262,10 +262,26 @@ export type MappingReviewExternalCandidate = {
   updatedAt: string;
 };
 
+export type MappingReviewNormalizationRole = 'LEAGUE' | 'HOME_TEAM' | 'AWAY_TEAM';
+
+/** 与某一外部赛事候选绑定的联赛或球队标准化确认建议。 */
+export type MappingReviewNormalizationProposal = {
+  sourceMappingId: number;
+  role: MappingReviewNormalizationRole;
+  providerMappingId: number | null;
+  externalDisplayName: string | null;
+  targetEntityId: number | null;
+  targetEntityName: string | null;
+  mappingStatus: MappingReviewStatus | null;
+  selectable: boolean;
+  unavailableReason: string | null;
+};
+
 /** 一场竞彩比赛及其服务端保留的外部赛事候选。 */
 export type MappingReviewMatchDetail = {
   match: MappingMatchBrief;
   externalCandidates: MappingReviewExternalCandidate[];
+  normalizationProposals: MappingReviewNormalizationProposal[];
 };
 
 export type MappingReviewCandidate = {
@@ -440,6 +456,22 @@ export function fetchMappingReviewDetail(mappingId: number, signal?: AbortSignal
 export function confirmMappingReview(mappingId: number, targetMatchId: number) {
   return requestApi<MappingReviewDetail>('/api/admin/provider/mappings/confirm', {
     method: 'POST', body: { mappingId, targetMatchId }, authenticated: true,
+  });
+}
+
+/** 确认赛事，并可在同一事务内显式确认联赛、主队、客队标准化关系。 */
+export function confirmMappingReviewBundle(
+  request: {
+    mappingId: number;
+    targetMatchId: number;
+    confirmLeague: boolean;
+    confirmHomeTeam: boolean;
+    confirmAwayTeam: boolean;
+  },
+  signal?: AbortSignal,
+) {
+  return requestApi<MappingReviewDetail>('/api/admin/provider/mappings/confirm-bundle', {
+    method: 'POST', body: request, signal, authenticated: true,
   });
 }
 

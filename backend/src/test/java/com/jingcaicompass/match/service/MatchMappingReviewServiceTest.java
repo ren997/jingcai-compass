@@ -17,6 +17,7 @@ import com.jingcaicompass.audit.enums.AuditActionTypeEnum;
 import com.jingcaicompass.audit.enums.AuditTargetTypeEnum;
 import com.jingcaicompass.audit.service.AuditLogService;
 import com.jingcaicompass.match.dto.MappingReviewConfirmDto;
+import com.jingcaicompass.match.dto.MappingReviewBundleConfirmDto;
 import com.jingcaicompass.match.dto.MappingReviewDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewMatchDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewListQueryDto;
@@ -24,10 +25,14 @@ import com.jingcaicompass.match.dto.MappingReviewRejectDto;
 import com.jingcaicompass.match.dto.MappingReviewReopenDto;
 import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.entity.MatchSourceMapping;
+import com.jingcaicompass.match.entity.ProviderLeagueMapping;
+import com.jingcaicompass.match.entity.ProviderTeamMapping;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
 import com.jingcaicompass.match.enums.MappingReviewScopeEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
+import com.jingcaicompass.match.mapper.ProviderLeagueMappingMapper;
+import com.jingcaicompass.match.mapper.ProviderTeamMappingMapper;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
 import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
@@ -35,6 +40,7 @@ import com.jingcaicompass.match.vo.MappingReviewMatchDetailVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
+import com.jingcaicompass.system.exception.ErrorCode;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -56,6 +62,12 @@ class MatchMappingReviewServiceTest {
     private MatchMapper matchMapper;
 
     @Mock
+    private ProviderLeagueMappingMapper providerLeagueMappingMapper;
+
+    @Mock
+    private ProviderTeamMappingMapper providerTeamMappingMapper;
+
+    @Mock
     private AuditLogService auditLogService;
 
     private MatchMappingReviewServiceImpl service;
@@ -65,6 +77,8 @@ class MatchMappingReviewServiceTest {
         service = new MatchMappingReviewServiceImpl(
                 matchSourceMappingMapper,
                 matchMapper,
+                providerLeagueMappingMapper,
+                providerTeamMappingMapper,
                 auditLogService,
                 new PaginationProperties(100)
         );
@@ -252,6 +266,119 @@ class MatchMappingReviewServiceTest {
     }
 
     @Test
+    void bundleConfirmWithoutNormalizationSelectionsKeepsLegacyEventConfirmation() {
+        MatchSourceMapping pending = pendingMapping(42L, 420L);
+        MatchSourceMapping confirmed = pendingMapping(42L, 420L);
+        confirmed.setMappingStatus(MappingStatusEnum.MANUAL_CONFIRMED);
+        when(matchSourceMappingMapper.selectById(42L)).thenReturn(pending, confirmed);
+        when(matchMapper.selectById(420L)).thenReturn(match(420L));
+        when(matchSourceMappingMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+
+        MappingReviewDetailVo result = service.confirmBundle(
+                new MappingReviewBundleConfirmDto(42L, 420L, false, false, false), "admin-1"
+        );
+
+        assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.MANUAL_CONFIRMED);
+        verify(providerLeagueMappingMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(providerTeamMappingMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(auditLogService).append(
+                eq("admin-1"), eq(AuditTargetTypeEnum.MATCH_SOURCE_MAPPING), eq("42"),
+                eq(AuditActionTypeEnum.CONFIRM), eq("mappingStatus"), any(), any()
+        );
+    }
+
+    @Test
+    void bundleConfirmAtomicallyConfirmsLeagueAndBothTeamsBeforeEvent() {
+        MatchSourceMapping pending = pendingMapping(43L, 430L);
+        pending.setExternalLeagueId("soccer_brazil_campeonato");
+        pending.setExternalHomeTeamId("SCOPED_NAME:home");
+        pending.setExternalAwayTeamId("SCOPED_NAME:away");
+        MatchSourceMapping confirmed = pendingMapping(43L, 430L);
+        confirmed.setMappingStatus(MappingStatusEnum.MANUAL_CONFIRMED);
+        MatchEntity target = match(430L);
+        target.setLeagueId(7L);
+        target.setLeagueName("巴甲");
+        target.setHomeTeamId(8L);
+        target.setHomeTeamName("科林蒂安");
+        target.setAwayTeamId(9L);
+        target.setAwayTeamName("巴竞技");
+        ProviderLeagueMapping league = pendingLeague(101L, "soccer_brazil_campeonato");
+        ProviderLeagueMapping confirmedLeague = pendingLeague(101L, "soccer_brazil_campeonato");
+        confirmedLeague.setLeagueId(7L);
+        confirmedLeague.setMappingStatus(MappingStatusEnum.MANUAL_CONFIRMED);
+        ProviderTeamMapping home = pendingTeam(102L, "SCOPED_NAME:home", "soccer_brazil_campeonato");
+        ProviderTeamMapping confirmedHome = pendingTeam(102L, "SCOPED_NAME:home", "soccer_brazil_campeonato");
+        confirmedHome.setTeamId(8L);
+        confirmedHome.setMappingStatus(MappingStatusEnum.MANUAL_CONFIRMED);
+        ProviderTeamMapping away = pendingTeam(103L, "SCOPED_NAME:away", "soccer_brazil_campeonato");
+        ProviderTeamMapping confirmedAway = pendingTeam(103L, "SCOPED_NAME:away", "soccer_brazil_campeonato");
+        confirmedAway.setTeamId(9L);
+        confirmedAway.setMappingStatus(MappingStatusEnum.MANUAL_CONFIRMED);
+
+        when(matchSourceMappingMapper.selectById(43L)).thenReturn(pending, confirmed);
+        when(matchMapper.selectById(430L)).thenReturn(target);
+        when(providerLeagueMappingMapper.selectOne(any(Wrapper.class))).thenReturn(league);
+        when(providerTeamMappingMapper.selectOne(any(Wrapper.class))).thenReturn(home, away);
+        when(providerLeagueMappingMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+        when(providerTeamMappingMapper.update(isNull(), any(Wrapper.class))).thenReturn(1, 1);
+        when(providerLeagueMappingMapper.selectById(101L)).thenReturn(confirmedLeague);
+        when(providerTeamMappingMapper.selectById(102L)).thenReturn(confirmedHome);
+        when(providerTeamMappingMapper.selectById(103L)).thenReturn(confirmedAway);
+        when(matchSourceMappingMapper.update(isNull(), any(Wrapper.class))).thenReturn(1);
+
+        service.confirmBundle(new MappingReviewBundleConfirmDto(43L, 430L, true, true, true), "admin-1");
+
+        verify(providerLeagueMappingMapper).update(isNull(), any(Wrapper.class));
+        verify(providerTeamMappingMapper, org.mockito.Mockito.times(2)).update(isNull(), any(Wrapper.class));
+        verify(matchSourceMappingMapper).update(isNull(), any(Wrapper.class));
+        verify(auditLogService).append(eq("admin-1"), eq(AuditTargetTypeEnum.PROVIDER_LEAGUE_MAPPING), eq("101"),
+                eq(AuditActionTypeEnum.CONFIRM), eq("mappingStatus"), any(), any());
+        verify(auditLogService).append(eq("admin-1"), eq(AuditTargetTypeEnum.PROVIDER_TEAM_MAPPING), eq("102"),
+                eq(AuditActionTypeEnum.CONFIRM), eq("mappingStatus"), any(), any());
+        verify(auditLogService).append(eq("admin-1"), eq(AuditTargetTypeEnum.PROVIDER_TEAM_MAPPING), eq("103"),
+                eq(AuditActionTypeEnum.CONFIRM), eq("mappingStatus"), any(), any());
+        verify(auditLogService).append(eq("admin-1"), eq(AuditTargetTypeEnum.MATCH_SOURCE_MAPPING), eq("43"),
+                eq(AuditActionTypeEnum.CONFIRM), eq("mappingStatus"), any(), any());
+    }
+
+    @Test
+    void bundleConfirmRejectsScopeConflictBeforeWritingAnyRelation() {
+        MatchSourceMapping pending = pendingMapping(44L, 440L);
+        pending.setExternalLeagueId("soccer_brazil_campeonato");
+        pending.setExternalHomeTeamId("SCOPED_NAME:home");
+        MatchEntity target = match(440L);
+        target.setHomeTeamId(8L);
+        ProviderTeamMapping wrongScope = pendingTeam(104L, "SCOPED_NAME:home", "soccer_argentina_primera_division");
+        when(matchSourceMappingMapper.selectById(44L)).thenReturn(pending);
+        when(matchMapper.selectById(440L)).thenReturn(target);
+        when(providerTeamMappingMapper.selectOne(any(Wrapper.class))).thenReturn(wrongScope);
+
+        assertThatThrownBy(() -> service.confirmBundle(
+                new MappingReviewBundleConfirmDto(44L, 440L, false, true, false), "admin-1"
+        )).isInstanceOf(BusinessException.class).hasMessageContaining("HOME_TEAM normalization is not selectable");
+
+        verify(providerTeamMappingMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(matchSourceMappingMapper, never()).update(isNull(), any(Wrapper.class));
+    }
+
+    @Test
+    void bundleConfirmRejectsStartedMatchBeforeNormalizations() {
+        MatchSourceMapping pending = pendingMapping(45L, 450L);
+        MatchEntity started = match(450L);
+        started.setKickoffTime(Instant.now().minusSeconds(1));
+        when(matchSourceMappingMapper.selectById(45L)).thenReturn(pending);
+        when(matchMapper.selectById(450L)).thenReturn(started);
+
+        assertThatThrownBy(() -> service.confirmBundle(
+                new MappingReviewBundleConfirmDto(45L, 450L, true, true, true), "admin-1"
+        )).isInstanceOf(BusinessException.class).extracting("errorCode").isEqualTo(ErrorCode.MAPPING_REVIEW_EXPIRED);
+
+        verify(providerLeagueMappingMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(providerTeamMappingMapper, never()).update(isNull(), any(Wrapper.class));
+        verify(matchSourceMappingMapper, never()).update(isNull(), any(Wrapper.class));
+    }
+
+    @Test
     void rejectPendingAndAppendsAudit() {
         MatchSourceMapping pending = pendingMapping(5L, 50L);
         MatchSourceMapping rejected = pendingMapping(5L, 50L);
@@ -375,5 +502,25 @@ class MatchMappingReviewServiceTest {
         entity.setLotteryMatchNo("周三00" + id);
         entity.setLotteryDate(LocalDate.of(2026, 7, 24));
         return entity;
+    }
+
+    private ProviderLeagueMapping pendingLeague(Long id, String externalId) {
+        ProviderLeagueMapping mapping = new ProviderLeagueMapping();
+        mapping.setId(id);
+        mapping.setProviderCode("THE_ODDS_API");
+        mapping.setExternalLeagueId(externalId);
+        mapping.setExternalDisplayName("Brazil Serie A");
+        mapping.setMappingStatus(MappingStatusEnum.PENDING);
+        return mapping;
+    }
+
+    private ProviderTeamMapping pendingTeam(Long id, String externalId, String scope) {
+        ProviderTeamMapping mapping = new ProviderTeamMapping();
+        mapping.setId(id);
+        mapping.setProviderCode("THE_ODDS_API");
+        mapping.setExternalTeamId(externalId);
+        mapping.setExternalScope(scope);
+        mapping.setMappingStatus(MappingStatusEnum.PENDING);
+        return mapping;
     }
 }

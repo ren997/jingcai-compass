@@ -6,6 +6,7 @@ import {
   fetchAdminSettlementStatuses,
   fetchAdminSyncRunDetail,
   fetchAdminSyncRuns,
+  confirmMappingReviewBundle,
   fetchMappingReviewDetail,
   fetchMappingReviewMatchDetail,
   fetchMappingReviewMatches,
@@ -61,6 +62,27 @@ describe('admin API services', () => {
     vi.mocked(fetch).mockResolvedValue(response({ mappingId: 9, candidates: [] }));
     await expect(fetchMappingReviewDetail(9)).resolves.toMatchObject({ mappingId: 9 });
     expect(fetch).toHaveBeenCalledWith('/api/admin/provider/mappings/detail', expect.objectContaining({ body: JSON.stringify({ mappingId: 9 }) }));
+  });
+
+  it('posts an atomic mapping confirmation bundle and retains traceable errors', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(response({ mappingId: 9, candidates: [] }));
+    const controller = new AbortController();
+    await confirmMappingReviewBundle({
+      mappingId: 9, targetMatchId: 42, confirmLeague: true, confirmHomeTeam: true, confirmAwayTeam: false,
+    }, controller.signal);
+
+    expect(fetch).toHaveBeenCalledWith('/api/admin/provider/mappings/confirm-bundle', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ mappingId: 9, targetMatchId: 42, confirmLeague: true, confirmHomeTeam: true, confirmAwayTeam: false }),
+      signal: expect.any(AbortSignal),
+    }));
+
+    vi.mocked(fetch).mockResolvedValueOnce(response(null, {
+      status: 409, code: 'COMMON_BUSINESS_ERROR', message: '标准化关系已被其他管理员更新', traceId: 'bundle-conflict',
+    }));
+    await expect(confirmMappingReviewBundle({
+      mappingId: 9, targetMatchId: 42, confirmLeague: true, confirmHomeTeam: false, confirmAwayTeam: false,
+    })).rejects.toMatchObject({ traceId: 'bundle-conflict', code: 'COMMON_BUSINESS_ERROR' });
   });
 
   it('posts lottery-match-oriented mapping candidates with cancellation', async () => {

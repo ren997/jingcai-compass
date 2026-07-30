@@ -23,7 +23,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
-/** 球队标准化实现：外部 ID → 别名 → 唯一精确名 → 新建候选。 */
+/** 球队标准化实现：已确认外部身份复用，The Odds 身份独立待人工复核。 */
 @Service
 @ConditionalOnBean(DataSource.class)
 public class TeamNormalizationServiceImpl implements TeamNormalizationService {
@@ -93,9 +93,12 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
             }
         }
 
-        // 2) The Odds 的新外部身份必须进入人工队列，不能由全局别名或名称命中自动确认。
-        if (requiresManualProviderReview(providerCode) && externalMapping == null) {
-            return createPendingCandidate(providerCode, externalId, displayName, normalizedKey, externalScope);
+        // 2) The Odds 身份一律只保留外部资料，不能通过名称、别名或临时内部实体自动确认。
+        if (requiresManualProviderReview(providerCode)) {
+            if (externalMapping == null) {
+                return createPendingExternalIdentity(providerCode, externalId, displayName, normalizedKey, externalScope);
+            }
+            return unresolvedExternalMapping(externalMapping, METHOD_NAME_CANDIDATE_REUSE);
         }
 
         // 3) 已确认别名
@@ -229,7 +232,7 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
             String method
     ) {
         return new EntityNormalizeResultDto(
-                mapping.getTeamId(),
+                requiresManualProviderReview(mapping.getProviderCode()) ? null : mapping.getTeamId(),
                 EntityNormalizeOutcomeEnum.CANDIDATE_CREATED,
                 mapping.getMappingStatus(),
                 method
@@ -298,6 +301,27 @@ public class TeamNormalizationServiceImpl implements TeamNormalizationService {
 
     private static boolean requiresManualProviderReview(String providerCode) {
         return "THE_ODDS_API".equals(providerCode);
+    }
+
+    /** 为 The Odds 保留可审计的外部身份，不创建内部标准球队。 */
+    private EntityNormalizeResultDto createPendingExternalIdentity(
+            String providerCode,
+            String externalId,
+            String displayName,
+            String normalizedKey,
+            String externalScope
+    ) {
+        ProviderTeamMapping pending = new ProviderTeamMapping();
+        pending.setProviderCode(providerCode);
+        pending.setExternalTeamId(externalId);
+        pending.setExternalDisplayName(displayName);
+        pending.setExternalNormalizedKey(normalizedKey);
+        pending.setExternalScope(externalScope);
+        pending.setMappingStatus(MappingStatusEnum.PENDING);
+        pending.setMappingMethod(METHOD_NAME_CANDIDATE);
+        providerTeamMappingMapper.insert(pending);
+        return new EntityNormalizeResultDto(null, EntityNormalizeOutcomeEnum.CANDIDATE_CREATED,
+                MappingStatusEnum.PENDING, METHOD_NAME_CANDIDATE);
     }
 
     private static boolean isSportteryBaseProvider(String providerCode) {

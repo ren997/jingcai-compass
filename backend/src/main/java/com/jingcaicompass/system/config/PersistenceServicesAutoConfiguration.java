@@ -807,12 +807,16 @@ public class PersistenceServicesAutoConfiguration {
     MatchMappingReviewService matchMappingReviewService(
             MatchSourceMappingMapper matchSourceMappingMapper,
             MatchMapper matchMapper,
+            ProviderLeagueMappingMapper providerLeagueMappingMapper,
+            ProviderTeamMappingMapper providerTeamMappingMapper,
             AuditLogService auditLogService,
             PaginationProperties paginationProperties
     ) {
         return new MatchMappingReviewServiceImpl(
                 matchSourceMappingMapper,
                 matchMapper,
+                providerLeagueMappingMapper,
+                providerTeamMappingMapper,
                 auditLogService,
                 paginationProperties
         );

@@ -6,7 +6,7 @@ import com.jingcaicompass.match.enums.MappingStatusEnum;
 /**
  * 联赛/球队标准化出参。
  *
- * @param entityId 标准实体 ID
+ * @param entityId 标准实体 ID；外部待复核身份未关联时为空
  * @param outcome 解析结果类型
  * @param mappingStatus 关联映射状态；无映射时为 null
  * @param method 解析方法：EXTERNAL_ID / ALIAS / EXACT_NAME / NAME_CANDIDATE

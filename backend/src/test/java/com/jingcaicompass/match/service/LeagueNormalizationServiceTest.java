@@ -86,6 +86,26 @@ class LeagueNormalizationServiceTest {
     }
 
     @Test
+    void theOddsIdentityCreatesPendingExternalReviewWithoutCreatingLeague() {
+        when(providerLeagueMappingMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        EntityNormalizeResultDto result = service.resolve(new EntityNormalizeRequestDto(
+                "THE_ODDS_API", "soccer_brazil_campeonato", "Brazil Serie A", "soccer_brazil_campeonato"));
+
+        ArgumentCaptor<ProviderLeagueMapping> captor = ArgumentCaptor.forClass(ProviderLeagueMapping.class);
+        verify(providerLeagueMappingMapper).insert(captor.capture());
+        assertThat(result.entityId()).isNull();
+        assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.PENDING);
+        assertThat(captor.getValue()).satisfies(mapping -> {
+            assertThat(mapping.getLeagueId()).isNull();
+            assertThat(mapping.getExternalDisplayName()).isEqualTo("Brazil Serie A");
+            assertThat(mapping.getExternalScope()).isEqualTo("soccer_brazil_campeonato");
+        });
+        verify(leagueMapper, never()).insert(any(League.class));
+        verify(leagueAliasMapper, never()).selectOne(any(Wrapper.class));
+    }
+
+    @Test
     void pendingExternalMappingIsReusedWithoutSilentConfirmation() {
         ProviderLeagueMapping mapping = new ProviderLeagueMapping();
         mapping.setLeagueId(12L);

@@ -1600,6 +1600,24 @@ h1 {
   line-height: 1.5;
 }
 
+.mapping-normalization-options {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.mapping-normalization-option {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color, #e5e7eb);
+  border-radius: 0.5rem;
+}
+
+.mapping-normalization-option small {
+  color: var(--text-muted, #6b7280);
+}
+
 .admin-modal-field {
   margin-top: 16px;
 }

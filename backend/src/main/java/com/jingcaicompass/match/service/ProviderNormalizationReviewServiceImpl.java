@@ -148,18 +148,10 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
         // 1) 只搜索内部标准字典；客户端不能提交裸 ID 以外的外部赛事或载荷数据。
         if (type == ProviderNormalizationEntityTypeEnum.LEAGUE) {
             requireReviewableProvider(requireLeagueMapping(mappingId).getProviderCode());
-            LambdaQueryWrapper<League> wrapper = new LambdaQueryWrapper<League>().orderByAsc(League::getId).last("LIMIT 20");
-            if (keyword != null) {
-                wrapper.and(item -> item.like(League::getNameZh, keyword).or().like(League::getNameEn, keyword));
-            }
-            return leagueMapper.selectList(wrapper).stream().map(this::toEntity).toList();
+            return leagueMapper.selectTrustedNormalizationCandidates(keyword).stream().map(this::toEntity).toList();
         }
         requireReviewableProvider(requireTeamMapping(mappingId).getProviderCode());
-        LambdaQueryWrapper<Team> wrapper = new LambdaQueryWrapper<Team>().orderByAsc(Team::getId).last("LIMIT 20");
-        if (keyword != null) {
-            wrapper.and(item -> item.like(Team::getNameZh, keyword).or().like(Team::getNameEn, keyword));
-        }
-        return teamMapper.selectList(wrapper).stream().map(this::toEntity).toList();
+        return teamMapper.selectTrustedNormalizationCandidates(keyword).stream().map(this::toEntity).toList();
     }
 
     @Override
@@ -293,14 +285,14 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
         return new ProviderNormalizationReviewDetailVo(mapping.getId(), ProviderNormalizationEntityTypeEnum.LEAGUE,
                 mapping.getProviderCode(), mapping.getExternalLeagueId(), mapping.getExternalScope(), mapping.getExternalDisplayName(),
                 mapping.getExternalNormalizedKey(), mapping.getMappingStatus(), mapping.getMappingConfidence(), mapping.getMappingMethod(),
-                toEntity(leagueMapper.selectById(mapping.getLeagueId())), auditHistory(AuditTargetTypeEnum.PROVIDER_LEAGUE_MAPPING, mapping.getId()), mapping.getUpdatedAt());
+                toEntity(mapping.getLeagueId() == null ? null : leagueMapper.selectById(mapping.getLeagueId())), auditHistory(AuditTargetTypeEnum.PROVIDER_LEAGUE_MAPPING, mapping.getId()), mapping.getUpdatedAt());
     }
 
     private ProviderNormalizationReviewDetailVo toDetail(ProviderTeamMapping mapping) {
         return new ProviderNormalizationReviewDetailVo(mapping.getId(), ProviderNormalizationEntityTypeEnum.TEAM,
                 mapping.getProviderCode(), mapping.getExternalTeamId(), mapping.getExternalScope(), mapping.getExternalDisplayName(),
                 mapping.getExternalNormalizedKey(), mapping.getMappingStatus(), mapping.getMappingConfidence(), mapping.getMappingMethod(),
-                toEntity(teamMapper.selectById(mapping.getTeamId())), auditHistory(AuditTargetTypeEnum.PROVIDER_TEAM_MAPPING, mapping.getId()), mapping.getUpdatedAt());
+                toEntity(mapping.getTeamId() == null ? null : teamMapper.selectById(mapping.getTeamId())), auditHistory(AuditTargetTypeEnum.PROVIDER_TEAM_MAPPING, mapping.getId()), mapping.getUpdatedAt());
     }
 
     private List<ProviderNormalizationAuditVo> auditHistory(AuditTargetTypeEnum targetType, Long mappingId) {
@@ -348,14 +340,14 @@ public class ProviderNormalizationReviewServiceImpl implements ProviderNormaliza
     }
 
     private void requireLeagueTarget(Long targetEntityId, Long provisionalEntityId) {
-        if (targetEntityId.equals(provisionalEntityId) || leagueMapper.selectById(targetEntityId) == null) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "targetLeagueId must be a separate existing internal entity");
+        if (targetEntityId.equals(provisionalEntityId) || !leagueMapper.isTrustedNormalizationEntity(targetEntityId)) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "targetLeagueId must be a trusted internal entity");
         }
     }
 
     private void requireTeamTarget(Long targetEntityId, Long provisionalEntityId) {
-        if (targetEntityId.equals(provisionalEntityId) || teamMapper.selectById(targetEntityId) == null) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "targetTeamId must be a separate existing internal entity");
+        if (targetEntityId.equals(provisionalEntityId) || !teamMapper.isTrustedNormalizationEntity(targetEntityId)) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "targetTeamId must be a trusted internal entity");
         }
     }
 

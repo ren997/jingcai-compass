@@ -1,6 +1,7 @@
 package com.jingcaicompass.match.service;
 
 import com.jingcaicompass.match.dto.MappingReviewConfirmDto;
+import com.jingcaicompass.match.dto.MappingReviewBundleConfirmDto;
 import com.jingcaicompass.match.dto.MappingReviewDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewMatchDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewListQueryDto;
@@ -42,6 +43,11 @@ public class NoOpMatchMappingReviewService implements MatchMappingReviewService 
 
     @Override
     public MappingReviewDetailVo confirm(MappingReviewConfirmDto request, String operatorUsername) {
+        throw unsupported();
+    }
+
+    @Override
+    public MappingReviewDetailVo confirmBundle(MappingReviewBundleConfirmDto request, String operatorUsername) {
         throw unsupported();
     }
 

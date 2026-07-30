@@ -1,7 +1,7 @@
-import { Alert, Button, Modal, Radio, Tag } from 'antd';
-import { useMemo, useState } from 'react';
+import { Alert, Button, Checkbox, Modal, Radio, Tag } from 'antd';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import type { MappingReviewExternalCandidate } from '../../services/admin';
+import type { MappingReviewExternalCandidate, MappingReviewNormalizationProposal } from '../../services/admin';
 import { formatTimestamp } from '../matches/matchPresentation';
 import { parseMappingSearch } from './adminSearch';
 import { useMappingReviewActions, useMappingReviewMatchDetailQuery } from './useAdminQueries';
@@ -12,6 +12,12 @@ function externalName(candidate: MappingReviewExternalCandidate) {
   }
   return `外部赛事 ${candidate.externalMatchId}`;
 }
+
+const normalizationLabels: Record<MappingReviewNormalizationProposal['role'], string> = {
+  LEAGUE: '联赛',
+  HOME_TEAM: '主队',
+  AWAY_TEAM: '客队',
+};
 
 /** 以竞彩比赛为主体核对并确认服务端保留的外部赛事候选。 */
 export default function AdminMappingMatchDetailPage() {
@@ -26,12 +32,25 @@ export default function AdminMappingMatchDetailPage() {
   const actions = useMappingReviewActions();
   const [selectedMappingId, setSelectedMappingId] = useState<number | undefined>();
   const [confirmationOpen, setConfirmationOpen] = useState(false);
+  const [confirmLeague, setConfirmLeague] = useState(false);
+  const [confirmHomeTeam, setConfirmHomeTeam] = useState(false);
+  const [confirmAwayTeam, setConfirmAwayTeam] = useState(false);
   const backTo = `/admin/mappings${searchParams.toString() ? `?${searchParams}` : ''}`;
   const candidates = detailQuery.data?.externalCandidates ?? [];
   const selected = useMemo(
     () => candidates.find((candidate) => candidate.mappingId === (selectedMappingId ?? candidates[0]?.mappingId)),
     [candidates, selectedMappingId],
   );
+  const proposals = useMemo(
+    () => detailQuery.data?.normalizationProposals?.filter((proposal) => proposal.sourceMappingId === selected?.mappingId) ?? [],
+    [detailQuery.data?.normalizationProposals, selected?.mappingId],
+  );
+
+  useEffect(() => {
+    setConfirmLeague(false);
+    setConfirmHomeTeam(false);
+    setConfirmAwayTeam(false);
+  }, [selected?.mappingId]);
 
   if (matchId === undefined) return <main className="admin-page"><section className="admin-state-card error"><h1>页面不存在</h1><p>竞彩比赛 ID 格式无效。</p></section></main>;
   if (detailQuery.isPending) return <main className="admin-page"><section className="admin-state-card">正在读取竞彩比赛与外部候选……</section></main>;
@@ -41,11 +60,17 @@ export default function AdminMappingMatchDetailPage() {
   const match = detail.match;
   const matchHasStarted = !Number.isNaN(Date.parse(match.kickoffTime)) && Date.parse(match.kickoffTime) <= Date.now();
   const canConfirm = filters.reviewScope === 'ACTIVE' && !matchHasStarted && selected?.mappingStatus === 'PENDING';
-  const actionError = actions.confirm.error;
+  const actionError = actions.confirmBundle.error ?? actions.confirm.error;
 
   async function confirm() {
     if (!selected) return;
-    await actions.confirm.mutateAsync({ mappingId: selected.mappingId, targetMatchId: match.matchId });
+    await actions.confirmBundle.mutateAsync({
+      mappingId: selected.mappingId,
+      targetMatchId: match.matchId,
+      confirmLeague,
+      confirmHomeTeam,
+      confirmAwayTeam,
+    });
     setConfirmationOpen(false);
     await detailQuery.refetch();
   }
@@ -73,8 +98,23 @@ export default function AdminMappingMatchDetailPage() {
       </>}</div>
     </section>
     <Modal title="确认外部赛事关联" open={confirmationOpen} onCancel={() => setConfirmationOpen(false)} onOk={() => void confirm()}
-      confirmLoading={actions.confirm.isPending} okText="确认关联">
+      confirmLoading={actions.confirmBundle.isPending} okText="确认关联">
       {selected && <p>将“{externalName(selected)}”关联到竞彩“{match.lotteryMatchNo} · {match.homeTeamName} vs {match.awayTeamName}”。请确认官方和外部开赛时间均合理。</p>}
+      <p className="admin-metadata-note">默认只确认本场赛事。以下选项必须由管理员显式勾选，且会与赛事确认作为一个原子操作提交。</p>
+      <div className="mapping-normalization-options">
+        {(['LEAGUE', 'HOME_TEAM', 'AWAY_TEAM'] as const).map((role) => {
+          const proposal = proposals.find((item) => item.role === role);
+          const checked = role === 'LEAGUE' ? confirmLeague : role === 'HOME_TEAM' ? confirmHomeTeam : confirmAwayTeam;
+          const setChecked = role === 'LEAGUE' ? setConfirmLeague : role === 'HOME_TEAM' ? setConfirmHomeTeam : setConfirmAwayTeam;
+          if (!proposal) return <p key={role} className="admin-metadata-note">{normalizationLabels[role]}：尚无可确认的外部身份。</p>;
+          return <div key={role} className="mapping-normalization-option">
+            <Checkbox checked={checked} disabled={!proposal.selectable} onChange={(event) => setChecked(event.target.checked)}>
+              同时确认{normalizationLabels[role]}：{proposal.externalDisplayName ?? '外部名称缺失'} → {proposal.targetEntityName ?? '竞彩内部实体缺失'}
+            </Checkbox>
+            {!proposal.selectable && <small>{proposal.unavailableReason ?? '当前不可确认'}</small>}
+          </div>;
+        })}
+      </div>
     </Modal>
   </main>;
 }

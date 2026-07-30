@@ -68,13 +68,7 @@ class TeamNormalizationServiceTest {
 
     @Test
     void theOddsIdentityAlwaysCreatesScopedPendingReviewInsteadOfUsingGlobalAlias() {
-        TeamAlias alias = new TeamAlias();
-        alias.setTeamId(1L);
         when(providerTeamMappingMapper.selectOne(any(Wrapper.class))).thenReturn(null);
-        when(teamMapper.insert(any(Team.class))).thenAnswer(invocation -> {
-            invocation.getArgument(0, Team.class).setId(301L);
-            return 1;
-        });
 
         EntityNormalizeResultDto result = service.resolve(new EntityNormalizeRequestDto(
                 "THE_ODDS_API", "SCOPED_NAME:a1", "Manchester United", "soccer_epl"));
@@ -82,7 +76,7 @@ class TeamNormalizationServiceTest {
         ArgumentCaptor<ProviderTeamMapping> captor = ArgumentCaptor.forClass(ProviderTeamMapping.class);
         verify(providerTeamMappingMapper).insert(captor.capture());
         assertThat(result.mappingStatus()).isEqualTo(MappingStatusEnum.PENDING);
-        assertThat(result.entityId()).isEqualTo(301L);
+        assertThat(result.entityId()).isNull();
         assertThat(captor.getValue()).satisfies(mapping -> {
             assertThat(mapping.getExternalScope()).isEqualTo("soccer_epl");
             assertThat(mapping.getExternalDisplayName()).isEqualTo("Manchester United");
@@ -90,6 +84,7 @@ class TeamNormalizationServiceTest {
         });
         verify(teamAliasMapper, never()).selectOne(any(Wrapper.class));
         verify(teamMapper, never()).selectList(null);
+        verify(teamMapper, never()).insert(any(Team.class));
     }
 
     @Test

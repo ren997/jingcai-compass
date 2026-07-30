@@ -1,6 +1,7 @@
 package com.jingcaicompass.match.service;
 
 import com.jingcaicompass.match.dto.MappingReviewConfirmDto;
+import com.jingcaicompass.match.dto.MappingReviewBundleConfirmDto;
 import com.jingcaicompass.match.dto.MappingReviewDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewMatchDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewListQueryDto;
@@ -29,6 +30,9 @@ public interface MatchMappingReviewService {
 
     /** PENDING → MANUAL_CONFIRMED；操作者必须来自已认证主体。 */
     MappingReviewDetailVo confirm(MappingReviewConfirmDto request, String operatorUsername);
+
+    /** 赛事确认时可原子地确认已显式勾选的联赛、主队和客队关系。 */
+    MappingReviewDetailVo confirmBundle(MappingReviewBundleConfirmDto request, String operatorUsername);
 
     /** PENDING → REJECTED；操作者必须来自已认证主体。 */
     MappingReviewDetailVo reject(MappingReviewRejectDto request, String operatorUsername);

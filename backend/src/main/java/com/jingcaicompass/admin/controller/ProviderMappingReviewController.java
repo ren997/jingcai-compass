@@ -1,6 +1,7 @@
 package com.jingcaicompass.admin.controller;
 
 import com.jingcaicompass.match.dto.MappingReviewConfirmDto;
+import com.jingcaicompass.match.dto.MappingReviewBundleConfirmDto;
 import com.jingcaicompass.match.dto.MappingReviewDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewMatchDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewListQueryDto;
@@ -73,6 +74,15 @@ public class ProviderMappingReviewController {
             @AuthenticationPrincipal Jwt jwt
     ) {
         return ApiResponse.success(matchMappingReviewService.confirm(request, requireUsername(jwt)));
+    }
+
+    /** 确认赛事，并按管理员勾选原子确认联赛、主队和客队标准化关系。 */
+    @PostMapping("/confirm-bundle")
+    public ApiResponse<MappingReviewDetailVo> confirmBundle(
+            @RequestBody MappingReviewBundleConfirmDto request,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        return ApiResponse.success(matchMappingReviewService.confirmBundle(request, requireUsername(jwt)));
     }
 
     /** 拒绝：PENDING → REJECTED。 */

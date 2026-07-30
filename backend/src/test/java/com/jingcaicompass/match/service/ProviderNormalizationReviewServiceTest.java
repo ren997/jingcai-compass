@@ -61,13 +61,11 @@ class ProviderNormalizationReviewServiceTest {
 
     @Test
     void listDefaultsToPendingAndReturnsCapturedProviderIdentity() {
-        ProviderLeagueMapping mapping = pendingLeagueMapping(1L, 10L, "soccer_epl");
+        ProviderLeagueMapping mapping = pendingLeagueMapping(1L, null, "soccer_epl");
         Page<ProviderLeagueMapping> page = new Page<>(1, 100);
         page.setRecords(List.of(mapping));
         page.setTotal(1);
-        League provisional = league(10L, "soccer_epl");
         when(providerLeagueMappingMapper.selectPage(any(Page.class), any(Wrapper.class))).thenReturn(page);
-        when(leagueMapper.selectBatchIds(List.of(10L))).thenReturn(List.of(provisional));
 
         var result = service.list(new ProviderNormalizationReviewListQueryDto(
                 ProviderNormalizationEntityTypeEnum.LEAGUE, "THE_ODDS_API", null, 1, 500));
@@ -78,7 +76,7 @@ class ProviderNormalizationReviewServiceTest {
             assertThat(item.mappingStatus()).isEqualTo(MappingStatusEnum.PENDING);
             assertThat(item.externalId()).isEqualTo("soccer_epl");
             assertThat(item.externalDisplayName()).isEqualTo("soccer_epl");
-            assertThat(item.currentEntity().entityId()).isEqualTo(10L);
+            assertThat(item.currentEntity()).isNull();
         });
     }
 
@@ -107,13 +105,14 @@ class ProviderNormalizationReviewServiceTest {
     void candidatesSearchTheInternalLeagueDictionaryForReviewableProviders() {
         ProviderLeagueMapping mapping = pendingLeagueMapping(12L, 120L, "soccer_brazil_campeonato");
         when(providerLeagueMappingMapper.selectById(12L)).thenReturn(mapping);
-        when(leagueMapper.selectList(any(Wrapper.class))).thenReturn(List.of(league(121L, "巴西甲级联赛")));
+        when(leagueMapper.selectTrustedNormalizationCandidates("巴西"))
+                .thenReturn(List.of(league(121L, "巴西甲级联赛")));
 
         List<ProviderNormalizationEntityVo> result = service.candidates(new ProviderNormalizationCandidateQueryDto(
                 ProviderNormalizationEntityTypeEnum.LEAGUE, 12L, "巴西"));
 
         assertThat(result).containsExactly(new ProviderNormalizationEntityVo(121L, "巴西甲级联赛", null));
-        verify(leagueMapper).selectList(any(Wrapper.class));
+        verify(leagueMapper).selectTrustedNormalizationCandidates("巴西");
     }
 
     @Test
@@ -124,6 +123,7 @@ class ProviderNormalizationReviewServiceTest {
         confirmed.setMappingConfidence(BigDecimal.ONE);
         confirmed.setMappingMethod(ProviderNormalizationReviewServiceImpl.METHOD_MANUAL_NORMALIZATION_REVIEW);
         when(providerLeagueMappingMapper.selectById(2L)).thenReturn(pending, confirmed);
+        when(leagueMapper.isTrustedNormalizationEntity(99L)).thenReturn(true);
         when(leagueMapper.selectById(99L)).thenReturn(league(99L, "英格兰超级联赛"));
         when(auditLogMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
         when(providerLeagueMappingMapper.update(eq(null), any(Wrapper.class))).thenReturn(1);
@@ -146,9 +146,9 @@ class ProviderNormalizationReviewServiceTest {
         assertThatThrownBy(() -> service.confirm(new ProviderNormalizationReviewConfirmDto(
                 ProviderNormalizationEntityTypeEnum.LEAGUE, 3L, 30L), "operator"))
                 .isInstanceOf(BusinessException.class)
-                .hasMessageContaining("separate existing internal entity");
+                .hasMessageContaining("trusted internal entity");
 
-        when(leagueMapper.selectById(31L)).thenReturn(league(31L, "英超"));
+        when(leagueMapper.isTrustedNormalizationEntity(31L)).thenReturn(true);
         when(providerLeagueMappingMapper.update(eq(null), any(Wrapper.class))).thenReturn(0);
         assertThatThrownBy(() -> service.confirm(new ProviderNormalizationReviewConfirmDto(
                 ProviderNormalizationEntityTypeEnum.LEAGUE, 3L, 31L), "operator"))

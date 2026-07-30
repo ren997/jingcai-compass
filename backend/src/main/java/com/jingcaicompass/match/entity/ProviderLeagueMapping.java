@@ -18,7 +18,7 @@ public class ProviderLeagueMapping {
     @TableId(type = IdType.AUTO)
     private Long id;
 
-    /** 标准联赛 ID */
+    /** 已确认的标准联赛 ID；待复核外部身份为空。 */
     private Long leagueId;
 
     /** Provider 业务编码 */

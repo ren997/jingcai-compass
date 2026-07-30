@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.match.dto.MappingReviewConfirmDto;
+import com.jingcaicompass.match.dto.MappingReviewBundleConfirmDto;
 import com.jingcaicompass.match.dto.MappingReviewDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewListQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewMatchDetailQueryDto;
@@ -126,7 +127,7 @@ class ProviderMappingReviewControllerTest {
                         "Kairat Almaty", "Omonia Nicosia", Instant.parse("2026-07-29T12:05:00Z"),
                         MappingStatusEnum.PENDING, new BigDecimal("0.7000"), List.of("KICKOFF_TIME"), "PENDING",
                         Instant.parse("2026-07-29T12:00:00Z")
-                ))
+                )), List.of()
         ));
 
         mockMvc.perform(post("/api/admin/provider/mappings/matches/detail")
@@ -187,6 +188,40 @@ class ProviderMappingReviewControllerTest {
             verify(matchMappingReviewService).confirm(
                     new MappingReviewConfirmDto(1L, null),
                     "admin-1"
+            );
+        } finally {
+            SecurityContextHolder.clearContext();
+        }
+    }
+
+    @Test
+    void confirmBundleUsesJwtOperatorAndKeepsExplicitSelections() throws Exception {
+        MappingReviewDetailVo confirmed = new MappingReviewDetailVo(
+                1L, 10L, "THE_ODDS_API", "ext-1", null, null, null,
+                "Manchester United", "Chelsea", Instant.parse("2026-07-24T12:00:00Z"),
+                MappingStatusEnum.MANUAL_CONFIRMED, new BigDecimal("1.0000"), "MANUAL_REVIEW", null,
+                List.of(), "admin-1", null, Instant.parse("2026-07-24T12:00:00Z")
+        );
+        when(matchMappingReviewService.confirmBundle(any(), eq("admin-1"))).thenReturn(confirmed);
+
+        Jwt jwt = Jwt.withTokenValue("controller-test-token")
+                .header("alg", "HS256").subject("1").claim("username", "admin-1").claim("role", "ADMIN").build();
+        SecurityContext context = SecurityContextHolder.createEmptyContext();
+        context.setAuthentication(new JwtAuthenticationToken(jwt));
+        SecurityContextHolder.setContext(context);
+        try {
+            mockMvc.perform(post("/api/admin/provider/mappings/confirm-bundle")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                    {"mappingId":1,"targetMatchId":10,"confirmLeague":true,
+                                     "confirmHomeTeam":true,"confirmAwayTeam":false,"operatorId":"spoofed-client"}
+                                    """)
+                            .header(TraceIdContext.HEADER_NAME, "bundle-confirm"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.traceId").isNotEmpty())
+                    .andExpect(jsonPath("$.data.mappingStatus").value("MANUAL_CONFIRMED"));
+            verify(matchMappingReviewService).confirmBundle(
+                    new MappingReviewBundleConfirmDto(1L, 10L, true, true, false), "admin-1"
             );
         } finally {
             SecurityContextHolder.clearContext();

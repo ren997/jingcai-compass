@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   confirmMappingReview,
+  confirmMappingReviewBundle,
   fetchAdminPredictionLocks,
   fetchAdminPredictionStatusDetail,
   fetchAdminSettlementStatuses,
@@ -219,10 +220,14 @@ export function useMappingReviewActions() {
   const queryClient = useQueryClient();
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: ['admin', 'mappings'] });
+    await queryClient.invalidateQueries({ queryKey: ['admin', 'normalizations'] });
   };
   return {
     confirm: useMutation({ mutationFn: ({ mappingId, targetMatchId }: { mappingId: number; targetMatchId: number }) =>
       confirmMappingReview(mappingId, targetMatchId), onSuccess: refresh }),
+    confirmBundle: useMutation({ mutationFn: (request: {
+      mappingId: number; targetMatchId: number; confirmLeague: boolean; confirmHomeTeam: boolean; confirmAwayTeam: boolean;
+    }) => confirmMappingReviewBundle(request), onSuccess: refresh }),
     reject: useMutation({ mutationFn: ({ mappingId, reason }: { mappingId: number; reason?: string }) =>
       rejectMappingReview(mappingId, reason), onSuccess: refresh }),
     reopen: useMutation({ mutationFn: (mappingId: number) => reopenMappingReview(mappingId), onSuccess: refresh }),

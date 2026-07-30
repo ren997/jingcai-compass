@@ -8,6 +8,7 @@ import com.jingcaicompass.audit.enums.AuditTargetTypeEnum;
 import com.jingcaicompass.audit.service.AuditLogService;
 import com.jingcaicompass.match.dto.MatchMapCandidateDto;
 import com.jingcaicompass.match.dto.MappingReviewConfirmDto;
+import com.jingcaicompass.match.dto.MappingReviewBundleConfirmDto;
 import com.jingcaicompass.match.dto.MappingReviewDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewMatchDetailQueryDto;
 import com.jingcaicompass.match.dto.MappingReviewListQueryDto;
@@ -15,18 +16,25 @@ import com.jingcaicompass.match.dto.MappingReviewRejectDto;
 import com.jingcaicompass.match.dto.MappingReviewReopenDto;
 import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.entity.MatchSourceMapping;
+import com.jingcaicompass.match.entity.ProviderLeagueMapping;
+import com.jingcaicompass.match.entity.ProviderTeamMapping;
+import com.jingcaicompass.match.enums.MappingNormalizationRoleEnum;
 import com.jingcaicompass.match.enums.MappingStatusEnum;
 import com.jingcaicompass.match.enums.MappingReviewScopeEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
+import com.jingcaicompass.match.mapper.ProviderLeagueMappingMapper;
+import com.jingcaicompass.match.mapper.ProviderTeamMappingMapper;
 import com.jingcaicompass.match.vo.MappingReviewDetailVo;
 import com.jingcaicompass.match.vo.MappingReviewListItemVo;
 import com.jingcaicompass.match.vo.MappingReviewMatchListItemVo;
 import com.jingcaicompass.match.vo.MappingReviewMatchDetailVo;
+import com.jingcaicompass.match.vo.MappingReviewNormalizationProposalVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -49,20 +57,28 @@ import org.springframework.util.StringUtils;
 public class MatchMappingReviewServiceImpl implements MatchMappingReviewService {
 
     static final String METHOD_MANUAL_REVIEW = "MANUAL_REVIEW";
+    static final String METHOD_MANUAL_BUNDLE_NORMALIZATION_REVIEW = "MANUAL_BUNDLE_NORMALIZATION_REVIEW";
+    private static final String THE_ODDS_API = "THE_ODDS_API";
 
     private final MatchSourceMappingMapper matchSourceMappingMapper;
     private final MatchMapper matchMapper;
+    private final ProviderLeagueMappingMapper providerLeagueMappingMapper;
+    private final ProviderTeamMappingMapper providerTeamMappingMapper;
     private final AuditLogService auditLogService;
     private final PaginationProperties paginationProperties;
 
     public MatchMappingReviewServiceImpl(
             MatchSourceMappingMapper matchSourceMappingMapper,
             MatchMapper matchMapper,
+            ProviderLeagueMappingMapper providerLeagueMappingMapper,
+            ProviderTeamMappingMapper providerTeamMappingMapper,
             AuditLogService auditLogService,
             PaginationProperties paginationProperties
     ) {
         this.matchSourceMappingMapper = matchSourceMappingMapper;
         this.matchMapper = matchMapper;
+        this.providerLeagueMappingMapper = providerLeagueMappingMapper;
+        this.providerTeamMappingMapper = providerTeamMappingMapper;
         this.auditLogService = auditLogService;
         this.paginationProperties = paginationProperties;
     }
@@ -177,7 +193,13 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                         .thenComparing(MappingReviewMatchListItemVo.ExternalCandidateVo::mappingId,
                                 Comparator.nullsLast(Comparator.reverseOrder())))
                 .toList();
-        return new MappingReviewMatchDetailVo(toMatchBrief(match), candidates);
+
+        // 3) 对每个外部候选返回独立的联赛/主客队标准化建议；不从赛事确认反推关系。
+        return new MappingReviewMatchDetailVo(
+                toMatchBrief(match),
+                candidates,
+                normalizationProposals(mappings, match)
+        );
     }
 
     @Override
@@ -198,57 +220,29 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
             throw new BusinessException(ErrorCode.INVALID_PARAMETER, "mappingId must not be null");
         }
         String operator = requireOperator(operatorUsername);
+        return confirmMatch(prepareConfirmation(request.mappingId(), request.targetMatchId()), operator);
+    }
 
-        // 1) 读取当前 PENDING 行
-        MatchSourceMapping current = requireMapping(request.mappingId());
-        if (current.getMappingStatus() != MappingStatusEnum.PENDING) {
-            throw new BusinessException(
-                    ErrorCode.BUSINESS_ERROR,
-                    "mapping confirm conflict: expected PENDING but was " + current.getMappingStatus()
-            );
+    @Override
+    @Transactional
+    public MappingReviewDetailVo confirmBundle(MappingReviewBundleConfirmDto request, String operatorUsername) {
+        Objects.requireNonNull(request, "request must not be null");
+        if (request.mappingId() == null) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "mappingId must not be null");
         }
+        String operator = requireOperator(operatorUsername);
 
-        Long targetMatchId = request.targetMatchId() == null ? current.getMatchId() : request.targetMatchId();
-        if (targetMatchId == null) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "targetMatchId must not be null");
-        }
-        if (!allowedTargetMatchIds(current).contains(targetMatchId)) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "targetMatchId must be current match or persisted candidate");
-        }
-        MatchEntity targetMatch = matchMapper.selectById(targetMatchId);
-        if (targetMatch == null) {
-            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "match not found: " + targetMatchId);
-        }
-        if (hasStarted(targetMatch)) {
-            throw new BusinessException(ErrorCode.MAPPING_REVIEW_EXPIRED);
+        // 1) 先完整校验所有勾选项；任一项不可确认时，不写入任何标准化或赛事关系。
+        ConfirmationContext context = prepareConfirmation(request.mappingId(), request.targetMatchId());
+        List<NormalizationConfirmation> confirmations = requestedNormalizations(request, context);
+
+        // 2) 每条标准化关系仅由本次显式勾选更新，并以 PENDING 条件更新处理并发。
+        for (NormalizationConfirmation confirmation : confirmations) {
+            confirmNormalization(confirmation, operator);
         }
 
-        String oldSnapshot = snapshot(current);
-        // 2) 条件更新：仅 PENDING 可确认
-        UpdateWrapper<MatchSourceMapping> update = new UpdateWrapper<MatchSourceMapping>()
-                .eq("id", current.getId())
-                .eq("mapping_status", MappingStatusEnum.PENDING.getCode())
-                .set("mapping_status", MappingStatusEnum.MANUAL_CONFIRMED.getCode())
-                .set("match_id", targetMatchId)
-                .set("confirmed_by", operator)
-                .set("mapping_method", METHOD_MANUAL_REVIEW);
-        int rows = matchSourceMappingMapper.update(null, update);
-        if (rows == 0) {
-            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "mapping confirm conflict: not PENDING");
-        }
-
-        MatchSourceMapping updated = requireMapping(current.getId());
-        // 3) 追加审计
-        auditLogService.append(
-                operator,
-                AuditTargetTypeEnum.MATCH_SOURCE_MAPPING,
-                String.valueOf(current.getId()),
-                AuditActionTypeEnum.CONFIRM,
-                "mappingStatus",
-                oldSnapshot,
-                snapshot(updated)
-        );
-        return toDetail(updated);
+        // 3) 全部标准化成功后再确认赛事；事务确保出现冲突时整组回滚。
+        return confirmMatch(context, operator);
     }
 
     @Override
@@ -345,6 +339,332 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
             throw new BusinessException(ErrorCode.AUTH_UNAUTHORIZED);
         }
         return operatorUsername.trim();
+    }
+
+    /** 构造页面可读的候选；每条建议始终绑定一个外部赛事映射，避免跨候选误确认。 */
+    private List<MappingReviewNormalizationProposalVo> normalizationProposals(
+            List<MatchSourceMapping> mappings,
+            MatchEntity targetMatch
+    ) {
+        List<MatchSourceMapping> candidates = mappings.stream()
+                .filter(mapping -> toExternalCandidate(mapping, targetMatch.getId()) != null)
+                .toList();
+        if (candidates.isEmpty()) {
+            return List.of();
+        }
+
+        Map<ProviderLeagueIdentity, ProviderLeagueMapping> leagueMappings = loadLeagueMappings(candidates);
+        Map<ProviderTeamIdentity, ProviderTeamMapping> teamMappings = loadTeamMappings(candidates);
+        List<MappingReviewNormalizationProposalVo> result = new ArrayList<>();
+        for (MatchSourceMapping mapping : candidates) {
+            ProviderLeagueMapping league = leagueMappings.get(new ProviderLeagueIdentity(
+                    mapping.getProviderCode(), mapping.getExternalLeagueId()
+            ));
+            result.add(toProposal(mapping, targetMatch, MappingNormalizationRoleEnum.LEAGUE, league));
+
+            String scope = expectedTeamScope(mapping);
+            ProviderTeamMapping home = teamMappings.get(new ProviderTeamIdentity(
+                    mapping.getProviderCode(), mapping.getExternalHomeTeamId(), scope
+            ));
+            result.add(toProposal(mapping, targetMatch, MappingNormalizationRoleEnum.HOME_TEAM, home));
+
+            ProviderTeamMapping away = teamMappings.get(new ProviderTeamIdentity(
+                    mapping.getProviderCode(), mapping.getExternalAwayTeamId(), scope
+            ));
+            result.add(toProposal(mapping, targetMatch, MappingNormalizationRoleEnum.AWAY_TEAM, away));
+        }
+        return result;
+    }
+
+    private Map<ProviderLeagueIdentity, ProviderLeagueMapping> loadLeagueMappings(List<MatchSourceMapping> mappings) {
+        Map<ProviderLeagueIdentity, ProviderLeagueMapping> result = new HashMap<>();
+        Map<String, List<String>> idsByProvider = mappings.stream()
+                .filter(mapping -> StringUtils.hasText(mapping.getProviderCode()))
+                .filter(mapping -> StringUtils.hasText(mapping.getExternalLeagueId()))
+                .collect(Collectors.groupingBy(
+                        MatchSourceMapping::getProviderCode,
+                        Collectors.mapping(MatchSourceMapping::getExternalLeagueId, Collectors.toList())
+                ));
+        for (Map.Entry<String, List<String>> entry : idsByProvider.entrySet()) {
+            List<ProviderLeagueMapping> rows = providerLeagueMappingMapper.selectList(
+                    new LambdaQueryWrapper<ProviderLeagueMapping>()
+                            .eq(ProviderLeagueMapping::getProviderCode, entry.getKey())
+                            .in(ProviderLeagueMapping::getExternalLeagueId, entry.getValue().stream().distinct().toList())
+            );
+            for (ProviderLeagueMapping row : rows == null ? List.<ProviderLeagueMapping>of() : rows) {
+                result.put(new ProviderLeagueIdentity(row.getProviderCode(), row.getExternalLeagueId()), row);
+            }
+        }
+        return result;
+    }
+
+    private Map<ProviderTeamIdentity, ProviderTeamMapping> loadTeamMappings(List<MatchSourceMapping> mappings) {
+        Map<ProviderTeamIdentity, ProviderTeamMapping> result = new HashMap<>();
+        Map<String, List<String>> idsByProvider = mappings.stream()
+                .filter(mapping -> StringUtils.hasText(mapping.getProviderCode()))
+                .flatMap(mapping -> java.util.stream.Stream.of(mapping.getExternalHomeTeamId(), mapping.getExternalAwayTeamId())
+                        .filter(StringUtils::hasText)
+                        .map(teamId -> Map.entry(mapping.getProviderCode(), teamId)))
+                .collect(Collectors.groupingBy(Map.Entry::getKey, Collectors.mapping(Map.Entry::getValue, Collectors.toList())));
+        for (Map.Entry<String, List<String>> entry : idsByProvider.entrySet()) {
+            List<ProviderTeamMapping> rows = providerTeamMappingMapper.selectList(
+                    new LambdaQueryWrapper<ProviderTeamMapping>()
+                            .eq(ProviderTeamMapping::getProviderCode, entry.getKey())
+                            .in(ProviderTeamMapping::getExternalTeamId, entry.getValue().stream().distinct().toList())
+            );
+            for (ProviderTeamMapping row : rows == null ? List.<ProviderTeamMapping>of() : rows) {
+                result.put(new ProviderTeamIdentity(
+                        row.getProviderCode(),
+                        row.getExternalTeamId(),
+                        THE_ODDS_API.equals(row.getProviderCode()) ? row.getExternalScope() : null
+                ), row);
+            }
+        }
+        return result;
+    }
+
+    private MappingReviewNormalizationProposalVo toProposal(
+            MatchSourceMapping source,
+            MatchEntity target,
+            MappingNormalizationRoleEnum role,
+            ProviderLeagueMapping mapping
+    ) {
+        return toProposal(
+                source,
+                role,
+                mapping == null ? null : mapping.getId(),
+                mapping == null ? source.getExternalLeagueId() : displayName(mapping.getExternalDisplayName(), source.getExternalLeagueId()),
+                target.getLeagueId(),
+                target.getLeagueName(),
+                mapping == null ? null : mapping.getMappingStatus(),
+                mapping != null && mapping.getMappingStatus() == MappingStatusEnum.PENDING && target.getLeagueId() != null,
+                mapping == null ? "尚未进入联赛标准化复核队列"
+                        : mapping.getMappingStatus() != MappingStatusEnum.PENDING ? "联赛关系当前为 " + mapping.getMappingStatus() + "，不可随赛事确认修改"
+                        : target.getLeagueId() == null ? "目标竞彩比赛尚未关联内部联赛" : null
+        );
+    }
+
+    private MappingReviewNormalizationProposalVo toProposal(
+            MatchSourceMapping source,
+            MatchEntity target,
+            MappingNormalizationRoleEnum role,
+            ProviderTeamMapping mapping
+    ) {
+        boolean expectedScope = mapping == null || !THE_ODDS_API.equals(source.getProviderCode())
+                || Objects.equals(mapping.getExternalScope(), expectedTeamScope(source));
+        boolean home = role == MappingNormalizationRoleEnum.HOME_TEAM;
+        String externalName = home ? source.getExternalHomeTeamName() : source.getExternalAwayTeamName();
+        String externalId = home ? source.getExternalHomeTeamId() : source.getExternalAwayTeamId();
+        Long targetId = home ? target.getHomeTeamId() : target.getAwayTeamId();
+        String targetName = home ? target.getHomeTeamName() : target.getAwayTeamName();
+        return toProposal(
+                source,
+                role,
+                mapping == null ? null : mapping.getId(),
+                mapping == null ? displayName(externalName, externalId) : displayName(mapping.getExternalDisplayName(), externalName),
+                targetId,
+                targetName,
+                mapping == null ? null : mapping.getMappingStatus(),
+                mapping != null && mapping.getMappingStatus() == MappingStatusEnum.PENDING && targetId != null && expectedScope,
+                mapping == null ? "尚未进入球队标准化复核队列"
+                        : mapping.getMappingStatus() != MappingStatusEnum.PENDING ? "球队关系当前为 " + mapping.getMappingStatus() + "，不可随赛事确认修改"
+                        : targetId == null ? "目标竞彩比赛尚未关联内部球队"
+                        : !expectedScope ? "外部球队作用域与该赛事联赛不一致" : null
+        );
+    }
+
+    private static MappingReviewNormalizationProposalVo toProposal(
+            MatchSourceMapping source,
+            MappingNormalizationRoleEnum role,
+            Long providerMappingId,
+            String externalDisplayName,
+            Long targetEntityId,
+            String targetEntityName,
+            MappingStatusEnum mappingStatus,
+            boolean selectable,
+            String unavailableReason
+    ) {
+        return new MappingReviewNormalizationProposalVo(
+                source.getId(), role, providerMappingId, externalDisplayName, targetEntityId,
+                targetEntityName, mappingStatus, selectable, unavailableReason
+        );
+    }
+
+    private ConfirmationContext prepareConfirmation(Long mappingId, Long requestedTargetMatchId) {
+        // 1) 读取当前 PENDING 行。
+        MatchSourceMapping current = requireMapping(mappingId);
+        if (current.getMappingStatus() != MappingStatusEnum.PENDING) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR,
+                    "mapping confirm conflict: expected PENDING but was " + current.getMappingStatus());
+        }
+        Long targetMatchId = requestedTargetMatchId == null ? current.getMatchId() : requestedTargetMatchId;
+        if (targetMatchId == null) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "targetMatchId must not be null");
+        }
+        if (!allowedTargetMatchIds(current).contains(targetMatchId)) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "targetMatchId must be current match or persisted candidate");
+        }
+        MatchEntity target = matchMapper.selectById(targetMatchId);
+        if (target == null) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "match not found: " + targetMatchId);
+        }
+        if (hasStarted(target)) {
+            throw new BusinessException(ErrorCode.MAPPING_REVIEW_EXPIRED);
+        }
+        return new ConfirmationContext(current, target);
+    }
+
+    private List<NormalizationConfirmation> requestedNormalizations(
+            MappingReviewBundleConfirmDto request,
+            ConfirmationContext context
+    ) {
+        List<NormalizationConfirmation> result = new ArrayList<>();
+        if (request.confirmLeague()) {
+            result.add(requireLeagueConfirmation(context));
+        }
+        if (request.confirmHomeTeam()) {
+            result.add(requireTeamConfirmation(context, MappingNormalizationRoleEnum.HOME_TEAM));
+        }
+        if (request.confirmAwayTeam()) {
+            result.add(requireTeamConfirmation(context, MappingNormalizationRoleEnum.AWAY_TEAM));
+        }
+        if (result.stream().map(NormalizationConfirmation::providerMappingId).distinct().count() != result.size()) {
+            throw new BusinessException(ErrorCode.INVALID_PARAMETER, "home and away team identities must be confirmed separately");
+        }
+        return result;
+    }
+
+    private NormalizationConfirmation requireLeagueConfirmation(ConfirmationContext context) {
+        MatchSourceMapping source = context.mapping();
+        ProviderLeagueMapping mapping = findLeagueMapping(source);
+        if (mapping == null || mapping.getMappingStatus() != MappingStatusEnum.PENDING || context.target().getLeagueId() == null) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, "league normalization is not selectable for this mapping");
+        }
+        return new NormalizationConfirmation(MappingNormalizationRoleEnum.LEAGUE, mapping.getId(), context.target().getLeagueId(), mapping, null);
+    }
+
+    private NormalizationConfirmation requireTeamConfirmation(
+            ConfirmationContext context,
+            MappingNormalizationRoleEnum role
+    ) {
+        MatchSourceMapping source = context.mapping();
+        boolean home = role == MappingNormalizationRoleEnum.HOME_TEAM;
+        Long targetTeamId = home ? context.target().getHomeTeamId() : context.target().getAwayTeamId();
+        ProviderTeamMapping mapping = findTeamMapping(source, home ? source.getExternalHomeTeamId() : source.getExternalAwayTeamId());
+        if (mapping == null || mapping.getMappingStatus() != MappingStatusEnum.PENDING || targetTeamId == null
+                || (THE_ODDS_API.equals(source.getProviderCode())
+                && !Objects.equals(mapping.getExternalScope(), expectedTeamScope(source)))) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, role + " normalization is not selectable for this mapping");
+        }
+        return new NormalizationConfirmation(role, mapping.getId(), targetTeamId, null, mapping);
+    }
+
+    private ProviderLeagueMapping findLeagueMapping(MatchSourceMapping source) {
+        if (!StringUtils.hasText(source.getProviderCode()) || !StringUtils.hasText(source.getExternalLeagueId())) {
+            return null;
+        }
+        return providerLeagueMappingMapper.selectOne(new LambdaQueryWrapper<ProviderLeagueMapping>()
+                .eq(ProviderLeagueMapping::getProviderCode, source.getProviderCode())
+                .eq(ProviderLeagueMapping::getExternalLeagueId, source.getExternalLeagueId()));
+    }
+
+    private ProviderTeamMapping findTeamMapping(MatchSourceMapping source, String externalTeamId) {
+        if (!StringUtils.hasText(source.getProviderCode()) || !StringUtils.hasText(externalTeamId)) {
+            return null;
+        }
+        LambdaQueryWrapper<ProviderTeamMapping> wrapper = new LambdaQueryWrapper<ProviderTeamMapping>()
+                .eq(ProviderTeamMapping::getProviderCode, source.getProviderCode())
+                .eq(ProviderTeamMapping::getExternalTeamId, externalTeamId);
+        if (THE_ODDS_API.equals(source.getProviderCode())) {
+            wrapper.eq(ProviderTeamMapping::getExternalScope, expectedTeamScope(source));
+        }
+        return providerTeamMappingMapper.selectOne(wrapper);
+    }
+
+    private void confirmNormalization(NormalizationConfirmation confirmation, String operator) {
+        if (confirmation.role() == MappingNormalizationRoleEnum.LEAGUE) {
+            ProviderLeagueMapping current = confirmation.leagueMapping();
+            String before = snapshot(current);
+            int rows = providerLeagueMappingMapper.update(null, new UpdateWrapper<ProviderLeagueMapping>()
+                    .eq("id", current.getId()).eq("mapping_status", MappingStatusEnum.PENDING.getCode())
+                    .set("league_id", confirmation.targetEntityId())
+                    .set("mapping_status", MappingStatusEnum.MANUAL_CONFIRMED.getCode())
+                    .set("mapping_confidence", BigDecimal.ONE)
+                    .set("mapping_method", METHOD_MANUAL_BUNDLE_NORMALIZATION_REVIEW));
+            requireUpdated(rows, "league normalization confirm");
+            ProviderLeagueMapping updated = providerLeagueMappingMapper.selectById(current.getId());
+            appendAudit(operator, AuditTargetTypeEnum.PROVIDER_LEAGUE_MAPPING, current.getId(), before, snapshot(updated));
+            return;
+        }
+        ProviderTeamMapping current = confirmation.teamMapping();
+        String before = snapshot(current);
+        int rows = providerTeamMappingMapper.update(null, new UpdateWrapper<ProviderTeamMapping>()
+                .eq("id", current.getId()).eq("mapping_status", MappingStatusEnum.PENDING.getCode())
+                .set("team_id", confirmation.targetEntityId())
+                .set("mapping_status", MappingStatusEnum.MANUAL_CONFIRMED.getCode())
+                .set("mapping_confidence", BigDecimal.ONE)
+                .set("mapping_method", METHOD_MANUAL_BUNDLE_NORMALIZATION_REVIEW));
+        requireUpdated(rows, "team normalization confirm");
+        ProviderTeamMapping updated = providerTeamMappingMapper.selectById(current.getId());
+        appendAudit(operator, AuditTargetTypeEnum.PROVIDER_TEAM_MAPPING, current.getId(), before, snapshot(updated));
+    }
+
+    private MappingReviewDetailVo confirmMatch(ConfirmationContext context, String operator) {
+        MatchSourceMapping current = context.mapping();
+        String oldSnapshot = snapshot(current);
+        int rows = matchSourceMappingMapper.update(null, new UpdateWrapper<MatchSourceMapping>()
+                .eq("id", current.getId()).eq("mapping_status", MappingStatusEnum.PENDING.getCode())
+                .set("mapping_status", MappingStatusEnum.MANUAL_CONFIRMED.getCode())
+                .set("match_id", context.target().getId())
+                .set("confirmed_by", operator)
+                .set("mapping_method", METHOD_MANUAL_REVIEW));
+        requireUpdated(rows, "mapping confirm");
+        MatchSourceMapping updated = requireMapping(current.getId());
+        appendAudit(operator, AuditTargetTypeEnum.MATCH_SOURCE_MAPPING, current.getId(), oldSnapshot, snapshot(updated));
+        return toDetail(updated);
+    }
+
+    private static void requireUpdated(int rows, String action) {
+        if (rows == 0) {
+            throw new BusinessException(ErrorCode.BUSINESS_ERROR, action + " conflict: expected PENDING");
+        }
+    }
+
+    private void appendAudit(
+            String operator,
+            AuditTargetTypeEnum targetType,
+            Long mappingId,
+            String oldValue,
+            String newValue
+    ) {
+        auditLogService.append(operator, targetType, String.valueOf(mappingId), AuditActionTypeEnum.CONFIRM,
+                "mappingStatus", oldValue, newValue);
+    }
+
+    private static String expectedTeamScope(MatchSourceMapping source) {
+        return THE_ODDS_API.equals(source.getProviderCode()) ? source.getExternalLeagueId() : null;
+    }
+
+    private static String displayName(String preferred, String fallback) {
+        return StringUtils.hasText(preferred) ? preferred : fallback;
+    }
+
+    private record ProviderLeagueIdentity(String providerCode, String externalLeagueId) {
+    }
+
+    private record ProviderTeamIdentity(String providerCode, String externalTeamId, String externalScope) {
+    }
+
+    private record ConfirmationContext(MatchSourceMapping mapping, MatchEntity target) {
+    }
+
+    private record NormalizationConfirmation(
+            MappingNormalizationRoleEnum role,
+            Long providerMappingId,
+            Long targetEntityId,
+            ProviderLeagueMapping leagueMapping,
+            ProviderTeamMapping teamMapping
+    ) {
     }
 
     private static MappingReviewScopeEnum reviewScope(MappingReviewListQueryDto query) {
@@ -517,5 +837,21 @@ public class MatchMappingReviewServiceImpl implements MatchMappingReviewService 
                 + ";matchId=" + mapping.getMatchId()
                 + ";method=" + mapping.getMappingMethod()
                 + ";confirmedBy=" + mapping.getConfirmedBy();
+    }
+
+    private static String snapshot(ProviderLeagueMapping mapping) {
+        return "provider=" + mapping.getProviderCode()
+                + ";externalId=" + mapping.getExternalLeagueId()
+                + ";scope=" + mapping.getExternalScope()
+                + ";status=" + mapping.getMappingStatus()
+                + ";leagueId=" + mapping.getLeagueId();
+    }
+
+    private static String snapshot(ProviderTeamMapping mapping) {
+        return "provider=" + mapping.getProviderCode()
+                + ";externalId=" + mapping.getExternalTeamId()
+                + ";scope=" + mapping.getExternalScope()
+                + ";status=" + mapping.getMappingStatus()
+                + ";teamId=" + mapping.getTeamId();
     }
 }

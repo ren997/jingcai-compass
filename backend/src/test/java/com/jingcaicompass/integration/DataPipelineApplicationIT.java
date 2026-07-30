@@ -90,8 +90,8 @@ class DataPipelineApplicationIT {
         assertThat(first.normalization().pendingMatchCount()).isZero();
         assertThat(first.normalization().failureCount()).isZero();
         assertThat(first.normalization().updatedMatchCount()).isEqualTo(1);
-        assertThat(first.confirmedMappingCount()).isEqualTo(6);
-        assertThat(first.pendingMappingCount()).isEqualTo(2);
+        assertThat(first.confirmedMappingCount()).isEqualTo(1);
+        assertThat(first.pendingMappingCount()).isEqualTo(7);
         assertThat(first.asianOddsSnapshotInsertCount()).isEqualTo(5);
         assertThat(first.skippedUnmapped()).isEqualTo(2);
         assertThat(first.skippedIncomplete()).isEqualTo(1);
@@ -138,8 +138,8 @@ class DataPipelineApplicationIT {
         assertThat(second.sportterySnapshotInsertCount()).isZero();
         assertThat(second.asianOddsSnapshotInsertCount()).isZero();
         assertThat(second.normalization().updatedMatchCount()).isZero();
-        assertThat(second.confirmedMappingCount()).isEqualTo(6);
-        assertThat(second.pendingMappingCount()).isEqualTo(2);
+        assertThat(second.confirmedMappingCount()).isEqualTo(1);
+        assertThat(second.pendingMappingCount()).isEqualTo(7);
         assertThat(afterSecond).isEqualTo(afterFirst);
         assertThat(afterSecond.matches()).isEqualTo(2);
         assertThat(afterSecond.leagues()).isEqualTo(1);

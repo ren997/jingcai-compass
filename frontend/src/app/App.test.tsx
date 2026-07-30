@@ -534,7 +534,8 @@ describe('App routes', () => {
     renderApp('/admin/normalizations/leagues?providerCode=THE_ODDS_API&mappingStatus=PENDING&page=1');
 
     expect(await screen.findByRole('heading', { name: '联赛标准化复核' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '标准化复核' })).toHaveAttribute('href', '/admin/normalizations/leagues');
+    expect(screen.getByRole('link', { name: '联赛复核' })).toHaveAttribute('href', '/admin/normalizations/leagues');
+    expect(screen.getByRole('link', { name: '球队复核' })).toHaveAttribute('href', '/admin/normalizations/teams');
     expect(await screen.findByText('共 1 项')).toBeInTheDocument();
     expect(screen.getByText('作用域')).toBeInTheDocument();
     expect(screen.getAllByText('soccer_epl').length).toBeGreaterThan(1);

@@ -38,7 +38,10 @@ export default function AdminLayout() {
             映射复核
           </NavLink>
           <NavLink to="/admin/normalizations/leagues">
-            标准化复核
+            联赛复核
+          </NavLink>
+          <NavLink to="/admin/normalizations/teams">
+            球队复核
           </NavLink>
           <NavLink to="/admin/predictions">
             预测锁定

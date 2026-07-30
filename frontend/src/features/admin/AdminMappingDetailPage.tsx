@@ -7,7 +7,7 @@ import { parseMappingSearch } from './adminSearch';
 import { useMappingReviewActions, useMappingReviewDetailQuery } from './useAdminQueries';
 
 type Action = 'confirm' | 'reject' | 'reopen' | null;
-const confirmationWords: Record<Exclude<Action, null>, string> = { confirm: '确认', reject: '拒绝', reopen: '重新打开' };
+const actionLabels: Record<Exclude<Action, null>, string> = { confirm: '确认关联', reject: '确认拒绝', reopen: '确认重新打开' };
 
 function MatchBrief({ candidate }: { candidate: MappingReviewCandidate }) {
   const match = candidate.match;
@@ -25,7 +25,6 @@ export default function AdminMappingDetailPage() {
   const detailQuery = useMappingReviewDetailQuery(mappingId);
   const actions = useMappingReviewActions();
   const [action, setAction] = useState<Action>(null);
-  const [confirmation, setConfirmation] = useState('');
   const [reason, setReason] = useState('');
   const [chosenTarget, setChosenTarget] = useState<number | undefined>();
   const backTo = `/admin/mappings${searchParams.toString() ? `?${searchParams}` : ''}`;
@@ -50,13 +49,13 @@ export default function AdminMappingDetailPage() {
   const isMutating = actions.confirm.isPending || actions.reject.isPending || actions.reopen.isPending;
   const actionError = actions.confirm.error || actions.reject.error || actions.reopen.error;
 
-  function open(next: Exclude<Action, null>) { setAction(next); setConfirmation(''); }
+  function open(next: Exclude<Action, null>) { setAction(next); }
   async function submit() {
-    if (!action || confirmation !== confirmationWords[action]) return;
+    if (!action) return;
     if (action === 'confirm' && targetMatchId !== undefined) await actions.confirm.mutateAsync({ mappingId: mappingId!, targetMatchId });
     if (action === 'reject') await actions.reject.mutateAsync({ mappingId: mappingId!, reason });
     if (action === 'reopen') await actions.reopen.mutateAsync(mappingId!);
-    setAction(null); setReason(''); setConfirmation('');
+    setAction(null); setReason('');
   }
 
   return <main className="admin-page admin-workspace"><section className="admin-page-heading"><div><p className="eyebrow">Operations · Mapping #{detail.mappingId}</p>
@@ -77,11 +76,10 @@ export default function AdminMappingDetailPage() {
     </section>
     <Modal title={action === 'confirm' ? '确认映射' : action === 'reject' ? '拒绝映射' : '重新打开映射'} open={action !== null}
       onCancel={() => setAction(null)} onOk={() => void submit()} confirmLoading={isMutating}
-      okButtonProps={{ disabled: action === null || confirmation !== confirmationWords[action] }} okText="执行操作">
+      okButtonProps={{ disabled: action === null }} okText={action ? actionLabels[action] : '执行操作'}>
       {action === 'confirm' && <p>将外部比赛关联到内部比赛 #{targetMatchId}。确认前请核对候选资料。</p>}
       {action === 'reject' && <label className="admin-modal-field">拒绝原因（可选）<Input.TextArea value={reason} onChange={(event) => setReason(event.target.value)} maxLength={200} /></label>}
       {action === 'reopen' && <p>此操作会将已拒绝映射恢复到待复核队列。</p>}
-      {action && <label className="admin-modal-field">输入“{confirmationWords[action]}”以进行二次确认<Input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>}
     </Modal>
   </main>;
 }

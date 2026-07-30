@@ -26,7 +26,6 @@ export default function AdminMappingMatchDetailPage() {
   const actions = useMappingReviewActions();
   const [selectedMappingId, setSelectedMappingId] = useState<number | undefined>();
   const [confirmationOpen, setConfirmationOpen] = useState(false);
-  const [confirmation, setConfirmation] = useState('');
   const backTo = `/admin/mappings${searchParams.toString() ? `?${searchParams}` : ''}`;
   const candidates = detailQuery.data?.externalCandidates ?? [];
   const selected = useMemo(
@@ -45,10 +44,9 @@ export default function AdminMappingMatchDetailPage() {
   const actionError = actions.confirm.error;
 
   async function confirm() {
-    if (!selected || confirmation !== '确认关联') return;
+    if (!selected) return;
     await actions.confirm.mutateAsync({ mappingId: selected.mappingId, targetMatchId: match.matchId });
     setConfirmationOpen(false);
-    setConfirmation('');
     await detailQuery.refetch();
   }
 
@@ -70,14 +68,13 @@ export default function AdminMappingMatchDetailPage() {
             <small>状态：<Tag>{candidate.mappingStatus}</Tag> · 得分：{candidate.score ?? '—'} · {candidate.reasons.join('、') || candidate.mappingExplanation || '服务端保留的候选'}</small></div>
         </Radio>)}</Radio.Group>}
       <div className="admin-actions">{selected && <>
-        <Button type="primary" disabled={!canConfirm} onClick={() => { setConfirmation(''); setConfirmationOpen(true); }}>确认关联</Button>
+        <Button type="primary" disabled={!canConfirm} onClick={() => setConfirmationOpen(true)}>确认关联</Button>
         <Link to={`/admin/mappings/${selected.mappingId}${searchParams.toString() ? `?${searchParams}` : ''}`}>查看该外部映射的高级详情</Link>
       </>}</div>
     </section>
     <Modal title="确认外部赛事关联" open={confirmationOpen} onCancel={() => setConfirmationOpen(false)} onOk={() => void confirm()}
-      confirmLoading={actions.confirm.isPending} okText="确认关联" okButtonProps={{ disabled: confirmation !== '确认关联' }}>
+      confirmLoading={actions.confirm.isPending} okText="确认关联">
       {selected && <p>将“{externalName(selected)}”关联到竞彩“{match.lotteryMatchNo} · {match.homeTeamName} vs {match.awayTeamName}”。请确认官方和外部开赛时间均合理。</p>}
-      <label className="admin-modal-field">输入“确认关联”以进行二次确认<input className="ant-input" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
     </Modal>
   </main>;
 }

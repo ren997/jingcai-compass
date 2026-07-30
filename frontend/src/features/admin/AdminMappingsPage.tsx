@@ -40,7 +40,6 @@ export default function AdminMappingsPage() {
   const actions = useMappingReviewActions();
   const [selectedExternal, setSelectedExternal] = useState<Record<number, number>>({});
   const [pendingConfirmation, setPendingConfirmation] = useState<PendingConfirmation | null>(null);
-  const [confirmation, setConfirmation] = useState('');
   const page = query.data;
   const pageCount = page ? Math.max(1, Math.ceil(page.total / page.pageSize)) : 1;
   const returnSearch = searchParams.toString();
@@ -55,13 +54,12 @@ export default function AdminMappingsPage() {
   }
 
   async function confirm() {
-    if (!pendingConfirmation || confirmation !== '确认关联') return;
+    if (!pendingConfirmation) return;
     await actions.confirm.mutateAsync({
       mappingId: pendingConfirmation.external.mappingId,
       targetMatchId: pendingConfirmation.match.matchId,
     });
     setPendingConfirmation(null);
-    setConfirmation('');
   }
 
   return <main className="admin-page admin-workspace">
@@ -101,7 +99,7 @@ export default function AdminMappingsPage() {
             </Radio>)}
           </Radio.Group>
           <div className="admin-actions">
-            <Button type="primary" disabled={!canConfirm} onClick={() => selected && (setPendingConfirmation({ match: item.match, external: selected }), setConfirmation(''))}>确认关联</Button>
+            <Button type="primary" disabled={!canConfirm} onClick={() => selected && setPendingConfirmation({ match: item.match, external: selected })}>确认关联</Button>
             <Link to={`/admin/mappings/matches/${item.match.matchId}${returnSearch ? `?${returnSearch}` : ''}`}>查看候选详情</Link>
           </div>
           {filters.reviewScope === 'HISTORY' && <p className="admin-metadata-note">该场已开赛，仅保留历史证据，不可确认关联。</p>}
@@ -111,9 +109,8 @@ export default function AdminMappingsPage() {
         <span>第 {filters.pageNo} / {pageCount} 页</span><Button disabled={filters.pageNo >= pageCount} onClick={() => update({ pageNo: filters.pageNo + 1 })}>下一页</Button></div>
     </section>}
     <Modal title="确认外部赛事关联" open={pendingConfirmation !== null} onCancel={() => setPendingConfirmation(null)} onOk={() => void confirm()}
-      confirmLoading={actions.confirm.isPending} okText="确认关联" okButtonProps={{ disabled: confirmation !== '确认关联' }}>
+      confirmLoading={actions.confirm.isPending} okText="确认关联">
       {pendingConfirmation && <p>将“{externalName(pendingConfirmation.external)}”关联到竞彩“{pendingConfirmation.match.lotteryMatchNo} · {pendingConfirmation.match.homeTeamName} vs {pendingConfirmation.match.awayTeamName}”。</p>}
-      <label className="admin-modal-field">输入“确认关联”以进行二次确认<Input value={confirmation} onChange={(event) => setConfirmation(event.target.value)} /></label>
     </Modal>
   </main>;
 }

@@ -61,6 +61,18 @@ class PredictionLockServiceTest {
     }
 
     @Test
+    void retriesWhenAClaimIsTemporarilySkipped() {
+        when(worker.lockNext(anyCollection()))
+                .thenReturn(null, item(3L), (PredictionLockWorker.LockResult) null);
+
+        var result = service.lockDuePredictions(100);
+
+        assertThat(result.lockedPredictionIds()).containsExactly(3L);
+        assertThat(result.failedPredictionIds()).isEmpty();
+        verify(worker, times(8)).lockNext(anyCollection());
+    }
+
+    @Test
     void excludesFailedItemAndContinuesWithOtherPredictions() {
         PredictionLockItemException failure = new PredictionLockItemException(
                 10L,
@@ -81,7 +93,7 @@ class PredictionLockServiceTest {
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<Collection<Long>> exclusions = ArgumentCaptor.forClass(Collection.class);
-        verify(worker, times(3)).lockNext(exclusions.capture());
+        verify(worker, times(8)).lockNext(exclusions.capture());
         assertThat(exclusions.getAllValues().get(1)).containsExactly(10L);
     }
 

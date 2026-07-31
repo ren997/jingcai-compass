@@ -7,6 +7,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.locks.LockSupport;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +21,8 @@ public class PredictionLockServiceImpl implements PredictionLockService {
 
     private static final Logger log = LoggerFactory.getLogger(PredictionLockServiceImpl.class);
     private static final int MAX_BATCH_SIZE = 1000;
+    private static final int MAX_EMPTY_RETRIES = 5;
+    private static final long EMPTY_RETRY_BACKOFF_NANOS = 2_000_000L;
 
     private final PredictionLockWorker predictionLockWorker;
     private final PredictionLockMetrics predictionLockMetrics;
@@ -39,6 +42,7 @@ public class PredictionLockServiceImpl implements PredictionLockService {
         List<Long> lockedIds = new ArrayList<>();
         List<Long> failedIds = new ArrayList<>();
         Set<Long> excludedIds = new LinkedHashSet<>();
+        int emptyRetries = 0;
 
         try {
             // 1) 逐条抢占到期记录，最多处理配置的批大小
@@ -58,10 +62,16 @@ public class PredictionLockServiceImpl implements PredictionLockService {
                     continue;
                 }
                 if (item == null) {
-                    break;
+                    // SKIP LOCKED 可能只是在本轮遇到短暂竞争；有界重试后再结束本批。
+                    if (emptyRetries++ >= MAX_EMPTY_RETRIES) {
+                        break;
+                    }
+                    LockSupport.parkNanos(EMPTY_RETRY_BACKOFF_NANOS);
+                    continue;
                 }
 
                 // 3) 记录成功 ID 和基于数据库时间计算的锁定延迟
+                emptyRetries = 0;
                 lockedIds.add(item.predictionId());
                 predictionLockMetrics.recordLocked(
                         Duration.between(item.lockTime(), item.lockedAt())

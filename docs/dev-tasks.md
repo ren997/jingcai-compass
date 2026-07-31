@@ -1126,10 +1126,13 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-30：开始执行；范围为 V17、The Odds 外部待复核身份、历史临时实体的受控清理、赛事组合确认接口与弹窗。组合确认允许只确认赛事，或显式勾选联赛、主队、客队；任一勾选项冲突则整组回滚。本轮只运行普通后端测试、前端测试/构建与差异检查，不启动 local profile、不运行 PostgreSQL 集成测试/CI、不推送。
   - 2026-07-30：完成本地代码增量。V17 使外部 `PENDING`/`REJECTED` 身份可不关联内部实体，并以受控 SQL 解除历史 `THE_ODDS_API + PENDING + NAME_CANDIDATE` 临时关联、只删除无比赛/别名/其他映射引用的孤立实体。新增 `confirm-bundle`，前端默认只确认赛事；联赛、主队、客队需显式勾选并与赛事条件更新、审计处于同一事务。未确认身份的后台详情显示“尚未关联内部实体”。
   - 2026-07-30：项目负责人确认 local 库均为测试数据后，按正常 `local` 启动。Flyway 成功将 PostgreSQL 16.3 从 V16 迁移至 V17（0.461 秒）；健康检查为 `UP`。浏览器实际验证首页、管理员登录、后台导航、赛事映射及联赛/球队复核页；The Odds 待复核球队显示“暂无内部暂存实体”，无页面控制台错误。未执行整合测试或 CI。
+  - 2026-07-31：开始处理本地 PostgreSQL 集成验证失败；范围为更新 V17 迁移数量基线、修复预测锁定遇到短暂 `SKIP LOCKED` 竞争时的有界重试，并运行定向与完整集成测试。
+  - 2026-07-31：完成集成失败修复；V17 基线更新为 17 个迁移，预测锁定服务对短暂 `SKIP LOCKED` 空候选增加最多 5 次、每次 2ms 的有界重试，且不改变失败记录和审计语义。
 - 验证记录：
   - 2026-07-30：`mvn -f backend/pom.xml clean test` 通过，437 项普通测试；`cd frontend && npm run test` 通过，64 项 Vitest；`cd frontend && npm run build` 通过；`git diff --check` 通过。未运行 `mvn -Pintegration verify`、未触发 CI、未推送，也未启动 local 应用或对开发库执行 V17。
   - 2026-07-30：经项目负责人确认测试数据范围后，`mvn -f backend/pom.xml spring-boot:run` 的 `local` profile 启动成功；Flyway V17 成功，`http://127.0.0.1:8081/actuator/health` 返回 `UP`。浏览器登录并访问首页、`/admin/mappings`、`/admin/normalizations/leagues`、`/admin/normalizations/teams` 及球队详情成功，控制台无 error/warn。
   - 2026-07-30：保持 `PARTIAL`。待在独立 PostgreSQL 环境中审计历史 `NAME_CANDIDATE` 引用图、执行 V17 并验证受控清理与并发条件更新；完成前 T106/T107 不启动连续观测。
+  - 2026-07-31：`mvn -B -ntp -f backend/pom.xml test` 通过（438 项）；`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（42 项，PostgreSQL 16/Testcontainers，V1～V17）；`git diff --check` 通过。T209 仍保持 `PARTIAL`，待真实库引用图审计与受控清理证据补齐。
 
 ## 8. M3 预测发布、锁定和快照
 

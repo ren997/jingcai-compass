@@ -39,7 +39,7 @@ public class TheOddsApiProvider implements AsianOddsProvider {
     static final String PROVIDER_CODE = "THE_ODDS_API";
     private static final String API_KEY_PARAMETER = "apiKey";
     private static final String REGIONS = "eu";
-    private static final String MARKETS = "spreads";
+    private static final String MARKETS = "spreads,totals";
 
     private final RestClient restClient;
     private final ProviderHttpExecutor httpExecutor;
@@ -221,7 +221,7 @@ public class TheOddsApiProvider implements AsianOddsProvider {
     private String requestKey(List<String> sportKeys, AsianOddsQueryDto query) {
         String from = query.kickoffFrom() == null ? "*" : query.kickoffFrom().toInstant().toString();
         String to = query.kickoffTo() == null ? "*" : query.kickoffTo().toInstant().toString();
-        return "the-odds:spreads:" + String.join(",", sportKeys) + ":" + from + ":" + to;
+        return "the-odds:" + MARKETS + ":" + String.join(",", sportKeys) + ":" + from + ":" + to;
     }
 
     private static String text(JsonNode node, String fieldName) {

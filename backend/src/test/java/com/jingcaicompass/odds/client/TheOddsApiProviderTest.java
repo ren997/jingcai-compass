@@ -77,6 +77,11 @@ class TheOddsApiProviderTest {
                                 {"name":"Home", "price":1.91, "point":-0.5},
                                 {"name":"Away", "price":1.95, "point":0.5}
                               ]
+                            }, {"key":"totals", "last_update":"2026-08-01T09:02:00Z",
+                              "outcomes":[
+                                {"name":"Over", "price":1.87, "point":2.5},
+                                {"name":"Under", "price":1.99, "point":2.5}
+                              ]
                             }]
                           }]
                         }]
@@ -87,6 +92,7 @@ class TheOddsApiProviderTest {
         assertThat(raw.quotaCost()).isEqualTo(1);
         assertThat(raw.payloadJson()).contains("\"responses\"").contains("soccer_epl");
         assertThat(raw.payloadJson()).doesNotContain("odds-api-secret");
+        assertThat(raw.requestKey()).contains("spreads,totals");
         assertThat(raw.requestKey()).doesNotContain("odds-api-secret");
         var matches = payloadMapper.parseMatches(raw.payloadJson());
         assertThat(matches).hasSize(1);
@@ -97,13 +103,16 @@ class TheOddsApiProviderTest {
             assertThat(line.handicapLine()).isEqualByComparingTo("-0.5");
             assertThat(line.homeOdds()).isEqualByComparingTo("1.91");
             assertThat(line.awayOdds()).isEqualByComparingTo("1.95");
+            assertThat(line.totalLine()).isEqualByComparingTo("2.5");
+            assertThat(line.overOdds()).isEqualByComparingTo("1.87");
+            assertThat(line.underOdds()).isEqualByComparingTo("1.99");
         });
 
         var request = server.takeRequest();
         assertThat(request.getPath()).startsWith("/v4/sports/soccer_epl/odds?");
         assertThat(request.getRequestUrl().queryParameter("apiKey")).isEqualTo("odds-api-secret");
         assertThat(request.getRequestUrl().queryParameter("regions")).isEqualTo("eu");
-        assertThat(request.getRequestUrl().queryParameter("markets")).isEqualTo("spreads");
+        assertThat(request.getRequestUrl().queryParameter("markets")).isEqualTo("spreads,totals");
         assertThat(request.getRequestUrl().queryParameter("commenceTimeFrom"))
                 .isEqualTo("2026-08-01T00:00:00Z");
         assertThat(request.getRequestUrl().queryParameter("commenceTimeTo"))
@@ -130,6 +139,33 @@ class TheOddsApiProviderTest {
 
         assertThat(match.lines()).isEmpty();
         assertThat(match.parseError()).isEqualTo("INCONSISTENT_SPREAD_PAIR");
+    }
+
+    @Test
+    void marksInconsistentTotalsPairAsControlledParseFailure() {
+        String payload = """
+                {"provider":"THE_ODDS_API","responses":[{"sportKey":"soccer_epl","body":[{
+                  "id":"event-3", "home_team":"Home", "away_team":"Away",
+                  "commence_time":"2026-08-01T12:00:00Z",
+                  "bookmakers":[{"key":"book", "markets":[
+                    {"key":"spreads", "outcomes":[
+                      {"name":"Home", "price":1.9, "point":-0.5},
+                      {"name":"Away", "price":1.9, "point":0.5}
+                    ]},
+                    {"key":"totals", "outcomes":[
+                      {"name":"Over", "price":1.9, "point":2.5},
+                      {"name":"Under", "price":1.9, "point":2.25}
+                    ]}
+                  ]}]
+                }]}]}
+                """;
+
+        var matches = payloadMapper.parseMatches(payload);
+
+        assertThat(matches).hasSize(1);
+        var match = matches.getFirst();
+        assertThat(match.lines()).isEmpty();
+        assertThat(match.parseError()).isEqualTo("INCONSISTENT_TOTALS_PAIR");
     }
 
     @Test

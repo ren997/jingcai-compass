@@ -134,26 +134,56 @@ public class AsianOddsPayloadMapper {
                     errors.add("INVALID_MARKETS");
                     continue;
                 }
+
+                JsonNode spreadMarket = null;
+                JsonNode totalsMarket = null;
                 for (JsonNode market : markets) {
-                    if (!"spreads".equals(market.path("key").asText())) {
-                        continue;
-                    }
-                    OffsetDateTime providerUpdatedAt = parseTime(market.path("last_update"));
-                    if (providerUpdatedAt == null) {
-                        providerUpdatedAt = bookmakerUpdatedAt;
-                    }
-                    AsianOddsLineDto line = toSpreadLine(
-                            market.path("outcomes"),
-                            bookmakerCode,
-                            homeTeamName,
-                            awayTeamName,
-                            providerUpdatedAt,
-                            errors
-                    );
-                    if (line != null) {
-                        lines.add(line);
+                    String marketKey = market.path("key").asText();
+                    if ("spreads".equals(marketKey)) {
+                        spreadMarket = market;
+                    } else if ("totals".equals(marketKey)) {
+                        totalsMarket = market;
                     }
                 }
+                if (spreadMarket == null) {
+                    continue;
+                }
+
+                OffsetDateTime spreadUpdatedAt = providerUpdatedAt(spreadMarket, bookmakerUpdatedAt);
+                AsianOddsLineDto spreadLine = toSpreadLine(
+                        spreadMarket.path("outcomes"),
+                        bookmakerCode,
+                        homeTeamName,
+                        awayTeamName,
+                        spreadUpdatedAt,
+                        errors
+                );
+                if (spreadLine == null) {
+                    continue;
+                }
+                if (totalsMarket == null) {
+                    lines.add(spreadLine);
+                    continue;
+                }
+
+                TotalsLine totalsLine = toTotalsLine(
+                        totalsMarket.path("outcomes"),
+                        providerUpdatedAt(totalsMarket, bookmakerUpdatedAt),
+                        errors
+                );
+                if (totalsLine == null) {
+                    continue;
+                }
+                lines.add(new AsianOddsLineDto(
+                        bookmakerCode,
+                        spreadLine.handicapLine(),
+                        spreadLine.homeOdds(),
+                        spreadLine.awayOdds(),
+                        totalsLine.totalLine(),
+                        totalsLine.overOdds(),
+                        totalsLine.underOdds(),
+                        latestUpdatedAt(spreadLine.providerUpdatedAt(), totalsLine.providerUpdatedAt())
+                ));
             }
         }
         boolean live = event.path("live").asBoolean(false);
@@ -207,6 +237,32 @@ public class AsianOddsPayloadMapper {
         );
     }
 
+    private TotalsLine toTotalsLine(
+            JsonNode outcomes,
+            OffsetDateTime providerUpdatedAt,
+            Set<String> errors
+    ) {
+        if (!outcomes.isArray()) {
+            errors.add("INVALID_TOTALS_OUTCOMES");
+            return null;
+        }
+        JsonNode over = findOutcomeIgnoreCase(outcomes, "Over");
+        JsonNode under = findOutcomeIgnoreCase(outcomes, "Under");
+        BigDecimal overPoint = decimal(over, "point");
+        BigDecimal underPoint = decimal(under, "point");
+        BigDecimal overPrice = decimal(over, "price");
+        BigDecimal underPrice = decimal(under, "price");
+        if (overPoint == null || underPoint == null || overPrice == null || underPrice == null) {
+            errors.add("INCOMPLETE_TOTALS_PAIR");
+            return null;
+        }
+        if (overPoint.compareTo(underPoint) != 0) {
+            errors.add("INCONSISTENT_TOTALS_PAIR");
+            return null;
+        }
+        return new TotalsLine(overPoint, overPrice, underPrice, providerUpdatedAt);
+    }
+
     private JsonNode findOutcome(JsonNode outcomes, String teamName) {
         if (!StringUtils.hasText(teamName)) {
             return null;
@@ -217,6 +273,33 @@ public class AsianOddsPayloadMapper {
             }
         }
         return null;
+    }
+
+    private JsonNode findOutcomeIgnoreCase(JsonNode outcomes, String outcomeName) {
+        if (!StringUtils.hasText(outcomeName)) {
+            return null;
+        }
+        for (JsonNode outcome : outcomes) {
+            if (outcomeName.equalsIgnoreCase(outcome.path("name").asText())) {
+                return outcome;
+            }
+        }
+        return null;
+    }
+
+    private OffsetDateTime providerUpdatedAt(JsonNode market, OffsetDateTime bookmakerUpdatedAt) {
+        OffsetDateTime marketUpdatedAt = parseTime(market.path("last_update"));
+        return marketUpdatedAt == null ? bookmakerUpdatedAt : marketUpdatedAt;
+    }
+
+    private OffsetDateTime latestUpdatedAt(OffsetDateTime first, OffsetDateTime second) {
+        if (first == null) {
+            return second;
+        }
+        if (second == null || !second.isAfter(first)) {
+            return first;
+        }
+        return second;
     }
 
     private static BigDecimal decimal(JsonNode node, String name) {
@@ -249,5 +332,13 @@ public class AsianOddsPayloadMapper {
     private static String text(JsonNode node, String fieldName) {
         JsonNode field = node == null ? null : node.get(fieldName);
         return field == null || field.isNull() ? null : field.asText(null);
+    }
+
+    private record TotalsLine(
+            BigDecimal totalLine,
+            BigDecimal overOdds,
+            BigDecimal underOdds,
+            OffsetDateTime providerUpdatedAt
+    ) {
     }
 }

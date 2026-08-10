@@ -5,9 +5,9 @@
 - 文档版本：v0.6
 - 最后更新：2026-08-10
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无（等待启动 T209 真实引用图审计与 V17 清理证据）`
-- 下一任务：`T209 真实引用图审计与 V17 清理证据`
-- 最近完成增量：`T406 受控人工赛果补录与既有自动结算联动`
+- 当前活动任务：`无（等待 T106/T107 授权与节点条件恢复连续观测）`
+- 下一任务：`T106/T107 连续观测授权与节点条件复核`
+- 最近完成增量：`T209 外部待复核身份与赛事组合复核`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -219,7 +219,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 | --- | --- | --- |
 | M0 工程基线 | `DONE` | T000～T006 已完成；GitHub Actions 已通过 PostgreSQL 16 空库迁移和完整数据库上下文验证 |
 | M1 Provider 基础 | `PARTIAL` | T101～T105 已完成；T106/T107 连续观测和授权结论尚未完成 |
-| M2 标准化与映射 | `PARTIAL` | T208 时效修正与 T209 外部待复核身份/组合确认的本地实现已完成；V17 清理迁移、真实引用图与 PostgreSQL 条件更新证据待补，未确认时不得由单场比赛映射反推别名 |
+| M2 标准化与映射 | `PARTIAL` | T209 已完成 V17/V19 受控清理、真实引用图与 PostgreSQL 条件更新证据；T208 时效修正仍为 `PARTIAL`，未确认时不得由单场比赛映射反推别名 |
 | M3 预测生成、发布与快照 | `DONE` | T301～T306、T601 已完成预测承载、可解释离线生成、发布、锁定和确定性公开快照；T306 已由 GitHub Actions PostgreSQL 16 回归验证 |
 | M4 赛果与结算 | `DONE` | T401～T406 已完成不可变赛果、自动结算/修正重算及受控人工赛果补录；人工事实仅用于开发验证和模型评估，不替代官方数据源 |
 | M5 公共 API 与前端 | `DONE` | T501、T502、T503、T504、T505、T506、T507 已完成；公开比赛、预测、历史、统计与首页闭环均由持久化事实查询支撑 |
@@ -1098,7 +1098,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T209 外部待复核身份与赛事组合复核
 
-- 状态：`PARTIAL`
+- 状态：`DONE`
 - 优先级：P0
 - 依赖：T208
 - 交付物：
@@ -1113,7 +1113,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 保持全局 `team_aliases` 不增加联赛字段：The Odds 无球队 ID 时，以现有 `provider_code + sport_key + 外部队名规范化键` 的 Provider 作用域身份作为复用键；同名队伍跨 `sport_key` 必须独立确认。
   - [x] 不让单场赛事确认直接写入联赛/球队别名或 Provider 映射；赛事复核弹窗提供联赛、主队、客队三项显式复选，未勾选时只确认赛事；勾选项与赛事确认在同一事务内逐项审计。
   - [x] 当同一 Provider 事件的联赛、主队、客队均已有已确认映射，且作用域、主客方向、开赛时间阈值和事件唯一性全部满足时，自动确认赛事映射并允许同步亚盘；任一条件不满足时继续 `PENDING` 并保留可读原因。
-  - [ ] 覆盖联赛/球队待复核不建内部实体、既有孤立临时实体安全清理、不可删除引用保护、跨 `sport_key` 同名隔离、三项确认后自动映射、主客反转/联赛冲突/时间超限不自动确认、单场确认不传播别名、JWT/traceId 与 PostgreSQL 约束。
+  - [x] 覆盖联赛/球队待复核不建内部实体、既有孤立临时实体安全清理、不可删除引用保护、跨 `sport_key` 同名隔离、三项确认后自动映射、主客反转/联赛冲突/时间超限不自动确认、单场确认不传播别名、JWT/traceId 与 PostgreSQL 约束。
 - 验证命令：
 
   ```bash
@@ -1126,7 +1126,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 未确认的外部身份不会伪装为或污染竞彩内部联赛/球队实体；后台清楚展示其未关联状态。
   - 只有明确人工确认的 Provider 联赛和作用域球队关系能够复用；赛事确认本身不会自动生成长期别名。
   - 已确认联赛与两支球队后，满足方向、时间与唯一性硬约束的新外部赛事可自动确认；跨联赛同名球队不交叉复用。
-  - 已在项目负责人确认的测试数据 local 库执行一次 V17 启动冒烟；仍未完成独立 PostgreSQL 集成测试、真实引用图审计及并发条件更新证据，任务保持 `PARTIAL`，T106/T107 不启动连续观测。
+  - 已在项目负责人确认的测试数据 local 库执行一次 V17 启动冒烟，并完成独立 PostgreSQL 集成测试、真实引用图审计及并发条件更新证据；本任务 Draft PR CI 已成功，T106/T107 不自动启动连续观测。
 - 恢复入口：先从真实本地库审计 `THE_ODDS_API` 的 `PENDING/NAME_CANDIDATE` 映射及其 `leagues`/`teams` 引用图，确认候选清理 SQL 不会触及体彩比赛、别名、已确认映射或审计证据；不得以手工删库替代迁移验证。
 - 执行记录：
   - 2026-07-30：项目负责人确认规划。发现当前 `TeamNormalizationServiceImpl.createPendingCandidate` 会为 The Odds 的 `PENDING` 外部球队新建同名 `teams` 行，以满足旧 `team_id NOT NULL` 约束，导致后台“当前暂存实体”显示 Odds 英文名。决定改为外部身份先行、内部实体显式确认；不在 `team_aliases` 增加联赛字段，继续以 Provider 作用域球队身份隔离同名队。此轮只登记任务，不修改业务代码。
@@ -1135,11 +1135,15 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-30：项目负责人确认 local 库均为测试数据后，按正常 `local` 启动。Flyway 成功将 PostgreSQL 16.3 从 V16 迁移至 V17（0.461 秒）；健康检查为 `UP`。浏览器实际验证首页、管理员登录、后台导航、赛事映射及联赛/球队复核页；The Odds 待复核球队显示“暂无内部暂存实体”，无页面控制台错误。未执行整合测试或 CI。
   - 2026-07-31：开始处理本地 PostgreSQL 集成验证失败；范围为更新 V17 迁移数量基线、修复预测锁定遇到短暂 `SKIP LOCKED` 竞争时的有界重试，并运行定向与完整集成测试。
   - 2026-07-31：完成集成失败修复；V17 基线更新为 17 个迁移，预测锁定服务对短暂 `SKIP LOCKED` 空候选增加最多 5 次、每次 2ms 的有界重试，且不改变失败记录和审计语义。
+  - 2026-08-10：恢复执行。范围固定为对项目负责人已确认的本地测试 PostgreSQL 做只读 `THE_ODDS_API + PENDING/NAME_CANDIDATE` 引用图审计，补齐缺失的 PostgreSQL 约束/并发验证与结果记录；不调用 Provider、不修改共享或生产数据库、不以手工删除代替 V17 受控清理。完成后将在独立 `codex/t209-reference-audit` 分支通过 Draft PR 与 GitHub Actions 复验。
+  - 2026-08-10：发现 V17 的数据修改 CTE 在同一 PostgreSQL 语句快照中无法看到解绑后的映射，导致已证明孤立的临时实体不能删除。保持已执行 V17 不变，新增 V19：仅在保留的外部展示名、内部标准名与同事务创建时间可共同证明旧临时身份时，且不存在比赛、别名或任一 Provider 映射引用时，才补偿删除；无法证明的记录继续保留待人工复核。
 - 验证记录：
   - 2026-07-30：`mvn -f backend/pom.xml clean test` 通过，437 项普通测试；`cd frontend && npm run test` 通过，64 项 Vitest；`cd frontend && npm run build` 通过；`git diff --check` 通过。未运行 `mvn -Pintegration verify`、未触发 CI、未推送，也未启动 local 应用或对开发库执行 V17。
   - 2026-07-30：经项目负责人确认测试数据范围后，`mvn -f backend/pom.xml spring-boot:run` 的 `local` profile 启动成功；Flyway V17 成功，`http://127.0.0.1:8081/actuator/health` 返回 `UP`。浏览器登录并访问首页、`/admin/mappings`、`/admin/normalizations/leagues`、`/admin/normalizations/teams` 及球队详情成功，控制台无 error/warn。
   - 2026-07-30：保持 `PARTIAL`。待在独立 PostgreSQL 环境中审计历史 `NAME_CANDIDATE` 引用图、执行 V17 并验证受控清理与并发条件更新；完成前 T106/T107 不启动连续观测。
   - 2026-07-31：`mvn -B -ntp -f backend/pom.xml test` 通过（438 项）；`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（42 项，PostgreSQL 16/Testcontainers，V1～V17）；`git diff --check` 通过。T209 仍保持 `PARTIAL`，待真实库引用图审计与受控清理证据补齐。
+  - 2026-08-10：对项目负责人确认的 local 测试 PostgreSQL 仅做只读审计；按 `installed_rank` 确认 Flyway 当前 V18。`THE_ODDS_API + PENDING + (NAME_CANDIDATE/LEGACY_NAME_CANDIDATE_REVIEW_REQUIRED)` 联赛候选 1、球队候选 30，候选关联内部实体、比赛、别名及其他 Provider 映射均为 0，证明 V17 已解绑且无残留保护性引用。PostgreSQL 16/Testcontainers 的新增 `ProviderNormalizationMigrationApplicationIT` 2 项验证 V17/V19 受控孤立清理、比赛/别名/其他 Provider 引用保护、待确认可空/已确认不可空约束和并发条件更新仅一方成功。`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（457 个普通测试、50 个 IT、Flyway V1～V19）；`npm --prefix frontend run test` 通过（65 项）；`npm --prefix frontend run build` 与 `git diff --check` 通过。Java 21.0.6、Maven 3.9.14、Docker Desktop Engine 29.6.2、Testcontainers PostgreSQL 16.14；等待 Draft PR CI。
+  - 2026-08-10：实现提交 `c3c04940282cdbf829a640cddac4f44321f0c9c1` 的 [PR #23](https://github.com/ren997/jingcai-compass/pull/23) 首次 [GitHub Actions #31377565822](https://github.com/ren997/jingcai-compass/actions/runs/31377565822) 成功。Ubuntu Runner 以 Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers `postgres:16-alpine`（PostgreSQL 16.14）完成 V1～V19 空库迁移、457 个普通测试和 50 个 PostgreSQL IT；已验证 V19 仅处理可证明孤立身份、引用保护、可空/已确认约束和并发条件更新。最终看板提交将触发第二轮 CI，成功后再转正式并合并。
 
 ## 8. M3 预测生成、发布、锁定和快照
 
@@ -2145,18 +2149,18 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ## 14. 推荐的下一步
 
-T406 已完成：受控人工补录已核实赛果事实并联动既有自动结算/重算。人工记录保留来源、原因与操作审计，只用于开发验证和评估样本积累；它不替代官方数据源，也不允许直接编辑结算。
+T209 已完成：真实待复核身份引用图已只读审计，V19 修复了 V17 解绑后的安全孤立清理，且 PostgreSQL 条件更新并发行为已验证。未能证明为临时实体的记录继续保留人工复核，绝不因单场映射反推别名。
 
-下一个 P0 是 T209：补齐真实 `NAME_CANDIDATE` 引用图审计、V17 受控清理和 PostgreSQL 条件更新证据。
+下一个 P0 是按授权与节点条件恢复 T106/T107 连续观测；T108 的真实赛果契约与生产 Go / No-Go 结论仍不能由人工赛果补录替代。
 
-T209 的真实 `NAME_CANDIDATE` 引用图审计与 V17 受控清理保持为 M2 的独立收口项，不阻塞 T306/T406；T106/T107 的连续观测仍须遵循原有映射和节点前置。T106 的真实赛果契约受 WAF 阻断，T108 因此继续为 `BLOCKED`，T604 生产部署仍不可开始。
+T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PARTIAL`。T106/T107 的连续观测仍须遵循原有映射和节点前置。T106 的真实赛果契约受 WAF 阻断，T108 因此继续为 `BLOCKED`，T604 生产部署仍不可开始。
 
 随后按以下顺序推进：
 
 ```text
-已完成：T207 + T302 -> T306 首版可解释离线预测
+已完成：T209 真实待复核身份审计与受控清理
 已完成：T401 + T404 + T405 + T601 -> T406 受控人工赛果补录
-下一步：T209 真实库引用图审计与 V17 清理证据
+下一步：T106/T107 连续观测授权与节点条件复核
 连续证据：T106/T107 -> T108 数据源 Go / No-Go
 生产前置：T108 + T306 + T406 + T604 -> T605 MVP 验收与连续运行
 ```
@@ -2165,6 +2169,7 @@ T209 的真实 `NAME_CANDIDATE` 引用图审计与 V17 受控清理保持为 M2 
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-08-10 | T209 / `c3c0494` | `IN_PROGRESS -> DONE` | [PR #23](https://github.com/ren997/jingcai-compass/pull/23) 的首次 [GitHub Actions #31377565822](https://github.com/ren997/jingcai-compass/actions/runs/31377565822) 成功；Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers PostgreSQL 16.14 上执行完整回归，457 个普通测试与 50 个 PostgreSQL IT 通过。真实 local 测试库已完成只读引用图审计；V19 受控孤立清理、引用保护、可空/已确认约束与并发条件更新已验证。最终看板提交将触发第二轮 CI，成功后再正式合并。 |
 | 2026-08-10 | T406 / `ce48e84` | `IN_PROGRESS -> DONE` | [PR #22](https://github.com/ren997/jingcai-compass/pull/22) 的 [GitHub Actions #31364984624](https://github.com/ren997/jingcai-compass/actions/runs/31364984624) 成功；Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers PostgreSQL 16.14 上执行完整回归，457 个普通测试与 48 个 PostgreSQL IT 通过。V18 人工来源/载荷约束、不可变事实、JWT 补录、幂等/并发、官方优先和按比赛结算重算已验证；最终看板提交将触发第二轮 CI，成功后再正式合并。 |
 | 2026-08-10 | T306 / `abd8542` | `IN_PROGRESS -> DONE` | [PR #21](https://github.com/ren997/jingcai-compass/pull/21) 的 [GitHub Actions #31353406368](https://github.com/ren997/jingcai-compass/actions/runs/31353406368) 成功；Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers PostgreSQL 16.14 上执行完整回归，445 个普通测试与 44 个 PostgreSQL IT 均通过。 |
 | 2026-08-10 | T306 / T406 | 新增；`T306 -> IN_PROGRESS` | 项目负责人将首版预测模型设为当前 P0：先用当前比赛与已确认的体彩/亚洲盘口完成可解释离线基线，既有导入/发布/锁定/快照复用。新增 T406 作为下一任务，受控人工补录赛果事实并复用自动结算；不直接编辑结算，不以人工输入替代真实赛果源或 T108 验收。 |

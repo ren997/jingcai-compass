@@ -5,9 +5,9 @@
 - 文档版本：v0.6
 - 最后更新：2026-08-10
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T306 可解释预测基线模型（IN_PROGRESS）；范围：使用当前可拉取且已确认映射的比赛/赔率特征生成离线预测，不依赖真实赛果源`
+- 当前活动任务：`无（T306 可解释预测基线模型已完成；T406 受控人工赛果补录已就绪）`
 - 下一任务：`T406 受控人工赛果补录与既有自动结算联动`
-- 最近完成增量：`T107 大小球盘口受控同步与复核`
+- 最近完成增量：`T306 可解释预测基线模型`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -220,7 +220,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 | M0 工程基线 | `DONE` | T000～T006 已完成；GitHub Actions 已通过 PostgreSQL 16 空库迁移和完整数据库上下文验证 |
 | M1 Provider 基础 | `PARTIAL` | T101～T105 已完成；T106/T107 连续观测和授权结论尚未完成 |
 | M2 标准化与映射 | `PARTIAL` | T208 时效修正与 T209 外部待复核身份/组合确认的本地实现已完成；V17 清理迁移、真实引用图与 PostgreSQL 条件更新证据待补，未确认时不得由单场比赛映射反推别名 |
-| M3 预测生成、发布与快照 | `PARTIAL` | T301～T305、T601 已完成预测承载、发布、锁定和确定性公开快照；T306 正在实现首版可解释离线预测模型 |
+| M3 预测生成、发布与快照 | `DONE` | T301～T306、T601 已完成预测承载、可解释离线生成、发布、锁定和确定性公开快照；T306 已由 GitHub Actions PostgreSQL 16 回归验证 |
 | M4 赛果与结算 | `PARTIAL` | T401～T405 已完成不可变赛果、自动结算与修正重算；T406 将增加受控人工赛果补录以支持开发验证和模型评估样本积累 |
 | M5 公共 API 与前端 | `DONE` | T501、T502、T503、T504、T505、T506、T507 已完成；公开比赛、预测、历史、统计与首页闭环均由持久化事实查询支撑 |
 | M6 后台、稳定性与上线 | `PARTIAL` | T601 管理员鉴权、T602 后台同步/映射复核、T603 基础可观测性与 T606 预测/结算运营状态已完成；业务指标、部署及真实数据源上线条件尚未完成 |
@@ -1317,7 +1317,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T306 可解释预测基线模型
 
-- 状态：`IN_PROGRESS`
+- 状态：`DONE`
 - 优先级：P0
 - 依赖：T207、T302
 - 交付物：
@@ -1351,9 +1351,11 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-08-10：项目负责人将首版预测模型提升为当前 P0。范围固定为离线、可解释的赔率/让球/大小球基线；不等待 T106 真实赛果接口，不编造历史训练结果，也不引入长期在线 Python 推理服务。计划执行专项/全量后端测试、PostgreSQL 16 集成验证、GitHub Actions 与差异检查。
   - 2026-08-10：完成后端首版。`BaselinePredictionGenerationService` 只读持久化比赛、最新体彩 SP 与已确认映射的完整亚盘/大小球；通过管理员 JWT 入口生成稳定 JSON 并复用 T302 导入为 DRAFT，绝不自动发布。未确认映射、无效/缺失盘口、非未开赛比赛均按稳定原因跳过；已加入结构化日志和低基数指标。
   - 2026-08-10：补齐 PostgreSQL 生命周期与并发证据。生成的 DRAFT 经既有发布流程生成内容哈希、再经到期锁定流程进入 LOCKED；同一稳定生成批次使用事务级 PostgreSQL advisory lock 串行化，后到请求复用首批而不产生额外预测版本。等待 Draft PR 的 GitHub Actions 完整复验，任务保持 `IN_PROGRESS`。
+  - 2026-08-10：实现提交 `abd854221117647d05eaa7853cb5ae4421e22044` 已在 [PR #21](https://github.com/ren997/jingcai-compass/pull/21) 的 [GitHub Actions #31353406368](https://github.com/ren997/jingcai-compass/actions/runs/31353406368) 通过；T306 完成，下一任务切换为 T406。
 - 验证记录：
   - 2026-08-10：专项 Maven 测试通过（6 项）：固定输入预测、严格 JSON 导入兼容、缺已确认亚盘跳过、管理员请求校验和 JWT 401/403 边界均已覆盖。`mvn -B -ntp -f backend/pom.xml -Pintegration -Dit.test=PredictionImportApplicationIT verify` 的普通测试 443 项通过；PostgreSQL 16 集成阶段因本机 Docker Desktop Linux Engine 未运行（命名管道不存在）无法启动，未使用共享或云端数据库替代。已编写相应 PostgreSQL 集成用例，待 Docker/CI 验证。
   - 2026-08-10：Docker Desktop 29.6.2 启动后，本地执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过：445 个普通测试、44 个 Testcontainers PostgreSQL 16.14 集成测试（`postgres:16-alpine`，Testcontainers 1.21.4），Flyway V1～V17 成功。`PredictionImportApplicationIT` 4 项覆盖确认映射特征、稳定幂等批次、生成后发布/锁定及双请求并发复用；`PredictionLockApplicationIT` 继续覆盖到期锁定并发。`git diff --check` 通过；未修改前端，故未重复执行前端构建。GitHub Actions 待 Draft PR 创建后验证。
+  - 2026-08-10：PR #21 的 GitHub Actions #31353406368 成功。`postgres-integration` 使用 Eclipse Temurin Java 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers 1.21.4 和 `postgres:16-alpine`（PostgreSQL 16.14），执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`；445 个普通测试和 44 个 PostgreSQL 集成测试全部通过，Flyway V1～V17 成功。实际覆盖 T306 的已确认映射特征、稳定批次、DRAFT→PUBLISHED→LOCKED 生命周期以及双请求并发单批次复用。
 
 ## 9. M4 赛果与自动结算
 
@@ -2138,16 +2140,16 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ## 14. 推荐的下一步
 
-当前 P0 是 T306：基于已拉取比赛及已确认映射的盘口实现可解释离线预测基线。它不等待体彩真实赛果接口，也不会把缺少赔率、未确认映射或已开赛比赛作为可预测输入；输出仍须经过既有导入、发布、锁定和快照闭环。
+T306 已完成：已基于已拉取比赛及已确认映射的盘口交付可解释离线预测基线，且不等待体彩真实赛果接口。缺少赔率、未确认映射或已开赛比赛不会作为可预测输入；输出仍经过既有导入、发布、锁定和快照闭环。
 
-紧接着执行 T406：受控人工补录已核实赛果事实并联动既有自动结算/重算。人工补录用于开发验证和评估样本积累，保留来源、原因与操作审计；它不替代官方数据源，也不允许直接编辑结算。
+下一个 P0 是 T406：受控人工补录已核实赛果事实并联动既有自动结算/重算。人工补录用于开发验证和评估样本积累，保留来源、原因与操作审计；它不替代官方数据源，也不允许直接编辑结算。
 
 T209 的真实 `NAME_CANDIDATE` 引用图审计与 V17 受控清理保持为 M2 的独立收口项，不阻塞 T306/T406；T106/T107 的连续观测仍须遵循原有映射和节点前置。T106 的真实赛果契约受 WAF 阻断，T108 因此继续为 `BLOCKED`，T604 生产部署仍不可开始。
 
 随后按以下顺序推进：
 
 ```text
-当前：T207 + T302 -> T306 首版可解释离线预测
+已完成：T207 + T302 -> T306 首版可解释离线预测
 下一步：T401 + T404 + T405 + T601 -> T406 受控人工赛果补录
 并行收口：T209 真实库引用图审计与 V17 清理证据
 连续证据：T106/T107 -> T108 数据源 Go / No-Go
@@ -2158,6 +2160,7 @@ T209 的真实 `NAME_CANDIDATE` 引用图审计与 V17 受控清理保持为 M2 
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-08-10 | T306 / `abd8542` | `IN_PROGRESS -> DONE` | [PR #21](https://github.com/ren997/jingcai-compass/pull/21) 的 [GitHub Actions #31353406368](https://github.com/ren997/jingcai-compass/actions/runs/31353406368) 成功；Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers PostgreSQL 16.14 上执行完整回归，445 个普通测试与 44 个 PostgreSQL IT 均通过。 |
 | 2026-08-10 | T306 / T406 | 新增；`T306 -> IN_PROGRESS` | 项目负责人将首版预测模型设为当前 P0：先用当前比赛与已确认的体彩/亚洲盘口完成可解释离线基线，既有导入/发布/锁定/快照复用。新增 T406 作为下一任务，受控人工补录赛果事实并复用自动结算；不直接编辑结算，不以人工输入替代真实赛果源或 T108 验收。 |
 | 2026-08-07 | T107 | `IN_PROGRESS -> PARTIAL` | The Odds API 请求扩展为 `spreads,totals`，严格配对 Over/Under 并与让球快照同写；日职两场受控同步运行 ID 13/14 成功，最终公开详情可读取大小球。`TheOddsApiProviderTest` 5 项、后端 439 项、前端 Vitest 64 项和生产构建通过；未启动连续观测，M1 仍为 `PARTIAL`。 |
 | 2026-07-30 | T209 | `IN_PROGRESS -> PARTIAL` | V17 外部身份可空关联与受控孤立实体清理、The Odds 不建临时内部实体、可信竞彩候选、`confirm-bundle` 原子赛事/联赛/主客队确认及后台复选弹窗完成；`mvn clean test` 437 项、Vitest 64 项与前端生产构建通过，差异检查通过。项目负责人确认测试数据范围后，local PostgreSQL 16.3 已成功执行 V17，应用健康与浏览器复核页冒烟通过；仍须独立审计真实引用图、执行 PostgreSQL 集成验证和并发条件更新证据，T106/T107 不启动连续观测。 |

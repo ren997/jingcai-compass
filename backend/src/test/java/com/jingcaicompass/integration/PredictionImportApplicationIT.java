@@ -5,13 +5,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
+import com.jingcaicompass.prediction.dto.PredictionLockResultDto;
+import com.jingcaicompass.prediction.dto.PredictionPublishDto;
 import com.jingcaicompass.prediction.entity.Prediction;
+import com.jingcaicompass.prediction.enums.BaselinePredictionSkipReasonEnum;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
+import com.jingcaicompass.prediction.service.BaselinePredictionGenerationService;
 import com.jingcaicompass.prediction.service.PredictionImportService;
 import com.jingcaicompass.prediction.service.PredictionImportWriter;
+import com.jingcaicompass.prediction.service.PredictionLockService;
+import com.jingcaicompass.prediction.service.PredictionPublishService;
+import com.jingcaicompass.prediction.vo.BaselinePredictionGenerationVo;
+import com.jingcaicompass.prediction.vo.PredictionPublishResultVo;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.security.MessageDigest;
@@ -20,9 +28,15 @@ import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -83,6 +97,15 @@ class PredictionImportApplicationIT {
     private PredictionImportWriter predictionImportWriter;
 
     @Autowired
+    private BaselinePredictionGenerationService baselinePredictionGenerationService;
+
+    @Autowired
+    private PredictionPublishService predictionPublishService;
+
+    @Autowired
+    private PredictionLockService predictionLockService;
+
+    @Autowired
     private PredictionMapper predictionMapper;
 
     @BeforeEach
@@ -105,6 +128,27 @@ class PredictionImportApplicationIT {
         // 2) 清理本类固定测试键，确保测试顺序和失败重跑不影响断言
         jdbcTemplate.update(
                 "DELETE FROM predictions WHERE match_id IN (?, ?, ?, ?)",
+                FIRST_MATCH_ID,
+                SECOND_MATCH_ID,
+                ROLLBACK_FIRST_MATCH_ID,
+                ROLLBACK_SECOND_MATCH_ID
+        );
+        jdbcTemplate.update(
+                "DELETE FROM sporttery_pool_snapshots WHERE match_id IN (?, ?, ?, ?)",
+                FIRST_MATCH_ID,
+                SECOND_MATCH_ID,
+                ROLLBACK_FIRST_MATCH_ID,
+                ROLLBACK_SECOND_MATCH_ID
+        );
+        jdbcTemplate.update(
+                "DELETE FROM asian_odds_snapshots WHERE match_id IN (?, ?, ?, ?)",
+                FIRST_MATCH_ID,
+                SECOND_MATCH_ID,
+                ROLLBACK_FIRST_MATCH_ID,
+                ROLLBACK_SECOND_MATCH_ID
+        );
+        jdbcTemplate.update(
+                "DELETE FROM match_source_mappings WHERE match_id IN (?, ?, ?, ?)",
                 FIRST_MATCH_ID,
                 SECOND_MATCH_ID,
                 ROLLBACK_FIRST_MATCH_ID,
@@ -158,6 +202,105 @@ class PredictionImportApplicationIT {
             assertThat(prediction.getLockTime()).isNull();
             assertThat(prediction.getPredictionHash()).isNull();
         });
+    }
+
+    @Test
+    void generatesBaselineOnlyForConfirmedMappedMarketsAndReusesSameDraftBatch() {
+        // 1) 同一业务日准备两场完整盘口，只有一场拥有已确认外部赛事映射
+        prepareBaselineGenerationFixtures();
+
+        // 2) 首次运行只为已确认比赛导入 DRAFT；未确认比赛保持可解释跳过
+        BaselinePredictionGenerationVo first = baselinePredictionGenerationService.generateAndImport(
+                LocalDate.of(2026, 7, 27),
+                "t306-it"
+        );
+
+        assertThat(first.candidateCount()).isEqualTo(2);
+        assertThat(first.generatedCount()).isEqualTo(1);
+        assertThat(first.insertedCount()).isEqualTo(1);
+        assertThat(first.reusedCount()).isZero();
+        assertThat(first.skippedByReason()).containsEntry(
+                BaselinePredictionSkipReasonEnum.MISSING_CONFIRMED_ASIAN_MARKET,
+                1
+        );
+        Prediction saved = predictionMapper.selectOne(new LambdaQueryWrapper<Prediction>()
+                .eq(Prediction::getGenerationBatchId, first.generationBatchId()));
+        assertThat(saved.getMatchId()).isEqualTo(FIRST_MATCH_ID);
+        assertThat(saved.getPredictionStatus()).isEqualTo(PredictionStatusEnum.DRAFT);
+        assertThat(saved.getModelVersion()).isEqualTo("t306-odds-baseline-v1");
+        assertThat(saved.getFeatureVersion()).isEqualTo("t306-sporttery-asian-v1");
+        assertThat(saved.getHomeWinProb().add(saved.getDrawProb()).add(saved.getAwayWinProb()))
+                .isEqualByComparingTo("1.000000");
+
+        // 3) 输入快照未变化时重跑复用同一批次，不产生第二条预测版本
+        BaselinePredictionGenerationVo second = baselinePredictionGenerationService.generateAndImport(
+                LocalDate.of(2026, 7, 27),
+                "t306-it"
+        );
+        assertThat(second.generationBatchId()).isEqualTo(first.generationBatchId());
+        assertThat(second.generationBatchHash()).isEqualTo(first.generationBatchHash());
+        assertThat(second.insertedCount()).isZero();
+        assertThat(second.reusedCount()).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM predictions WHERE generation_batch_id = ?",
+                Integer.class,
+                first.generationBatchId()
+        )).isEqualTo(1);
+
+        // 4) 生成器只留下草稿；仍须由既有发布、到期锁定流程推进生命周期
+        PredictionPublishResultVo published = predictionPublishService.publish(
+                new PredictionPublishDto(saved.getId()),
+                "t306-it"
+        );
+        assertThat(published.predictionStatus()).isEqualTo(PredictionStatusEnum.PUBLISHED);
+        assertThat(published.predictionHash()).hasSize(64);
+
+        PredictionLockResultDto locked = predictionLockService.lockDuePredictions(10);
+        assertThat(locked.lockedCount()).isEqualTo(1);
+        assertThat(locked.failedCount()).isZero();
+        assertThat(locked.lockedPredictionIds()).containsExactly(saved.getId());
+
+        Prediction lockedPrediction = predictionMapper.selectById(saved.getId());
+        assertThat(lockedPrediction.getPredictionStatus()).isEqualTo(PredictionStatusEnum.LOCKED);
+        assertThat(lockedPrediction.getPublishTime()).isNotNull();
+        assertThat(lockedPrediction.getLockTime()).isNotNull();
+        assertThat(lockedPrediction.getPredictionHash()).isEqualTo(published.predictionHash());
+    }
+
+    @Test
+    void concurrentBaselineGenerationsReuseOneStableDraftBatch() throws Exception {
+        // 1) 两个管理请求同时生成同一业务日，输入特征和批次标识完全一致
+        prepareBaselineGenerationFixtures();
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<BaselinePredictionGenerationVo> first = executor.submit(
+                    () -> generateAfterBarrier(ready, start)
+            );
+            Future<BaselinePredictionGenerationVo> second = executor.submit(
+                    () -> generateAfterBarrier(ready, start)
+            );
+            assertThat(ready.await(10, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+
+            BaselinePredictionGenerationVo firstResult = first.get(30, TimeUnit.SECONDS);
+            BaselinePredictionGenerationVo secondResult = second.get(30, TimeUnit.SECONDS);
+
+            // 2) 事务级批次锁使后到请求复用首批结果，绝不增加第二条预测版本
+            assertThat(firstResult.generationBatchId()).isEqualTo(secondResult.generationBatchId());
+            assertThat(firstResult.generationBatchHash()).isEqualTo(secondResult.generationBatchHash());
+            assertThat(firstResult.insertedCount() + secondResult.insertedCount()).isEqualTo(1);
+            assertThat(firstResult.reusedCount() + secondResult.reusedCount()).isEqualTo(1);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM predictions WHERE match_id = ?",
+                Integer.class,
+                FIRST_MATCH_ID
+        )).isEqualTo(1);
     }
 
     @Test
@@ -222,6 +365,76 @@ class PredictionImportApplicationIT {
         prediction.setGeneratedAt(Instant.parse("2026-07-26T01:00:00Z"));
         prediction.setPredictionStatus(PredictionStatusEnum.DRAFT);
         return prediction;
+    }
+
+    private void prepareBaselineGenerationFixtures() {
+        insertFutureMatch(FIRST_MATCH_ID, "T306-001");
+        insertFutureMatch(SECOND_MATCH_ID, "T306-002");
+        insertBaselineMarkets(FIRST_MATCH_ID, "a", "b");
+        insertBaselineMarkets(SECOND_MATCH_ID, "c", "d");
+        jdbcTemplate.update(
+                """
+                INSERT INTO match_source_mappings (
+                    match_id, provider_code, external_match_id, mapping_status,
+                    mapping_confidence, mapping_method, confirmed_by
+                ) VALUES (?, 'STUB', 't306-confirmed-001', 'MANUAL_CONFIRMED',
+                          1.0000, 'MANUAL_REVIEW', 't306-it')
+                """,
+                FIRST_MATCH_ID
+        );
+    }
+
+    private BaselinePredictionGenerationVo generateAfterBarrier(
+            CountDownLatch ready,
+            CountDownLatch start
+    ) {
+        ready.countDown();
+        try {
+            if (!start.await(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("concurrent generation start timed out");
+            }
+            return baselinePredictionGenerationService.generateAndImport(
+                    LocalDate.of(2026, 7, 27),
+                    "t306-concurrent-it"
+            );
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("concurrent generation was interrupted", exception);
+        }
+    }
+
+    private void insertBaselineMarkets(long matchId, String sportteryHash, String asianHash) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO sporttery_pool_snapshots (
+                    match_id, lottery_match_no, lottery_date, official_handicap,
+                    had_home_sp, had_draw_sp, had_away_sp,
+                    hhad_home_sp, hhad_draw_sp, hhad_away_sp,
+                    captured_at, raw_payload_hash
+                ) VALUES (?, ?, DATE '2026-07-27', -1.00,
+                          2.00, 4.00, 4.00,
+                          1.70, 3.20, 5.00,
+                          TIMESTAMPTZ '2026-07-26 09:00:00+08', ?)
+                """,
+                matchId,
+                "T306-" + matchId,
+                sportteryHash.repeat(64)
+        );
+        jdbcTemplate.update(
+                """
+                INSERT INTO asian_odds_snapshots (
+                    match_id, provider_code, bookmaker_code,
+                    handicap_line, home_odds, away_odds,
+                    total_line, over_odds, under_odds,
+                    snapshot_type, captured_at, raw_payload_hash
+                ) VALUES (?, 'STUB', 't306-bookmaker',
+                          -0.50, 1.90, 1.90,
+                          2.50, 1.80, 2.00,
+                          'FIRST_SEEN', TIMESTAMPTZ '2026-07-26 10:00:00+08', ?)
+                """,
+                matchId,
+                asianHash.repeat(64)
+        );
     }
 
     private byte[] sampleBytes() throws IOException {

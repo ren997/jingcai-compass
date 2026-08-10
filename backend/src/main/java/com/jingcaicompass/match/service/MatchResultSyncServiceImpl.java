@@ -11,12 +11,17 @@ import com.jingcaicompass.match.dto.MatchResultSyncResultDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultDto;
 import com.jingcaicompass.match.exception.SportteryDataAccessException;
 import com.jingcaicompass.system.provider.ProviderErrorCategory;
+import com.jingcaicompass.settlement.service.SettlementRecalculationService;
+import com.jingcaicompass.settlement.service.SettlementService;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.sql.DataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 
@@ -25,11 +30,15 @@ import org.springframework.stereotype.Service;
 @ConditionalOnBean(DataSource.class)
 public class MatchResultSyncServiceImpl implements MatchResultSyncService {
 
+    private static final Logger log = LoggerFactory.getLogger(MatchResultSyncServiceImpl.class);
+
     private final SportteryProvider sportteryProvider;
     private final ProviderSyncTemplate providerSyncTemplate;
     private final MatchResultFactWriter factWriter;
     private final ObjectMapper objectMapper;
     private final MatchResultSyncCoordinator coordinator;
+    private final SettlementRecalculationService recalculationService;
+    private final SettlementService settlementService;
 
     public MatchResultSyncServiceImpl(
             SportteryProvider sportteryProvider,
@@ -38,11 +47,26 @@ public class MatchResultSyncServiceImpl implements MatchResultSyncService {
             ObjectMapper objectMapper,
             MatchResultSyncCoordinator coordinator
     ) {
+        this(sportteryProvider, providerSyncTemplate, factWriter, objectMapper, coordinator, null, null);
+    }
+
+    @Autowired
+    public MatchResultSyncServiceImpl(
+            SportteryProvider sportteryProvider,
+            ProviderSyncTemplate providerSyncTemplate,
+            MatchResultFactWriter factWriter,
+            ObjectMapper objectMapper,
+            MatchResultSyncCoordinator coordinator,
+            SettlementRecalculationService recalculationService,
+            SettlementService settlementService
+    ) {
         this.sportteryProvider = sportteryProvider;
         this.providerSyncTemplate = providerSyncTemplate;
         this.factWriter = factWriter;
         this.objectMapper = objectMapper;
         this.coordinator = coordinator;
+        this.recalculationService = recalculationService;
+        this.settlementService = settlementService;
     }
 
     @Override
@@ -102,6 +126,7 @@ public class MatchResultSyncServiceImpl implements MatchResultSyncService {
                     }
                     case UNCHANGED -> counters.unchangedFactCount++;
                 }
+                triggerScopedSettlementAfterOfficialManualReplacement(result);
                 successCount++;
             } catch (RuntimeException exception) {
                 failureCount++;
@@ -109,6 +134,21 @@ public class MatchResultSyncServiceImpl implements MatchResultSyncService {
             }
         }
         return new ProviderParseResult(successCount, failureCount, truncate(String.join("; ", errors)));
+    }
+
+    private void triggerScopedSettlementAfterOfficialManualReplacement(MatchResultFactWriter.WriteResult result) {
+        if (!result.officialReplacedManual() || result.matchId() == null
+                || recalculationService == null || settlementService == null) {
+            return;
+        }
+        // 官方事实替代人工事实时，严格只处理该场，避免常规同步扫描无关预测。
+        try {
+            recalculationService.recalculateOutdatedSettlementsForMatch(result.matchId());
+            settlementService.settlePendingPredictionsForMatch(result.matchId());
+        } catch (RuntimeException exception) {
+            log.error("event=official_manual_result_recalculation_failed matchId={} exceptionType={}",
+                    result.matchId(), exception.getClass().getSimpleName());
+        }
     }
 
     /**

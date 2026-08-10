@@ -187,6 +187,10 @@ public class HistoryRecordAssembler {
                 fact.getHomeScore(),
                 fact.getAwayScore(),
                 fact.getProviderUpdatedAt(),
+                fact.getResultSource(),
+                fact.getSourceNote(),
+                fact.getEntryReason(),
+                fact.getEnteredBy(),
                 Boolean.TRUE.equals(fact.getIsCurrent()),
                 fact.getCreatedAt()
         );

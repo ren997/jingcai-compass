@@ -20,7 +20,7 @@ export default function AdminSettlementStatusesPage() {
 
   return <main className="admin-page admin-workspace">
     <section className="admin-page-heading"><div><p className="eyebrow">Operations · Settlement status</p><h1>结算状态</h1>
-      <p>显示等待官方赛果、当前市场结算缺失或引用已替代赛果的锁定预测；此处只读，不可人工改写结算。</p></div>
+      <p>显示等待确认赛果、当前市场结算缺失或引用已替代赛果的锁定预测；此处只读，不可人工改写结算。</p></div>
       <Button loading={query.isFetching} onClick={() => void query.refetch()}>刷新</Button></section>
     <section className="admin-filters" aria-label="结算状态筛选">
       <label><span>比赛日期</span><input aria-label="比赛日期" type="date" value={filters.lotteryDate ?? ''}

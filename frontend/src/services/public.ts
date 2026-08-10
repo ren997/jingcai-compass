@@ -50,6 +50,8 @@ export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
 
 export type MatchResultFactStatus = 'PENDING' | 'FINAL' | 'VOID';
 
+export type MatchResultFactSource = 'OFFICIAL' | 'MANUAL';
+
 export type ProbabilityMetricUnavailableReason = 'NO_FINAL_SAMPLE';
 
 export type RoiUnavailableReason =
@@ -235,6 +237,7 @@ export type MatchResultFactHistoryVo = {
   homeScore: number | null;
   awayScore: number | null;
   providerUpdatedAt: string | null;
+  resultSource?: MatchResultFactSource;
   current: boolean;
   createdAt: string;
 };

@@ -7,7 +7,7 @@ export type AdminLoginDto = {
   password: string;
 };
 
-export const PROVIDER_DATA_TYPES = ['SPORTTERY_POOL', 'SPORTTERY_RESULT', 'ASIAN_ODDS', 'OTHER'] as const;
+export const PROVIDER_DATA_TYPES = ['SPORTTERY_POOL', 'SPORTTERY_RESULT', 'ASIAN_ODDS', 'MANUAL_RESULT', 'OTHER'] as const;
 export type ProviderDataType = (typeof PROVIDER_DATA_TYPES)[number];
 
 export const SYNC_STATUSES = ['RUNNING', 'SUCCESS', 'FAILED', 'PARTIAL'] as const;
@@ -143,6 +143,10 @@ export type AdminResultFact = {
   homeScore: number | null;
   awayScore: number | null;
   providerUpdatedAt: string;
+  resultSource?: 'OFFICIAL' | 'MANUAL';
+  sourceNote?: string | null;
+  entryReason?: string | null;
+  enteredBy?: string | null;
   current: boolean;
   createdAt: string;
 };
@@ -206,6 +210,47 @@ export type AdminPredictionStatusDetail = {
   prediction: AdminPredictionStatusItem;
   resultFactHistory: AdminResultFact[];
   settlementMarkets: AdminSettlementMarketHistory[];
+};
+
+export type AdminManualMatchResultRequest = {
+  matchId: number;
+  factStatus: 'FINAL' | 'VOID';
+  matchStatus: 'FINISHED' | 'CANCELLED' | 'ABANDONED';
+  homeScore: number | null;
+  awayScore: number | null;
+  sourceNote: string;
+  entryReason: string;
+  confirmed: boolean;
+};
+
+export type AdminManualResultSettlement = {
+  recalculationCandidatePredictionCount: number;
+  recalculatedPredictionCount: number;
+  recalculatedMarketCount: number;
+  recalculationFailureCount: number;
+  recalculationManualReviewCount: number;
+  settlementCandidatePredictionCount: number;
+  settledPredictionCount: number;
+  settledMarketCount: number;
+  settlementFailureCount: number;
+  settlementManualReviewCount: number;
+};
+
+export type AdminManualMatchResult = {
+  factId: number;
+  factVersion: number;
+  writeOutcome: 'APPENDED' | 'SUPERSEDED' | 'UNCHANGED';
+  resultSource: 'MANUAL';
+  factStatus: 'FINAL' | 'VOID';
+  matchStatus: 'FINISHED' | 'CANCELLED' | 'ABANDONED';
+  homeScore: number | null;
+  awayScore: number | null;
+  sourceNote: string;
+  entryReason: string;
+  enteredBy: string;
+  enteredAt: string;
+  settlementTriggered: boolean;
+  settlement: AdminManualResultSettlement;
 };
 
 export type MappingReviewListQuery = {
@@ -482,6 +527,13 @@ export function syncAdminSportteryResults(
 ) {
   return requestApi<AdminSportteryResultSync>('/api/admin/provider/sporttery/results/sync', {
     method: 'POST', body: request, signal, authenticated: true,
+  });
+}
+
+/** 受控人工补录赛果；服务端仅定向联动该比赛的自动结算与重算。 */
+export function recordAdminManualMatchResult(request: AdminManualMatchResultRequest) {
+  return requestApi<AdminManualMatchResult>('/api/admin/manual-results', {
+    method: 'POST', body: request, authenticated: true,
   });
 }
 

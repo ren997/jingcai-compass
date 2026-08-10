@@ -14,10 +14,12 @@ public enum ProviderDataTypeEnum {
     SPORTTERY_POOL("SPORTTERY_POOL", "体彩比赛池"),
     SPORTTERY_RESULT("SPORTTERY_RESULT", "体彩赛果"),
     ASIAN_ODDS("ASIAN_ODDS", "亚盘赔率"),
+    MANUAL_RESULT("MANUAL_RESULT", "人工赛果证据"),
     OTHER("OTHER", "其他原始数据");
 
     public static final String DESC =
-            "原始数据类型: SPORTTERY_POOL-体彩比赛池, SPORTTERY_RESULT-体彩赛果, ASIAN_ODDS-亚盘赔率, OTHER-其他原始数据";
+            "原始数据类型: SPORTTERY_POOL-体彩比赛池, SPORTTERY_RESULT-体彩赛果, ASIAN_ODDS-亚盘赔率, "
+                    + "MANUAL_RESULT-人工赛果证据, OTHER-其他原始数据";
 
     private static final Map<String, ProviderDataTypeEnum> CODE_MAP = Stream.of(values())
             .collect(Collectors.toMap(ProviderDataTypeEnum::getCode, Function.identity()));

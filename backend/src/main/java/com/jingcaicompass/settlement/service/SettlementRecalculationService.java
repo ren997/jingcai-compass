@@ -12,4 +12,12 @@ public interface SettlementRecalculationService {
      * @return 本轮真实处理摘要
      */
     SettlementRecalculationBatchResultDto recalculateOutdatedSettlements(int batchSize);
+
+    /**
+     * 仅重算指定比赛引用旧赛果事实的锁定预测，不扫描其他比赛。
+     *
+     * @param matchId 比赛 ID
+     * @return 该比赛的处理摘要
+     */
+    SettlementRecalculationBatchResultDto recalculateOutdatedSettlementsForMatch(Long matchId);
 }

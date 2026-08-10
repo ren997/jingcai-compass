@@ -19,6 +19,7 @@ const AdminNormalizationsPage = lazy(() => import('../features/admin/AdminNormal
 const AdminNormalizationDetailPage = lazy(() => import('../features/admin/AdminNormalizationDetailPage'));
 const AdminPredictionLocksPage = lazy(() => import('../features/admin/AdminPredictionLocksPage'));
 const AdminSettlementStatusesPage = lazy(() => import('../features/admin/AdminSettlementStatusesPage'));
+const AdminManualResultsPage = lazy(() => import('../features/admin/AdminManualResultsPage'));
 const AdminPredictionStatusDetailPage = lazy(() => import('../features/admin/AdminPredictionStatusDetailPage'));
 const AdminLoginPage = lazy(() => import('../pages/AdminLoginPage'));
 const NotFoundPage = lazy(() => import('../pages/NotFoundPage'));
@@ -52,6 +53,7 @@ export default function App() {
             <Route path="predictions/:predictionId" element={<AdminPredictionStatusDetailPage />} />
             <Route path="settlements" element={<AdminSettlementStatusesPage />} />
             <Route path="settlements/:predictionId" element={<AdminPredictionStatusDetailPage />} />
+            <Route path="manual-results" element={<AdminManualResultsPage />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFoundPage />} />

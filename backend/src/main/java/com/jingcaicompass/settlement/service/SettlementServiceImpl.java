@@ -41,6 +41,18 @@ public class SettlementServiceImpl implements SettlementService {
 
         // 1) 只取已锁定且拥有当前 FINAL/VOID 事实的待结算预测。
         List<Long> candidateIds = settlementMapper.selectPendingLockedPredictionIds(batchSize);
+        return settleCandidates(candidateIds);
+    }
+
+    @Override
+    public SettlementBatchResultDto settlePendingPredictionsForMatch(Long matchId) {
+        if (matchId == null) {
+            throw new IllegalArgumentException("matchId must not be null");
+        }
+        return settleCandidates(settlementMapper.selectPendingLockedPredictionIdsByMatchId(matchId));
+    }
+
+    private SettlementBatchResultDto settleCandidates(List<Long> candidateIds) {
         BatchCounters counters = new BatchCounters(candidateIds.size());
 
         // 2) 每条预测委派到独立事务，单条回滚不会阻塞本批其他比赛。

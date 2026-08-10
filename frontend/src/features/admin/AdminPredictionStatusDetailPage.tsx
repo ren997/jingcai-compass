@@ -44,10 +44,11 @@ export default function AdminPredictionStatusDetailPage() {
       <dl className="admin-metadata compact"><div><dt>HAD</dt><dd>{marketText(item.hadSettlement)}</dd></div><div><dt>HHAD</dt><dd>{marketText(item.hhadSettlement)}</dd></div>
         <div><dt>当前事实版本</dt><dd>{item.currentResultFact ? `V${item.currentResultFact.factVersion}` : '暂无'}</dd></div><div><dt>供应商更新时间</dt><dd>{formatTimestamp(item.currentResultFact?.providerUpdatedAt ?? null)}</dd></div></dl>
     </section>
-    <section className="admin-panel"><header className="admin-panel-heading"><div><h2>官方赛果版本链</h2><span>当前与历史明确区分</span></div></header>
-      {detail.resultFactHistory.length === 0 ? <p className="admin-empty">尚未持久化官方赛果事实。</p> : <div className="admin-version-list">{detail.resultFactHistory.map((fact) => <article key={fact.factId} className={fact.current ? 'current' : ''}>
+    <section className="admin-panel"><header className="admin-panel-heading"><div><h2>赛果版本链</h2><span>当前与历史明确区分</span></div></header>
+      {detail.resultFactHistory.length === 0 ? <p className="admin-empty">尚未持久化赛果事实。</p> : <div className="admin-version-list">{detail.resultFactHistory.map((fact) => <article key={fact.factId} className={fact.current ? 'current' : ''}>
         <strong>事实 V{fact.factVersion} · {fact.factStatus}</strong><span>{fact.current ? '当前权威事实' : '历史事实'} · {factText(fact)}</span>
-        <small>供应商更新 {formatTimestamp(fact.providerUpdatedAt)} · 写入 {formatTimestamp(fact.createdAt)}</small>{fact.supersedesFactVersion !== null && <small>替代 V{fact.supersedesFactVersion}</small>}
+        <small>来源：{fact.resultSource === 'MANUAL' ? '人工补录，非官方源' : '官方赛果'} · 更新 {formatTimestamp(fact.providerUpdatedAt)} · 写入 {formatTimestamp(fact.createdAt)}</small>
+        {fact.resultSource === 'MANUAL' && <small>来源说明：{fact.sourceNote} · 原因：{fact.entryReason} · 操作者：{fact.enteredBy}</small>}{fact.supersedesFactVersion !== null && <small>替代 V{fact.supersedesFactVersion}</small>}
       </article>)}</div>}
     </section>
     <section className="admin-panel"><header className="admin-panel-heading"><div><h2>市场结算版本链</h2><span>不会将历史结算冒充为当前结果</span></div></header>

@@ -15,9 +15,11 @@ import com.jingcaicompass.audit.enums.AuditActionTypeEnum;
 import com.jingcaicompass.audit.enums.AuditTargetTypeEnum;
 import com.jingcaicompass.audit.service.AuditLogService;
 import com.jingcaicompass.match.dto.SportteryMatchResultDto;
+import com.jingcaicompass.match.dto.ManualMatchResultFactDto;
 import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.entity.MatchResultFact;
 import com.jingcaicompass.match.enums.MatchResultFactStatusEnum;
+import com.jingcaicompass.match.enums.MatchResultFactSourceEnum;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.MatchResultFactMapper;
@@ -61,6 +63,7 @@ class MatchResultFactWriterTest {
         match.setId(41L);
         match.setMatchStatus(MatchStatusEnum.SCHEDULED);
         lenient().when(matchMapper.selectByLotteryIdentityForUpdate(LOTTERY_DATE, "周三001")).thenReturn(match);
+        lenient().when(matchMapper.selectByIdForUpdate(41L)).thenReturn(match);
         lenient().when(matchMapper.updateById(any(MatchEntity.class))).thenReturn(1);
         lenient().when(factMapper.insert(any(MatchResultFact.class))).thenAnswer(invocation -> {
             MatchResultFact fact = invocation.getArgument(0);
@@ -204,6 +207,53 @@ class MatchResultFactWriterTest {
     }
 
     @Test
+    void appendsManualFactWithEvidenceAndAuthenticatedOperator() {
+        MatchResultFactWriter.WriteResult result = writer.writeManual(manual(MatchResultFactStatusEnum.FINAL,
+                MatchStatusEnum.FINISHED, 2, 1, "已核实现场记录", "开发样本补录", "admin-1"), RAW_PAYLOAD_ID);
+
+        ArgumentCaptor<MatchResultFact> factCaptor = ArgumentCaptor.forClass(MatchResultFact.class);
+        verify(factMapper).insert(factCaptor.capture());
+        assertThat(result.outcome()).isEqualTo(MatchResultFactWriter.WriteOutcome.APPENDED);
+        assertThat(factCaptor.getValue().getResultSource()).isEqualTo(MatchResultFactSourceEnum.MANUAL);
+        assertThat(factCaptor.getValue().getSourceNote()).isEqualTo("已核实现场记录");
+        assertThat(factCaptor.getValue().getEntryReason()).isEqualTo("开发样本补录");
+        assertThat(factCaptor.getValue().getEnteredBy()).isEqualTo("admin-1");
+        verify(auditLogService).append(eq("admin-1"), eq(AuditTargetTypeEnum.MATCH_RESULT_FACT), eq("501"),
+                eq(AuditActionTypeEnum.MANUAL_ENTRY), eq("matchResultFact"), isNull(), contains("resultSource=MANUAL"));
+    }
+
+    @Test
+    void rejectsManualReplacementWhenCurrentFactIsOfficial() {
+        MatchResultFact current = currentFact(1, MatchResultFactStatusEnum.FINAL, MatchStatusEnum.FINISHED, 2, 1,
+                "2026-07-22T23:30:00Z");
+        current.setResultSource(MatchResultFactSourceEnum.OFFICIAL);
+        when(factMapper.selectCurrentByMatchId(41L)).thenReturn(current);
+
+        assertThatIllegalArgumentException().isThrownBy(() -> writer.writeManual(manual(MatchResultFactStatusEnum.FINAL,
+                MatchStatusEnum.FINISHED, 1, 1, "人工说明", "尝试覆盖", "admin-1"), RAW_PAYLOAD_ID))
+                .withMessageContaining("cannot replace");
+    }
+
+    @Test
+    void officialFactSupersedesCurrentManualFactWithoutProviderTimestampOrdering() {
+        MatchResultFact current = currentFact(1, MatchResultFactStatusEnum.FINAL, MatchStatusEnum.FINISHED, 2, 1,
+                "2026-07-23T23:30:00Z");
+        current.setResultSource(MatchResultFactSourceEnum.MANUAL);
+        current.setSourceNote("人工说明");
+        current.setEntryReason("开发补录");
+        current.setEnteredBy("admin-1");
+        when(factMapper.selectCurrentByMatchId(41L)).thenReturn(current);
+        when(factMapper.markNotCurrent(77L)).thenReturn(1);
+
+        MatchResultFactWriter.WriteResult result = writer.write(
+                result(MatchStatusEnum.FINISHED, 1, 1, false, false, "2026-07-22T23:30:00+08:00"), RAW_PAYLOAD_ID);
+
+        assertThat(result.outcome()).isEqualTo(MatchResultFactWriter.WriteOutcome.SUPERSEDED);
+        assertThat(result.officialReplacedManual()).isTrue();
+        assertThat(result.matchId()).isEqualTo(41L);
+    }
+
+    @Test
     void rejectsChangedPendingFactWithoutLaterProviderTimestamp() {
         MatchResultFact current = currentFact(1, MatchResultFactStatusEnum.PENDING, MatchStatusEnum.POSTPONED, null, null,
                 "2026-07-22T20:00:00Z");
@@ -269,5 +319,18 @@ class MatchResultFactWriterTest {
                 officialVoid,
                 OffsetDateTime.parse(providerUpdatedAt)
         );
+    }
+
+    private static ManualMatchResultFactDto manual(
+            MatchResultFactStatusEnum factStatus,
+            MatchStatusEnum matchStatus,
+            Integer homeScore,
+            Integer awayScore,
+            String sourceNote,
+            String reason,
+            String operator
+    ) {
+        return new ManualMatchResultFactDto(41L, factStatus, matchStatus, homeScore, awayScore,
+                sourceNote, reason, operator, Instant.parse("2026-07-23T10:00:00Z"));
     }
 }

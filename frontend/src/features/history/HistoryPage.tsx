@@ -14,6 +14,7 @@ import {
 import {
   currentFact,
   factScore,
+  factSourceLabel,
   factStatusLabel,
   settlementMarketLabel,
   settlementStatusLabel,
@@ -180,7 +181,7 @@ export default function HistoryPage() {
                         <div><dt>锁定时间</dt><dd>{formatTimestamp(record.lockTime)}</dd></div>
                         <div><dt>主胜 / 平局 / 客胜</dt><dd>{formatProbability(record.homeWinProb)} / {formatProbability(record.drawProb)} / {formatProbability(record.awayWinProb)}</dd></div>
                         <div><dt>让球倾向</dt><dd>{handicapPickLabel(record.handicapPick)}</dd></div>
-                        <div><dt>当前赛果</dt><dd>{factScore(fact)}{fact ? ` · ${factStatusLabel(fact.factStatus)}` : ''}</dd></div>
+                        <div><dt>当前赛果</dt><dd>{factScore(fact)}{fact ? ` · ${factStatusLabel(fact.factStatus)} · ${factSourceLabel(fact.resultSource)}` : ''}</dd></div>
                         <div><dt>比赛状态</dt><dd>{fact ? statusLabels[fact.matchStatus] : '待赛果'}</dd></div>
                       </dl>
                       <div className="settlement-summary" aria-label="当前结算状态">
@@ -195,9 +196,9 @@ export default function HistoryPage() {
                         <div className="version-columns">
                           <section>
                             <h3>赛果事实</h3>
-                            {record.resultFacts.length === 0 ? <p>尚无官方赛果事实。</p> : (
+                            {record.resultFacts.length === 0 ? <p>尚无赛果事实。</p> : (
                               <ul>
-                                {record.resultFacts.map((item) => <li key={item.factId}>第 {item.factVersion} 版 · {factScore(item)} · {factStatusLabel(item.factStatus)}{item.current ? ' · 当前' : ''}</li>)}
+                                {record.resultFacts.map((item) => <li key={item.factId}>第 {item.factVersion} 版 · {factScore(item)} · {factStatusLabel(item.factStatus)}{item.current ? ' · 当前' : ''} · {factSourceLabel(item.resultSource)}</li>)}
                               </ul>
                             )}
                           </section>

@@ -55,6 +55,34 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
             """)
     List<Long> selectPendingLockedPredictionIds(@Param("batchSize") int batchSize);
 
+    /** 查询指定比赛已锁定、拥有当前确认事实且至少一个市场未结算的预测 ID。 */
+    @Select("""
+            SELECT prediction.id
+            FROM predictions prediction
+            INNER JOIN match_result_facts fact
+                ON fact.match_id = prediction.match_id
+               AND fact.is_current = TRUE
+            WHERE prediction.match_id = #{matchId}
+              AND prediction.prediction_status = 'LOCKED'
+              AND fact.fact_status IN ('FINAL', 'VOID')
+              AND (
+                    NOT EXISTS (
+                        SELECT 1 FROM settlements settlement
+                        WHERE settlement.prediction_id = prediction.id
+                          AND settlement.market_type = 'HAD'
+                          AND settlement.is_current = TRUE
+                    )
+                    OR NOT EXISTS (
+                        SELECT 1 FROM settlements settlement
+                        WHERE settlement.prediction_id = prediction.id
+                          AND settlement.market_type = 'HHAD'
+                          AND settlement.is_current = TRUE
+                    )
+              )
+            ORDER BY prediction.id
+            """)
+    List<Long> selectPendingLockedPredictionIdsByMatchId(@Param("matchId") Long matchId);
+
     /** 查询已锁定、当前结算仍引用被替代官方事实的预测 ID。 */
     @Select("""
             SELECT DISTINCT prediction.id
@@ -72,6 +100,24 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
             LIMIT #{batchSize}
             """)
     List<Long> selectOutdatedLockedPredictionIds(@Param("batchSize") int batchSize);
+
+    /** 查询指定比赛当前结算仍引用已替代赛果事实的锁定预测 ID。 */
+    @Select("""
+            SELECT DISTINCT prediction.id
+            FROM predictions prediction
+            INNER JOIN match_result_facts fact
+                ON fact.match_id = prediction.match_id
+               AND fact.is_current = TRUE
+            INNER JOIN settlements settlement
+                ON settlement.prediction_id = prediction.id
+               AND settlement.is_current = TRUE
+               AND settlement.match_fact_id <> fact.id
+            WHERE prediction.match_id = #{matchId}
+              AND prediction.prediction_status = 'LOCKED'
+              AND fact.fact_status IN ('FINAL', 'VOID')
+            ORDER BY prediction.id
+            """)
+    List<Long> selectOutdatedLockedPredictionIdsByMatchId(@Param("matchId") Long matchId);
 
     /** 统计确认赛果已超过宽限期、但仍缺失或引用旧事实的去重锁定预测。 */
     @Select("""

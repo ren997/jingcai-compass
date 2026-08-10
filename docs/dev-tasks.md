@@ -5,8 +5,8 @@
 - 文档版本：v0.5
 - 最后更新：2026-07-30
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T209 V17 真实库引用图审计与受控清理验证`
-- 下一任务：`完成 T209 验收后恢复 T106 公开赛果契约无会话验证`
+- 当前活动任务：`无（T209 V20 清理修复暂缓，等待后续恢复）`
+- 下一任务：`恢复 T209 的 PostgreSQL 集成修复，或按项目负责人安排继续 T106 公开赛果契约无会话验证`
 - 最近完成增量：`T209 外部待复核身份与赛事组合复核（本地普通测试）`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
@@ -1095,7 +1095,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T209 外部待复核身份与赛事组合复核
 
-- 状态：`IN_PROGRESS`
+- 状态：`PARTIAL`
 - 优先级：P0
 - 依赖：T208
 - 交付物：
@@ -1136,12 +1136,14 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-08-10：恢复执行；范围为只读审计 local PostgreSQL 中 `THE_ODDS_API` 的历史待复核映射及其 `leagues`/`teams` 引用图，随后在独立 PostgreSQL 集成环境复核 V17 迁移、受控清理和条件更新证据。预计执行 `npm run backend:test`、`mvn -B -ntp -f backend/pom.xml -Pintegration verify`、`cd frontend && npm run test && npm run build` 与 `git diff --check`。
   - 2026-08-10：只读审计确认 PostgreSQL 16.3 已应用 V17，`PENDING` 空内部关联与已确认非空约束均有效；24 条旧 `NAME:` 身份可由 24 个无引用孤立球队唯一复算，另有 2 条带展示名的旧身份与 2 个孤立球队精确匹配。V17 的同语句 CTE 清理受 PostgreSQL 可见性影响，解除映射后删除阶段仍看到旧映射引用，留下 26 个孤立临时球队；新增 V20 Java Flyway migration 以确定性哈希匹配和删除时二次引用检查修复，并新增 PostgreSQL 16 集成覆盖。
   - 2026-08-10：local 库历史为 V1～V19，其中 V18 `add manual match result facts`、V19 `repair legacy pending identity cleanup` 不在当前仓库。正常 local 启动在 Flyway 校验阶段拒绝未解析的 V18/V19，V20 未执行且未修改该库；不运行 `repair` 或手工删库，等待迁移来源确认。独立容器由分支 CI 验证 V1～V17→V20。
+  - 2026-08-10：V20 代码与集成测试已提交至 `codex/t209-legacy-identity-cleanup`（`4fb49a5`）并创建 Draft PR #24；CI 已证明空库可迁移至 V20，但新增集成测试在测试数据插入阶段以 `Instant` 直接调用 JDBC `setObject`，PostgreSQL 无法推断参数类型而失败。项目负责人决定暂缓，不修改现有测试；恢复时先将该参数显式绑定为 `Timestamp`，再重跑 CI。
 - 验证记录：
   - 2026-07-30：`mvn -f backend/pom.xml clean test` 通过，437 项普通测试；`cd frontend && npm run test` 通过，64 项 Vitest；`cd frontend && npm run build` 通过；`git diff --check` 通过。未运行 `mvn -Pintegration verify`、未触发 CI、未推送，也未启动 local 应用或对开发库执行 V17。
   - 2026-07-30：经项目负责人确认测试数据范围后，`mvn -f backend/pom.xml spring-boot:run` 的 `local` profile 启动成功；Flyway V17 成功，`http://127.0.0.1:8081/actuator/health` 返回 `UP`。浏览器登录并访问首页、`/admin/mappings`、`/admin/normalizations/leagues`、`/admin/normalizations/teams` 及球队详情成功，控制台无 error/warn。
   - 2026-07-30：保持 `PARTIAL`。待在独立 PostgreSQL 环境中审计历史 `NAME_CANDIDATE` 引用图、执行 V17 并验证受控清理与并发条件更新；完成前 T106/T107 不启动连续观测。
   - 2026-07-31：`mvn -B -ntp -f backend/pom.xml test` 通过（438 项）；`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（42 项，PostgreSQL 16/Testcontainers，V1～V17）；`git diff --check` 通过。T209 仍保持 `PARTIAL`，待真实库引用图审计与受控清理证据补齐。
   - 2026-08-10：`mvn -B -ntp -f backend/pom.xml test` 通过（439 项）；前端 Vitest 13 个文件、64 项通过，生产构建通过；本机没有 Docker，未运行 `-Pintegration verify`。local 启动按预期被未入库 V18/V19 漂移阻止，未触及数据库；V20 集成场景（唯一名称键清理、比赛/别名/其它映射保护、歧义保留、作用域键和 V17 条件约束）待 Draft PR 的 PostgreSQL 16 CI。
+  - 2026-08-10：[GitHub Actions #31392874955](https://github.com/ren997/jingcai-compass/actions/runs/31392874955) 使用 Java 21.0.11、Maven 3.9.16 和 `postgres:16-alpine`（PostgreSQL 16.14）运行失败；普通测试和空库 V1～V20 迁移完成，43 个 PostgreSQL 集成测试中 1 个新增 T209 测试在 JDBC `Instant` 参数绑定前失败。任务保持 `PARTIAL`，不以失败 CI 标记 `DONE`。
 
 ## 8. M3 预测发布、锁定和快照
 

@@ -89,6 +89,8 @@ import com.jingcaicompass.odds.service.AsianOddsSyncService;
 import com.jingcaicompass.odds.service.AsianOddsSyncServiceImpl;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.job.PredictionLockJob;
+import com.jingcaicompass.prediction.service.BaselinePredictionGenerationService;
+import com.jingcaicompass.prediction.service.BaselinePredictionGenerationServiceImpl;
 import com.jingcaicompass.prediction.service.PredictionContentHasher;
 import com.jingcaicompass.prediction.service.PredictionImportFileParser;
 import com.jingcaicompass.prediction.service.PredictionImportFileParserImpl;
@@ -385,6 +387,30 @@ public class PersistenceServicesAutoConfiguration {
                 predictionMapper,
                 predictionImportWriter,
                 predictionImportClock
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(BaselinePredictionGenerationService.class)
+    BaselinePredictionGenerationService baselinePredictionGenerationService(
+            MatchMapper matchMapper,
+            SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
+            AsianOddsSnapshotMapper asianOddsSnapshotMapper,
+            PredictionMapper predictionMapper,
+            PredictionImportService predictionImportService,
+            ObjectMapper objectMapper,
+            Clock predictionImportClock,
+            MeterRegistry meterRegistry
+    ) {
+        return new BaselinePredictionGenerationServiceImpl(
+                matchMapper,
+                sportteryPoolSnapshotMapper,
+                asianOddsSnapshotMapper,
+                predictionMapper,
+                predictionImportService,
+                objectMapper,
+                predictionImportClock,
+                meterRegistry
         );
     }
 

@@ -15,6 +15,15 @@ import org.apache.ibatis.annotations.Update;
 @Mapper
 public interface PredictionMapper extends BaseMapper<Prediction> {
 
+    /** 在当前事务内按生成批次持有 PostgreSQL advisory lock，串行化同批次导入。 */
+    @Select("""
+            SELECT 1
+            FROM (
+                SELECT pg_advisory_xact_lock(hashtextextended(#{generationBatchId}, 0))
+            ) AS generation_batch_lock
+            """)
+    int lockGenerationBatch(@Param("generationBatchId") String generationBatchId);
+
     /** 在发布事务中锁定单条预测。 */
     @Select("SELECT * FROM predictions WHERE id = #{id} FOR UPDATE")
     Prediction selectByIdForUpdate(@Param("id") Long id);

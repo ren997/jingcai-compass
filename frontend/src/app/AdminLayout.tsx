@@ -49,6 +49,9 @@ export default function AdminLayout() {
           <NavLink to="/admin/settlements">
             结算状态
           </NavLink>
+          <NavLink to="/admin/manual-results">
+            人工赛果补录
+          </NavLink>
         </nav>
       </aside>
       <div className="admin-content">

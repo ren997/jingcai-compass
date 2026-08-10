@@ -22,6 +22,7 @@ public enum AuditActionTypeEnum {
     PUBLISH("PUBLISH", "发布"),
     LOCK("LOCK", "锁定"),
     SYNC("SYNC", "同步"),
+    MANUAL_ENTRY("MANUAL_ENTRY", "人工补录"),
     SETTLE("SETTLE", "结算"),
     SUPERSEDE("SUPERSEDE", "替代");
 
@@ -29,7 +30,7 @@ public enum AuditActionTypeEnum {
             "审计操作: CONFIRM-确认, REJECT-拒绝, REOPEN-重新打开, "
                     + "ADMIN_BOOTSTRAP-创建首位管理员, LOGIN_SUCCESS-登录成功, "
                     + "LOGIN_FAILED-登录失败, LOGOUT-退出登录, ACCESS_DENIED-访问拒绝, "
-                    + "PUBLISH-发布, LOCK-锁定, SYNC-同步, SETTLE-结算, SUPERSEDE-替代";
+                    + "PUBLISH-发布, LOCK-锁定, SYNC-同步, MANUAL_ENTRY-人工补录, SETTLE-结算, SUPERSEDE-替代";
 
     private static final Map<String, AuditActionTypeEnum> CODE_MAP = Stream.of(values())
             .collect(Collectors.toMap(AuditActionTypeEnum::getCode, Function.identity()));

@@ -41,6 +41,18 @@ public class SettlementRecalculationServiceImpl implements SettlementRecalculati
 
         // 1) 只扫描当前结算引用已被替代 FINAL/VOID 事实的锁定预测。
         List<Long> candidateIds = settlementMapper.selectOutdatedLockedPredictionIds(batchSize);
+        return recalculateCandidates(candidateIds);
+    }
+
+    @Override
+    public SettlementRecalculationBatchResultDto recalculateOutdatedSettlementsForMatch(Long matchId) {
+        if (matchId == null) {
+            throw new IllegalArgumentException("matchId must not be null");
+        }
+        return recalculateCandidates(settlementMapper.selectOutdatedLockedPredictionIdsByMatchId(matchId));
+    }
+
+    private SettlementRecalculationBatchResultDto recalculateCandidates(List<Long> candidateIds) {
         BatchCounters counters = new BatchCounters(candidateIds.size());
 
         // 2) 每条预测使用独立事务，单条人工处理或回滚不阻塞本批其他预测。

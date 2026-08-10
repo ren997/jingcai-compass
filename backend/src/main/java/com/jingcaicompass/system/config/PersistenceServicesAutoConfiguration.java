@@ -15,6 +15,8 @@ import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
 import com.jingcaicompass.admin.service.AdminSyncRunQueryServiceImpl;
 import com.jingcaicompass.admin.service.AdminSportteryResultSyncService;
 import com.jingcaicompass.admin.service.AdminSportteryResultSyncServiceImpl;
+import com.jingcaicompass.admin.service.AdminManualMatchResultService;
+import com.jingcaicompass.admin.service.AdminManualMatchResultServiceImpl;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
 import com.jingcaicompass.admin.mapper.AdminPredictionStatusMapper;
 import com.jingcaicompass.audit.service.AuditLogService;
@@ -626,14 +628,18 @@ public class PersistenceServicesAutoConfiguration {
             ProviderSyncTemplate providerSyncTemplate,
             MatchResultFactWriter matchResultFactWriter,
             ObjectMapper objectMapper,
-            MatchResultSyncCoordinator matchResultSyncCoordinator
+            MatchResultSyncCoordinator matchResultSyncCoordinator,
+            SettlementRecalculationService settlementRecalculationService,
+            SettlementService settlementService
     ) {
         return new MatchResultSyncServiceImpl(
                 sportteryProvider,
                 providerSyncTemplate,
                 matchResultFactWriter,
                 objectMapper,
-                matchResultSyncCoordinator
+                matchResultSyncCoordinator,
+                settlementRecalculationService,
+                settlementService
         );
     }
 
@@ -710,6 +716,30 @@ public class PersistenceServicesAutoConfiguration {
                 settlementMapper,
                 settlementRecalculationWriter,
                 predictionLifecycleMetrics
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(AdminManualMatchResultService.class)
+    AdminManualMatchResultService adminManualMatchResultService(
+            MatchMapper matchMapper,
+            MatchResultFactMapper matchResultFactMapper,
+            RawDataPayloadService rawDataPayloadService,
+            MatchResultFactWriter matchResultFactWriter,
+            SettlementRecalculationService settlementRecalculationService,
+            SettlementService settlementService,
+            ObjectMapper objectMapper,
+            Clock predictionImportClock
+    ) {
+        return new AdminManualMatchResultServiceImpl(
+                matchMapper,
+                matchResultFactMapper,
+                rawDataPayloadService,
+                matchResultFactWriter,
+                settlementRecalculationService,
+                settlementService,
+                objectMapper,
+                predictionImportClock
         );
     }
 

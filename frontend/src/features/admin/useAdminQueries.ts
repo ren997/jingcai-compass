@@ -20,6 +20,7 @@ import {
   fetchProviderNormalizationCandidates,
   fetchProviderNormalizationDetail,
   fetchProviderNormalizations,
+  recordAdminManualMatchResult,
   rejectProviderNormalization,
   reopenProviderNormalization,
   type AdminSyncRunListQuery,
@@ -28,6 +29,7 @@ import {
   type MappingReviewListQuery,
   type NormalizationEntityType,
   type ProviderNormalizationListQuery,
+  type AdminManualMatchResultRequest,
 } from '../../services/admin';
 
 export function adminSyncRunsQueryKey(query: AdminSyncRunListQuery) {
@@ -131,6 +133,20 @@ export function useAdminSportteryResultSyncAction() {
     mutationFn: (request: { startDate?: string; endDate?: string }) => syncAdminSportteryResults(request),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ['admin', 'sync-runs'] });
+    },
+  });
+}
+
+/** 人工赛果事实写入后刷新后台结算状态与对应可追溯视图。 */
+export function useAdminManualMatchResultAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: AdminManualMatchResultRequest) => recordAdminManualMatchResult(request),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'prediction-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['history'] }),
+      ]);
     },
   });
 }

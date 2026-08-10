@@ -5,7 +5,7 @@ export const lockLabels: Record<string, string> = {
 };
 
 export const settlementLabels: Record<string, string> = {
-  AWAITING_RESULT: '等待官方赛果',
+  AWAITING_RESULT: '等待确认赛果',
   SETTLEMENT_MISSING_HAD: 'HAD 待结算',
   SETTLEMENT_MISSING_HHAD: 'HHAD 待结算',
   SETTLEMENT_STALE_HAD: 'HAD 需重算',
@@ -17,10 +17,11 @@ export function diagnosticsText(diagnostics: AdminStatusDiagnostic[], labels: Re
 }
 
 export function factText(fact: AdminResultFact | null) {
-  if (!fact) return '暂无官方赛果';
-  if (fact.factStatus === 'PENDING') return '官方赛果待确认';
-  if (fact.factStatus === 'VOID') return '官方赛果作废';
-  return `${fact.homeScore} : ${fact.awayScore}（FINAL）`;
+  const source = fact?.resultSource === 'MANUAL' ? '人工补录，非官方源' : '官方赛果';
+  if (!fact) return '暂无赛果';
+  if (fact.factStatus === 'PENDING') return `${source}待确认`;
+  if (fact.factStatus === 'VOID') return `${source}作废`;
+  return `${fact.homeScore} : ${fact.awayScore}（FINAL · ${source}）`;
 }
 
 export function marketText(market: AdminSettlementMarket) {

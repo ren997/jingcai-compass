@@ -230,7 +230,8 @@ public class AdminPredictionStatusQueryServiceImpl implements AdminPredictionSta
     private AdminResultFactVo toFact(MatchResultFactHistoryVo fact) {
         return new AdminResultFactVo(
                 fact.factId(), fact.factVersion(), fact.supersedesFactVersion(), fact.factStatus(), fact.matchStatus(),
-                fact.homeScore(), fact.awayScore(), fact.providerUpdatedAt(), fact.current(), fact.createdAt()
+                fact.homeScore(), fact.awayScore(), fact.providerUpdatedAt(), fact.resultSource(),
+                fact.sourceNote(), fact.entryReason(), fact.enteredBy(), fact.current(), fact.createdAt()
         );
     }
 

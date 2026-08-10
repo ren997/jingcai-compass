@@ -203,7 +203,7 @@ public class AdminSyncRunQueryServiceImpl implements AdminSyncRunQueryService {
         int value = switch (dataType) {
             case SPORTTERY_POOL, SPORTTERY_RESULT -> sportteryProperties.quotaWarningThreshold();
             case ASIAN_ODDS -> asianOddsProperties.quotaWarningThreshold();
-            case OTHER -> 0;
+            case MANUAL_RESULT, OTHER -> 0;
         };
         return value > 0 ? value : null;
     }

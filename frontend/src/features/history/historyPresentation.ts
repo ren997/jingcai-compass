@@ -2,6 +2,7 @@ import type {
   HistoryListItemVo,
   MarketHitRateVo,
   MatchResultFactHistoryVo,
+  MatchResultFactSource,
   MatchResultFactStatus,
   ProbabilityMetricUnavailableReason,
   RoiUnavailableReason,
@@ -25,7 +26,12 @@ export const settlementStatusLabels: Record<SettlementStatus, string> = {
 const factStatusLabels: Record<MatchResultFactStatus, string> = {
   PENDING: '待确认',
   FINAL: '最终赛果',
-  VOID: '官方作废',
+  VOID: '赛果作废',
+};
+
+const factSourceLabels: Record<MatchResultFactSource, string> = {
+  OFFICIAL: '官方赛果',
+  MANUAL: '人工补录，非官方源',
 };
 
 const probabilityReasonLabels: Record<ProbabilityMetricUnavailableReason, string> = {
@@ -48,6 +54,10 @@ export function settlementMarketLabel(market: SettlementMarket) {
 
 export function factStatusLabel(status: MatchResultFactStatus) {
   return factStatusLabels[status];
+}
+
+export function factSourceLabel(source: MatchResultFactSource | undefined) {
+  return factSourceLabels[source ?? 'OFFICIAL'];
 }
 
 export function probabilityUnavailableReasonLabel(reason: ProbabilityMetricUnavailableReason) {

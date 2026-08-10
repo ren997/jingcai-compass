@@ -23,6 +23,8 @@ import com.jingcaicompass.match.dto.MatchResultSyncResultDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultPayloadDto;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
+import com.jingcaicompass.settlement.service.SettlementRecalculationService;
+import com.jingcaicompass.settlement.service.SettlementService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -50,6 +52,12 @@ class MatchResultSyncServiceTest {
     @Mock
     private MatchResultFactWriter factWriter;
 
+    @Mock
+    private SettlementRecalculationService recalculationService;
+
+    @Mock
+    private SettlementService settlementService;
+
     private ObjectMapper objectMapper;
     private MatchResultSyncServiceImpl service;
 
@@ -61,7 +69,9 @@ class MatchResultSyncServiceTest {
                 providerSyncTemplate,
                 factWriter,
                 objectMapper,
-                new MatchResultSyncCoordinator()
+                new MatchResultSyncCoordinator(),
+                recalculationService,
+                settlementService
         );
     }
 
@@ -157,6 +167,29 @@ class MatchResultSyncServiceTest {
         assertThatIllegalArgumentException().isThrownBy(() -> service.sync(
                 new MatchResultSyncRequestDto(LOTTERY_DATE, LOTTERY_DATE.minusDays(1))
         )).withMessageContaining("endDate");
+    }
+
+    @Test
+    void officialReplacementOfManualFactRecalculatesOnlyThatMatch() throws Exception {
+        ProviderFetchResult fetchResult = new ProviderFetchResult(
+                "request",
+                payloadJson(List.of(result("周三001", MatchStatusEnum.FINISHED, 1, 0, true, false,
+                        "2026-07-23T10:00:00+08:00"))),
+                200, Instant.now(), 0, 0
+        );
+        when(sportteryProvider.providerCode()).thenReturn("STUB");
+        when(sportteryProvider.fetchMatchResultsRaw(LOTTERY_DATE, LOTTERY_DATE)).thenReturn(fetchResult);
+        when(sportteryProvider.parseMatchResults(any(), eq(LOTTERY_DATE), eq(LOTTERY_DATE))).thenReturn(List.of(
+                result("周三001", MatchStatusEnum.FINISHED, 1, 0, true, false, "2026-07-23T10:00:00+08:00")
+        ));
+        when(factWriter.write(any(), eq(71L))).thenReturn(new MatchResultFactWriter.WriteResult(
+                MatchResultFactWriter.WriteOutcome.SUPERSEDED, 501L, 41L, true));
+        configureTemplateToUseRawPayload(fetchResult);
+
+        service.sync(new MatchResultSyncRequestDto(LOTTERY_DATE, LOTTERY_DATE));
+
+        verify(recalculationService).recalculateOutdatedSettlementsForMatch(41L);
+        verify(settlementService).settlePendingPredictionsForMatch(41L);
     }
 
     private ProviderSyncOutcome configureTemplateToUseRawPayload(ProviderFetchResult fetchResult) throws Exception {

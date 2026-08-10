@@ -86,7 +86,7 @@ describe('admin prediction status pages', () => {
     expect(screen.getByRole('link', { name: /主队 vs 客队/ })).toHaveAttribute('href', '/admin/settlements/7');
 
     renderRoute('/admin/settlements/7?diagnostics=SETTLEMENT_MISSING_HHAD');
-    expect(await screen.findByText('官方赛果版本链')).toBeInTheDocument();
+    expect(await screen.findByText('赛果版本链')).toBeInTheDocument();
     expect(screen.getByText(/当前权威事实/)).toBeInTheDocument();
     expect(screen.getByText('市场结算版本链')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '返回结算状态' })).toHaveAttribute('href', '/admin/settlements?diagnostics=SETTLEMENT_MISSING_HHAD');

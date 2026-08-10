@@ -12,4 +12,12 @@ public interface SettlementService {
      * @return 批次成功、失败和人工处理摘要
      */
     SettlementBatchResultDto settlePendingPredictions(int batchSize);
+
+    /**
+     * 仅结算指定比赛的待结算锁定预测，不扫描其他比赛。
+     *
+     * @param matchId 比赛 ID
+     * @return 该比赛的处理摘要
+     */
+    SettlementBatchResultDto settlePendingPredictionsForMatch(Long matchId);
 }

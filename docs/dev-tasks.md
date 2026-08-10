@@ -5,8 +5,8 @@
 - 文档版本：v0.5
 - 最后更新：2026-07-30
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无（T106 公开赛果契约受 WAF 阻塞，等待可验证的无会话请求）`
-- 下一任务：`审计真实库后验证 T209 V17 迁移与受控清理（独立 PostgreSQL 集成验证）`
+- 当前活动任务：`T209 V17 真实库引用图审计与受控清理验证`
+- 下一任务：`完成 T209 验收后恢复 T106 公开赛果契约无会话验证`
 - 最近完成增量：`T209 外部待复核身份与赛事组合复核（本地普通测试）`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
@@ -216,7 +216,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 | --- | --- | --- |
 | M0 工程基线 | `DONE` | T000～T006 已完成；GitHub Actions 已通过 PostgreSQL 16 空库迁移和完整数据库上下文验证 |
 | M1 Provider 基础 | `PARTIAL` | T101～T105 已完成；T106/T107 连续观测和授权结论尚未完成 |
-| M2 标准化与映射 | `PARTIAL` | T208 时效修正与 T209 外部待复核身份/组合确认的本地实现已完成；V17 清理迁移、真实引用图与 PostgreSQL 条件更新证据待补，未确认时不得由单场比赛映射反推别名 |
+| M2 标准化与映射 | `PARTIAL` | T208 时效修正与 T209 外部待复核身份/组合确认的本地实现已完成；V17 清理遗留已由 V20 受控修复，等待独立 PostgreSQL CI 证据；local 库还存在未入库的 V18/V19 漂移，未确认前不得由单场比赛映射反推别名 |
 | M3 预测发布闭环 | `DONE` | T301～T305、T601 已完成；预测导入、发布、锁定和确定性公开快照闭环已通过验证 |
 | M4 赛果与结算 | `DONE` | T401～T405 已完成；公开修正标识由 T507/T504 基于结算版本链交付 |
 | M5 公共 API 与前端 | `DONE` | T501、T502、T503、T504、T505、T506、T507 已完成；公开比赛、预测、历史、统计与首页闭环均由持久化事实查询支撑 |
@@ -1095,7 +1095,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T209 外部待复核身份与赛事组合复核
 
-- 状态：`PARTIAL`
+- 状态：`IN_PROGRESS`
 - 优先级：P0
 - 依赖：T208
 - 交付物：
@@ -1110,6 +1110,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 保持全局 `team_aliases` 不增加联赛字段：The Odds 无球队 ID 时，以现有 `provider_code + sport_key + 外部队名规范化键` 的 Provider 作用域身份作为复用键；同名队伍跨 `sport_key` 必须独立确认。
   - [x] 不让单场赛事确认直接写入联赛/球队别名或 Provider 映射；赛事复核弹窗提供联赛、主队、客队三项显式复选，未勾选时只确认赛事；勾选项与赛事确认在同一事务内逐项审计。
   - [x] 当同一 Provider 事件的联赛、主队、客队均已有已确认映射，且作用域、主客方向、开赛时间阈值和事件唯一性全部满足时，自动确认赛事映射并允许同步亚盘；任一条件不满足时继续 `PENDING` 并保留可读原因。
+  - [x] 新增 V20 修复 V17 的 CTE 可见性遗留：仅当旧 `NAME:` / `SCOPED_NAME:` 来源键能与一个无引用内部实体唯一复算匹配时删除；模糊匹配及任何比赛、别名、其它映射引用一律保留。
   - [ ] 覆盖联赛/球队待复核不建内部实体、既有孤立临时实体安全清理、不可删除引用保护、跨 `sport_key` 同名隔离、三项确认后自动映射、主客反转/联赛冲突/时间超限不自动确认、单场确认不传播别名、JWT/traceId 与 PostgreSQL 约束。
 - 验证命令：
 
@@ -1132,11 +1133,15 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-30：项目负责人确认 local 库均为测试数据后，按正常 `local` 启动。Flyway 成功将 PostgreSQL 16.3 从 V16 迁移至 V17（0.461 秒）；健康检查为 `UP`。浏览器实际验证首页、管理员登录、后台导航、赛事映射及联赛/球队复核页；The Odds 待复核球队显示“暂无内部暂存实体”，无页面控制台错误。未执行整合测试或 CI。
   - 2026-07-31：开始处理本地 PostgreSQL 集成验证失败；范围为更新 V17 迁移数量基线、修复预测锁定遇到短暂 `SKIP LOCKED` 竞争时的有界重试，并运行定向与完整集成测试。
   - 2026-07-31：完成集成失败修复；V17 基线更新为 17 个迁移，预测锁定服务对短暂 `SKIP LOCKED` 空候选增加最多 5 次、每次 2ms 的有界重试，且不改变失败记录和审计语义。
+  - 2026-08-10：恢复执行；范围为只读审计 local PostgreSQL 中 `THE_ODDS_API` 的历史待复核映射及其 `leagues`/`teams` 引用图，随后在独立 PostgreSQL 集成环境复核 V17 迁移、受控清理和条件更新证据。预计执行 `npm run backend:test`、`mvn -B -ntp -f backend/pom.xml -Pintegration verify`、`cd frontend && npm run test && npm run build` 与 `git diff --check`。
+  - 2026-08-10：只读审计确认 PostgreSQL 16.3 已应用 V17，`PENDING` 空内部关联与已确认非空约束均有效；24 条旧 `NAME:` 身份可由 24 个无引用孤立球队唯一复算，另有 2 条带展示名的旧身份与 2 个孤立球队精确匹配。V17 的同语句 CTE 清理受 PostgreSQL 可见性影响，解除映射后删除阶段仍看到旧映射引用，留下 26 个孤立临时球队；新增 V20 Java Flyway migration 以确定性哈希匹配和删除时二次引用检查修复，并新增 PostgreSQL 16 集成覆盖。
+  - 2026-08-10：local 库历史为 V1～V19，其中 V18 `add manual match result facts`、V19 `repair legacy pending identity cleanup` 不在当前仓库。正常 local 启动在 Flyway 校验阶段拒绝未解析的 V18/V19，V20 未执行且未修改该库；不运行 `repair` 或手工删库，等待迁移来源确认。独立容器由分支 CI 验证 V1～V17→V20。
 - 验证记录：
   - 2026-07-30：`mvn -f backend/pom.xml clean test` 通过，437 项普通测试；`cd frontend && npm run test` 通过，64 项 Vitest；`cd frontend && npm run build` 通过；`git diff --check` 通过。未运行 `mvn -Pintegration verify`、未触发 CI、未推送，也未启动 local 应用或对开发库执行 V17。
   - 2026-07-30：经项目负责人确认测试数据范围后，`mvn -f backend/pom.xml spring-boot:run` 的 `local` profile 启动成功；Flyway V17 成功，`http://127.0.0.1:8081/actuator/health` 返回 `UP`。浏览器登录并访问首页、`/admin/mappings`、`/admin/normalizations/leagues`、`/admin/normalizations/teams` 及球队详情成功，控制台无 error/warn。
   - 2026-07-30：保持 `PARTIAL`。待在独立 PostgreSQL 环境中审计历史 `NAME_CANDIDATE` 引用图、执行 V17 并验证受控清理与并发条件更新；完成前 T106/T107 不启动连续观测。
   - 2026-07-31：`mvn -B -ntp -f backend/pom.xml test` 通过（438 项）；`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（42 项，PostgreSQL 16/Testcontainers，V1～V17）；`git diff --check` 通过。T209 仍保持 `PARTIAL`，待真实库引用图审计与受控清理证据补齐。
+  - 2026-08-10：`mvn -B -ntp -f backend/pom.xml test` 通过（439 项）；前端 Vitest 13 个文件、64 项通过，生产构建通过；本机没有 Docker，未运行 `-Pintegration verify`。local 启动按预期被未入库 V18/V19 漂移阻止，未触及数据库；V20 集成场景（唯一名称键清理、比赛/别名/其它映射保护、歧义保留、作用域键和 V17 条件约束）待 Draft PR 的 PostgreSQL 16 CI。
 
 ## 8. M3 预测发布、锁定和快照
 

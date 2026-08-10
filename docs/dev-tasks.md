@@ -5,9 +5,9 @@
 - 文档版本：v0.6
 - 最后更新：2026-08-10
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T406 受控人工赛果补录与既有自动结算联动`
-- 下一任务：`T406 完成后回到 T209 真实引用图审计与 V17 清理证据`
-- 最近完成增量：`T306 可解释预测基线模型`
+- 当前活动任务：`无（等待启动 T209 真实引用图审计与 V17 清理证据）`
+- 下一任务：`T209 真实引用图审计与 V17 清理证据`
+- 最近完成增量：`T406 受控人工赛果补录与既有自动结算联动`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -221,7 +221,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 | M1 Provider 基础 | `PARTIAL` | T101～T105 已完成；T106/T107 连续观测和授权结论尚未完成 |
 | M2 标准化与映射 | `PARTIAL` | T208 时效修正与 T209 外部待复核身份/组合确认的本地实现已完成；V17 清理迁移、真实引用图与 PostgreSQL 条件更新证据待补，未确认时不得由单场比赛映射反推别名 |
 | M3 预测生成、发布与快照 | `DONE` | T301～T306、T601 已完成预测承载、可解释离线生成、发布、锁定和确定性公开快照；T306 已由 GitHub Actions PostgreSQL 16 回归验证 |
-| M4 赛果与结算 | `PARTIAL` | T401～T405 已完成不可变赛果、自动结算与修正重算；T406 将增加受控人工赛果补录以支持开发验证和模型评估样本积累 |
+| M4 赛果与结算 | `DONE` | T401～T406 已完成不可变赛果、自动结算/修正重算及受控人工赛果补录；人工事实仅用于开发验证和模型评估，不替代官方数据源 |
 | M5 公共 API 与前端 | `DONE` | T501、T502、T503、T504、T505、T506、T507 已完成；公开比赛、预测、历史、统计与首页闭环均由持久化事实查询支撑 |
 | M6 后台、稳定性与上线 | `PARTIAL` | T601 管理员鉴权、T602 后台同步/映射复核、T603 基础可观测性与 T606 预测/结算运营状态已完成；业务指标、部署及真实数据源上线条件尚未完成 |
 
@@ -1525,7 +1525,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T406 受控人工赛果补录与自动结算联动
 
-- 状态：`IN_PROGRESS`
+- 状态：`DONE`
 - 优先级：P0
 - 依赖：T401、T404、T405、T601
 - 交付物：
@@ -1558,7 +1558,8 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 - 执行记录：
   - 2026-08-10：开始执行。范围固定为开赛后 `FINAL`/`VOID` 的受控人工事实、独立人工原始载荷、按比赛定向结算/重算和来源提示；人工输入绝不覆盖官方事实，后续官方事实自动优先。计划在隔离 PostgreSQL 16、前端与 GitHub Actions 中验证，不连接共享或云端数据库。
   - 2026-08-10：本地实现完成，新增 V18 的 `MANUAL_RESULT` 原始载荷与 `MANUAL/OFFICIAL` 事实来源约束；管理员 JWT 补录接口只接受已开赛的 `FINAL`/`VOID`，并以 JWT 用户名审计。补录追加不可变事实及专用原始证据，精确按 `matchId` 触发既有结算/重算；官方同步可优先替代人工事实。后台录入、确认弹窗、版本链来源和公共非官方警示均已接入，未增加任何人工结算接口。
-  - 2026-08-10：本机验证通过：`mvn -B -ntp -f backend/pom.xml -Dtest=*Manual*Result*Test,*Settlement*Test test`（55 项）、`mvn -B -ntp -f backend/pom.xml test`（457 项）、`mvn -B -ntp -f backend/pom.xml -Pintegration verify`（457 项普通测试、48 项 PostgreSQL 16 Testcontainers IT）、`frontend/npm run test`（65 项）及 `frontend/npm run build`。已验证人工载荷来源约束、追加不可变性、相同输入幂等、修正、并发、人工不能覆盖官方、官方替代人工后的双市场定向重算和无关比赛隔离；待 Draft PR 的 GitHub Actions 复验后再标记 `DONE`。
+  - 2026-08-10：本机验证通过：`mvn -B -ntp -f backend/pom.xml -Dtest=*Manual*Result*Test,*Settlement*Test test`（55 项）、`mvn -B -ntp -f backend/pom.xml test`（457 项）、`mvn -B -ntp -f backend/pom.xml -Pintegration verify`（457 项普通测试、48 项 PostgreSQL 16 Testcontainers IT）、`frontend/npm run test`（65 项）及 `frontend/npm run build`。已验证人工载荷来源约束、追加不可变性、相同输入幂等、修正、并发、人工不能覆盖官方、官方替代人工后的双市场定向重算和无关比赛隔离。
+  - 2026-08-10：完成。实现提交 `ce48e84616954aeffea08d2d56c2c05b62e207ee` 已通过 Draft [PR #22](https://github.com/ren997/jingcai-compass/pull/22) 的 [GitHub Actions #31364984624](https://github.com/ren997/jingcai-compass/actions/runs/31364984624)。Ubuntu Runner 使用 Eclipse Temurin Java 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers `postgres:16-alpine`（PostgreSQL 16.14），空库 Flyway V1～V18 成功；457 项普通测试和 48 项 PostgreSQL IT 全部通过，其中新增 `ManualMatchResultApplicationIT` 为 4 项。实际复验人工载荷来源、事实/结算追加保护、输入幂等、人工修正与并发、官方优先替代、两市场定向结算/重算和无关比赛隔离；未连接共享或云端开发数据库。最终任务看板提交后将再次等待同一 PR 的 CI 再标记正式并合并。
 
 ## 10. M5 公共 API 与前端
 
@@ -2144,9 +2145,9 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ## 14. 推荐的下一步
 
-T306 已完成：已基于已拉取比赛及已确认映射的盘口交付可解释离线预测基线，且不等待体彩真实赛果接口。缺少赔率、未确认映射或已开赛比赛不会作为可预测输入；输出仍经过既有导入、发布、锁定和快照闭环。
+T406 已完成：受控人工补录已核实赛果事实并联动既有自动结算/重算。人工记录保留来源、原因与操作审计，只用于开发验证和评估样本积累；它不替代官方数据源，也不允许直接编辑结算。
 
-下一个 P0 是 T406：受控人工补录已核实赛果事实并联动既有自动结算/重算。人工补录用于开发验证和评估样本积累，保留来源、原因与操作审计；它不替代官方数据源，也不允许直接编辑结算。
+下一个 P0 是 T209：补齐真实 `NAME_CANDIDATE` 引用图审计、V17 受控清理和 PostgreSQL 条件更新证据。
 
 T209 的真实 `NAME_CANDIDATE` 引用图审计与 V17 受控清理保持为 M2 的独立收口项，不阻塞 T306/T406；T106/T107 的连续观测仍须遵循原有映射和节点前置。T106 的真实赛果契约受 WAF 阻断，T108 因此继续为 `BLOCKED`，T604 生产部署仍不可开始。
 
@@ -2154,8 +2155,8 @@ T209 的真实 `NAME_CANDIDATE` 引用图审计与 V17 受控清理保持为 M2 
 
 ```text
 已完成：T207 + T302 -> T306 首版可解释离线预测
-下一步：T401 + T404 + T405 + T601 -> T406 受控人工赛果补录
-并行收口：T209 真实库引用图审计与 V17 清理证据
+已完成：T401 + T404 + T405 + T601 -> T406 受控人工赛果补录
+下一步：T209 真实库引用图审计与 V17 清理证据
 连续证据：T106/T107 -> T108 数据源 Go / No-Go
 生产前置：T108 + T306 + T406 + T604 -> T605 MVP 验收与连续运行
 ```
@@ -2164,6 +2165,7 @@ T209 的真实 `NAME_CANDIDATE` 引用图审计与 V17 受控清理保持为 M2 
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-08-10 | T406 / `ce48e84` | `IN_PROGRESS -> DONE` | [PR #22](https://github.com/ren997/jingcai-compass/pull/22) 的 [GitHub Actions #31364984624](https://github.com/ren997/jingcai-compass/actions/runs/31364984624) 成功；Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers PostgreSQL 16.14 上执行完整回归，457 个普通测试与 48 个 PostgreSQL IT 通过。V18 人工来源/载荷约束、不可变事实、JWT 补录、幂等/并发、官方优先和按比赛结算重算已验证；最终看板提交将触发第二轮 CI，成功后再正式合并。 |
 | 2026-08-10 | T306 / `abd8542` | `IN_PROGRESS -> DONE` | [PR #21](https://github.com/ren997/jingcai-compass/pull/21) 的 [GitHub Actions #31353406368](https://github.com/ren997/jingcai-compass/actions/runs/31353406368) 成功；Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers PostgreSQL 16.14 上执行完整回归，445 个普通测试与 44 个 PostgreSQL IT 均通过。 |
 | 2026-08-10 | T306 / T406 | 新增；`T306 -> IN_PROGRESS` | 项目负责人将首版预测模型设为当前 P0：先用当前比赛与已确认的体彩/亚洲盘口完成可解释离线基线，既有导入/发布/锁定/快照复用。新增 T406 作为下一任务，受控人工补录赛果事实并复用自动结算；不直接编辑结算，不以人工输入替代真实赛果源或 T108 验收。 |
 | 2026-08-07 | T107 | `IN_PROGRESS -> PARTIAL` | The Odds API 请求扩展为 `spreads,totals`，严格配对 Over/Under 并与让球快照同写；日职两场受控同步运行 ID 13/14 成功，最终公开详情可读取大小球。`TheOddsApiProviderTest` 5 项、后端 439 项、前端 Vitest 64 项和生产构建通过；未启动连续观测，M1 仍为 `PARTIAL`。 |

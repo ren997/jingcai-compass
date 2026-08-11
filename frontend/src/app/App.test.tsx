@@ -22,6 +22,43 @@ const match: MatchListItemVo = {
   sportteryDataSource: 'CHINA_SPORTTERY',
   sportteryCapturedAt: '2026-07-22T10:00:00+08:00',
   sportteryProviderUpdatedAt: null,
+  sportteryMarket: {
+    availability: 'AVAILABLE',
+    dataSource: 'CHINA_SPORTTERY',
+    capturedAt: '2026-07-22T10:00:00+08:00',
+    providerUpdatedAt: null,
+    officialHandicap: -1,
+    hadHomeSp: 1.8,
+    hadDrawSp: 3.4,
+    hadAwaySp: 4.2,
+    hhadHomeSp: 2.4,
+    hhadDrawSp: 3.2,
+    hhadAwaySp: 2.7,
+    sellStatus: 'ON_SALE',
+  },
+  asianMainMarket: {
+    providerCode: 'ODDS_API',
+    bookmakerCode: 'BOOK_A',
+    handicapLine: -0.5,
+    homeOdds: 1.92,
+    awayOdds: 1.96,
+    totalLine: 2.5,
+    overOdds: 1.88,
+    underOdds: 2.02,
+    snapshotType: 'PRE_KICKOFF',
+    capturedAt: '2026-07-22T10:01:00+08:00',
+    providerUpdatedAt: '2026-07-22T10:00:00+08:00',
+  },
+  publishedPredictions: [{
+    modelVersion: 'model-v1',
+    predictionStatus: 'PUBLISHED',
+    homeWinProb: 0.45,
+    drawProb: 0.3,
+    awayWinProb: 0.25,
+    handicapPick: 'HOME_WIN',
+    expectedTotalGoals: 2.5,
+    confidenceLevel: 'HIGH',
+  }],
 };
 
 const detail: MatchDetailVo = {
@@ -332,6 +369,20 @@ describe('App routes', () => {
         pageSize: 20,
       }),
     ])));
+  });
+
+  it('renders sporttery odds, the complete Asian main market and public predictions on a match card', async () => {
+    mockPublicMatches();
+    renderApp('/matches?date=2026-07-22');
+
+    expect(await screen.findByRole('heading', { name: '体彩赔率' })).toBeInTheDocument();
+    expect(screen.getByText('胜平负')).toBeInTheDocument();
+    expect(screen.getByText('让球胜平负（主队 -1）')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '亚盘主盘' })).toBeInTheDocument();
+    expect(screen.getByText('BOOK_A · ODDS_API')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '预测结果' })).toBeInTheDocument();
+    expect(screen.getByText('model-v1')).toBeInTheDocument();
+    expect(screen.getByText('主 45.0% · 平 30.0% · 客 25.0%')).toBeInTheDocument();
   });
 
   it('renders public detail in separate Sporttery and Asian Odds sections and preserves the list URL', async () => {

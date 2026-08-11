@@ -5,6 +5,7 @@ import com.jingcaicompass.match.enums.MatchStatusEnum;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 /** 公开比赛分页列表项。 */
 public record MatchListItemVo(
@@ -26,6 +27,12 @@ public record MatchListItemVo(
         /** 最新体彩快照的 Provider 编码。 */
         String sportteryDataSource,
         OffsetDateTime sportteryCapturedAt,
-        OffsetDateTime sportteryProviderUpdatedAt
+        OffsetDateTime sportteryProviderUpdatedAt,
+        /** 当前体彩胜平负、让球胜平负市场；缺快照时明确标记不可用。 */
+        SportteryMarketVo sportteryMarket,
+        /** 已确认映射且让球/大小球完整的最新亚盘主盘；不可用时为空。 */
+        AsianOddsMarketVo asianMainMarket,
+        /** 每个模型仅保留当前公开版本，草稿永不进入列表。 */
+        List<MatchPredictionSummaryVo> publishedPredictions
 ) {
 }

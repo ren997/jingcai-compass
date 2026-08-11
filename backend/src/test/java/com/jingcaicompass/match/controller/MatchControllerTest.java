@@ -83,7 +83,25 @@ class MatchControllerTest {
                 42L, lotteryDate, "周三042", 7L, "英超", "主队", "客队",
                 OffsetDateTime.parse("2026-07-22T19:30:00+08:00"), MatchStatusEnum.SCHEDULED,
                 BigDecimal.valueOf(-1), com.jingcaicompass.match.enums.MatchDataAvailabilityEnum.AVAILABLE,
-                "CHINA_SPORTTERY", OffsetDateTime.parse("2026-07-22T10:00:00+08:00"), null
+                "CHINA_SPORTTERY", OffsetDateTime.parse("2026-07-22T10:00:00+08:00"), null,
+                new com.jingcaicompass.match.vo.SportteryMarketVo(
+                        com.jingcaicompass.match.enums.MatchDataAvailabilityEnum.AVAILABLE,
+                        "CHINA_SPORTTERY", OffsetDateTime.parse("2026-07-22T10:00:00+08:00"), null,
+                        BigDecimal.valueOf(-1), BigDecimal.valueOf(2.36), BigDecimal.valueOf(2.9), BigDecimal.valueOf(2.77),
+                        BigDecimal.valueOf(5.65), BigDecimal.valueOf(3.8), BigDecimal.valueOf(1.45), "Selling"
+                ),
+                new com.jingcaicompass.match.vo.AsianOddsMarketVo(
+                        "THE_ODDS_API", "BOOK_A", BigDecimal.ZERO, BigDecimal.valueOf(1.85), BigDecimal.valueOf(1.98),
+                        BigDecimal.valueOf(2.5), BigDecimal.valueOf(1.82), BigDecimal.valueOf(2.02),
+                        com.jingcaicompass.odds.enums.OddsSnapshotTypeEnum.FIRST_SEEN,
+                        OffsetDateTime.parse("2026-07-22T10:00:00+08:00"), null
+                ),
+                List.of(new com.jingcaicompass.match.vo.MatchPredictionSummaryVo(
+                        "baseline-v1", com.jingcaicompass.prediction.enums.PredictionStatusEnum.PUBLISHED,
+                        BigDecimal.valueOf(0.37), BigDecimal.valueOf(0.31), BigDecimal.valueOf(0.32),
+                        com.jingcaicompass.prediction.enums.HandicapPickEnum.AWAY_WIN, BigDecimal.valueOf(2.5),
+                        com.jingcaicompass.prediction.enums.ConfidenceLevelEnum.MEDIUM
+                ))
         );
         MatchDetailVo detail = new MatchDetailVo(
                 42L, lotteryDate, "周三042", 7L, "英超", "主队", "客队",
@@ -103,7 +121,10 @@ class MatchControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.total").value(1))
                 .andExpect(jsonPath("$.data.records[0].matchId").value(42))
-                .andExpect(jsonPath("$.data.records[0].sportteryAvailability").value("AVAILABLE"));
+                .andExpect(jsonPath("$.data.records[0].sportteryAvailability").value("AVAILABLE"))
+                .andExpect(jsonPath("$.data.records[0].sportteryMarket.hadHomeSp").value(2.36))
+                .andExpect(jsonPath("$.data.records[0].asianMainMarket.totalLine").value(2.5))
+                .andExpect(jsonPath("$.data.records[0].publishedPredictions[0].modelVersion").value("baseline-v1"));
 
         mockMvc.perform(post("/api/public/matches/detail")
                         .contentType(MediaType.APPLICATION_JSON)

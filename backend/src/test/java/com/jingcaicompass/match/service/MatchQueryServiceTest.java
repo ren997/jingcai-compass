@@ -24,6 +24,11 @@ import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.prediction.entity.Prediction;
+import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
+import com.jingcaicompass.prediction.enums.HandicapPickEnum;
+import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
 import java.math.BigDecimal;
@@ -38,6 +43,7 @@ class MatchQueryServiceTest {
     private MatchMapper matchMapper;
     private SportteryPoolSnapshotMapper sportterySnapshotMapper;
     private AsianOddsSnapshotMapper asianOddsSnapshotMapper;
+    private PredictionMapper predictionMapper;
     private MatchSourceMappingMapper matchSourceMappingMapper;
     private RawDataPayloadMapper rawDataPayloadMapper;
     private MatchQueryService matchQueryService;
@@ -47,12 +53,14 @@ class MatchQueryServiceTest {
         matchMapper = mock(MatchMapper.class);
         sportterySnapshotMapper = mock(SportteryPoolSnapshotMapper.class);
         asianOddsSnapshotMapper = mock(AsianOddsSnapshotMapper.class);
+        predictionMapper = mock(PredictionMapper.class);
         matchSourceMappingMapper = mock(MatchSourceMappingMapper.class);
         rawDataPayloadMapper = mock(RawDataPayloadMapper.class);
         matchQueryService = new MatchQueryServiceImpl(
                 matchMapper,
                 sportterySnapshotMapper,
                 asianOddsSnapshotMapper,
+                predictionMapper,
                 matchSourceMappingMapper,
                 rawDataPayloadMapper,
                 new PaginationProperties(50)
@@ -86,6 +94,8 @@ class MatchQueryServiceTest {
         when(matchMapper.selectPublicPage(any())).thenReturn(List.of(match));
         when(sportterySnapshotMapper.selectLatestByMatchIds(anyCollection())).thenReturn(List.of(snapshot));
         when(rawDataPayloadMapper.selectList(any())).thenReturn(List.of());
+        when(asianOddsSnapshotMapper.selectLatestCompleteConfirmedLinesByMatchIds(anyCollection())).thenReturn(List.of());
+        when(predictionMapper.selectCurrentPublishedByMatchIds(anyCollection())).thenReturn(List.of());
 
         var page = matchQueryService.list(new MatchListQueryDto(
                 match.getLotteryDate(), null, null, MatchListSortEnum.KICKOFF_DESC, 0, 500
@@ -99,6 +109,58 @@ class MatchQueryServiceTest {
             assertThat(item.officialHandicap()).isEqualByComparingTo("0.5");
             assertThat(item.sportteryAvailability()).isEqualTo(MatchDataAvailabilityEnum.AVAILABLE);
         });
+    }
+
+    @Test
+    void batchesCurrentMarketsAndPublishedPredictionsForThePublicList() {
+        MatchEntity match = match(105L, "周三205");
+        SportteryPoolSnapshot sporttery = sportterySnapshot(105L, "2026-07-22T10:00:00Z", "-1");
+        sporttery.setHadHomeSp(BigDecimal.valueOf(2.36));
+        sporttery.setHadDrawSp(BigDecimal.valueOf(2.9));
+        sporttery.setHadAwaySp(BigDecimal.valueOf(2.77));
+        sporttery.setHhadHomeSp(BigDecimal.valueOf(5.65));
+        sporttery.setHhadDrawSp(BigDecimal.valueOf(3.8));
+        sporttery.setHhadAwaySp(BigDecimal.valueOf(1.45));
+        AsianOddsSnapshot asianMain = asianOddsSnapshot("BOOK_A", "0", "2026-07-22T10:01:00Z");
+        asianMain.setMatchId(105L);
+        asianMain.setTotalLine(BigDecimal.valueOf(2.5));
+        asianMain.setOverOdds(BigDecimal.valueOf(1.82));
+        asianMain.setUnderOdds(BigDecimal.valueOf(2.02));
+        Prediction prediction = publishedPrediction(105L, "baseline-v1");
+        Prediction lockedPrediction = publishedPrediction(105L, "baseline-v2");
+        lockedPrediction.setPredictionStatus(PredictionStatusEnum.LOCKED);
+        Prediction draftPrediction = publishedPrediction(105L, "draft-v1");
+        draftPrediction.setPredictionStatus(PredictionStatusEnum.DRAFT);
+        when(matchMapper.countPublicPage(any())).thenReturn(1L);
+        when(matchMapper.selectPublicPage(any())).thenReturn(List.of(match));
+        when(sportterySnapshotMapper.selectLatestByMatchIds(anyCollection())).thenReturn(List.of(sporttery));
+        when(rawDataPayloadMapper.selectList(any())).thenReturn(List.of());
+        when(asianOddsSnapshotMapper.selectLatestCompleteConfirmedLinesByMatchIds(anyCollection()))
+                .thenReturn(List.of(asianMain));
+        when(predictionMapper.selectCurrentPublishedByMatchIds(anyCollection()))
+                .thenReturn(List.of(prediction, lockedPrediction, draftPrediction));
+
+        var page = matchQueryService.list(new MatchListQueryDto(
+                match.getLotteryDate(), null, null, MatchListSortEnum.KICKOFF_ASC, 1, 20
+        ));
+
+        assertThat(page.records()).singleElement().satisfies(item -> {
+            assertThat(item.sportteryMarket().hadHomeSp()).isEqualByComparingTo("2.36");
+            assertThat(item.sportteryMarket().hhadAwaySp()).isEqualByComparingTo("1.45");
+            assertThat(item.asianMainMarket()).satisfies(market -> {
+                assertThat(market.bookmakerCode()).isEqualTo("BOOK_A");
+                assertThat(market.handicapLine()).isEqualByComparingTo("0");
+                assertThat(market.totalLine()).isEqualByComparingTo("2.5");
+            });
+            assertThat(item.publishedPredictions()).extracting(summary -> summary.modelVersion())
+                    .containsExactly("baseline-v1", "baseline-v2");
+            assertThat(item.publishedPredictions().getFirst()).satisfies(summary -> {
+                assertThat(summary.predictionStatus()).isEqualTo(PredictionStatusEnum.PUBLISHED);
+                assertThat(summary.homeWinProb()).isEqualByComparingTo("0.37");
+            });
+        });
+        verify(asianOddsSnapshotMapper).selectLatestCompleteConfirmedLinesByMatchIds(anyCollection());
+        verify(predictionMapper).selectCurrentPublishedByMatchIds(anyCollection());
     }
 
     @Test
@@ -182,6 +244,20 @@ class MatchQueryServiceTest {
         result.setHomeOdds(BigDecimal.valueOf(1.8));
         result.setAwayOdds(BigDecimal.valueOf(2.1));
         result.setCapturedAt(Instant.parse(capturedAt));
+        return result;
+    }
+
+    private Prediction publishedPrediction(long matchId, String modelVersion) {
+        Prediction result = new Prediction();
+        result.setMatchId(matchId);
+        result.setModelVersion(modelVersion);
+        result.setPredictionStatus(PredictionStatusEnum.PUBLISHED);
+        result.setHomeWinProb(BigDecimal.valueOf(0.37));
+        result.setDrawProb(BigDecimal.valueOf(0.31));
+        result.setAwayWinProb(BigDecimal.valueOf(0.32));
+        result.setHandicapPick(HandicapPickEnum.AWAY_WIN);
+        result.setExpectedTotalGoals(BigDecimal.valueOf(2.5));
+        result.setConfidenceLevel(ConfidenceLevelEnum.MEDIUM);
         return result;
     }
 }

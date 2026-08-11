@@ -19,11 +19,15 @@ import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import com.jingcaicompass.match.vo.AsianOddsMarketVo;
 import com.jingcaicompass.match.vo.MatchDetailVo;
 import com.jingcaicompass.match.vo.MatchListItemVo;
+import com.jingcaicompass.match.vo.MatchPredictionSummaryVo;
 import com.jingcaicompass.match.vo.MatchSourceMappingVo;
 import com.jingcaicompass.match.vo.MatchSummaryVo;
 import com.jingcaicompass.match.vo.SportteryMarketVo;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.prediction.entity.Prediction;
+import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -53,6 +57,7 @@ public class MatchQueryServiceImpl implements MatchQueryService {
     private final MatchMapper matchMapper;
     private final SportteryPoolSnapshotMapper sportterySnapshotMapper;
     private final AsianOddsSnapshotMapper asianOddsSnapshotMapper;
+    private final PredictionMapper predictionMapper;
     private final MatchSourceMappingMapper matchSourceMappingMapper;
     private final RawDataPayloadMapper rawDataPayloadMapper;
     private final PaginationProperties paginationProperties;
@@ -61,6 +66,7 @@ public class MatchQueryServiceImpl implements MatchQueryService {
             MatchMapper matchMapper,
             SportteryPoolSnapshotMapper sportterySnapshotMapper,
             AsianOddsSnapshotMapper asianOddsSnapshotMapper,
+            PredictionMapper predictionMapper,
             MatchSourceMappingMapper matchSourceMappingMapper,
             RawDataPayloadMapper rawDataPayloadMapper,
             PaginationProperties paginationProperties
@@ -68,6 +74,7 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         this.matchMapper = matchMapper;
         this.sportterySnapshotMapper = sportterySnapshotMapper;
         this.asianOddsSnapshotMapper = asianOddsSnapshotMapper;
+        this.predictionMapper = predictionMapper;
         this.matchSourceMappingMapper = matchSourceMappingMapper;
         this.rawDataPayloadMapper = rawDataPayloadMapper;
         this.paginationProperties = paginationProperties;
@@ -92,10 +99,17 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         long total = matchMapper.countPublicPage(criteria);
         List<MatchEntity> matches = total == 0 ? List.of() : matchMapper.selectPublicPage(criteria);
 
-        // 2) 批量装配每场比赛的最新体彩快照，避免分页记录逐条查询。
+        // 2) 批量装配市场和当前公开预测，避免分页记录逐条查询。
         Map<Long, SportteryPresentation> sporttery = loadLatestSporttery(matches);
+        Map<Long, AsianOddsSnapshot> asianMainMarkets = loadLatestAsianMainMarkets(matches);
+        Map<Long, List<MatchPredictionSummaryVo>> publishedPredictions = loadCurrentPublishedPredictions(matches);
         List<MatchListItemVo> records = matches.stream()
-                .map(match -> toListItemVo(match, sporttery.get(match.getId())))
+                .map(match -> toListItemVo(
+                        match,
+                        sporttery.get(match.getId()),
+                        asianMainMarkets.get(match.getId()),
+                        publishedPredictions.getOrDefault(match.getId(), List.of())
+                ))
                 .toList();
         return new PageResult<>(records, criteria.offset() / criteria.pageSize() + 1, criteria.pageSize(), total);
     }
@@ -183,6 +197,37 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         return result;
     }
 
+    private Map<Long, AsianOddsSnapshot> loadLatestAsianMainMarkets(Collection<MatchEntity> matches) {
+        List<Long> matchIds = matchIds(matches);
+        if (matchIds.isEmpty()) {
+            return Map.of();
+        }
+        return asianOddsSnapshotMapper.selectLatestCompleteConfirmedLinesByMatchIds(matchIds).stream()
+                .collect(Collectors.toMap(AsianOddsSnapshot::getMatchId, snapshot -> snapshot));
+    }
+
+    private Map<Long, List<MatchPredictionSummaryVo>> loadCurrentPublishedPredictions(Collection<MatchEntity> matches) {
+        List<Long> matchIds = matchIds(matches);
+        if (matchIds.isEmpty()) {
+            return Map.of();
+        }
+        return predictionMapper.selectCurrentPublishedByMatchIds(matchIds).stream()
+                .filter(prediction -> prediction.getPredictionStatus() == PredictionStatusEnum.PUBLISHED
+                        || prediction.getPredictionStatus() == PredictionStatusEnum.LOCKED)
+                .collect(Collectors.groupingBy(
+                        Prediction::getMatchId,
+                        java.util.LinkedHashMap::new,
+                        Collectors.mapping(this::toPredictionSummaryVo, Collectors.toList())
+                ));
+    }
+
+    private List<Long> matchIds(Collection<MatchEntity> matches) {
+        return matches.stream()
+                .map(MatchEntity::getId)
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
     private MatchSummaryVo toSummaryVo(MatchEntity match, SportteryPresentation sporttery) {
         SportteryPoolSnapshot snapshot = sporttery == null ? null : sporttery.snapshot();
         return new MatchSummaryVo(
@@ -199,7 +244,12 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         );
     }
 
-    private MatchListItemVo toListItemVo(MatchEntity match, SportteryPresentation sporttery) {
+    private MatchListItemVo toListItemVo(
+            MatchEntity match,
+            SportteryPresentation sporttery,
+            AsianOddsSnapshot asianMainMarket,
+            List<MatchPredictionSummaryVo> publishedPredictions
+    ) {
         SportteryPoolSnapshot snapshot = sporttery == null ? null : sporttery.snapshot();
         return new MatchListItemVo(
                 match.getId(),
@@ -215,7 +265,10 @@ public class MatchQueryServiceImpl implements MatchQueryService {
                 snapshot == null ? MatchDataAvailabilityEnum.NO_SPORTTERY_SNAPSHOT : MatchDataAvailabilityEnum.AVAILABLE,
                 sporttery == null || sporttery.dataSource() == null ? null : sporttery.dataSource(),
                 snapshot == null ? null : toShanghaiTime(snapshot.getCapturedAt()),
-                snapshot == null ? null : toShanghaiTime(snapshot.getProviderUpdatedAt())
+                snapshot == null ? null : toShanghaiTime(snapshot.getProviderUpdatedAt()),
+                toSportteryMarketVo(sporttery),
+                asianMainMarket == null ? null : toAsianOddsMarketVo(asianMainMarket),
+                List.copyOf(publishedPredictions)
         );
     }
 
@@ -225,24 +278,7 @@ public class MatchQueryServiceImpl implements MatchQueryService {
             List<AsianOddsSnapshot> asianSnapshots,
             List<MatchSourceMapping> mappings
     ) {
-        SportteryPoolSnapshot snapshot = sporttery == null ? null : sporttery.snapshot();
-        SportteryMarketVo sportteryMarket = snapshot == null
-                ? new SportteryMarketVo(MatchDataAvailabilityEnum.NO_SPORTTERY_SNAPSHOT, null, null, null,
-                null, null, null, null, null, null, null, null)
-                : new SportteryMarketVo(
-                MatchDataAvailabilityEnum.AVAILABLE,
-                sporttery.dataSource() == null ? "PERSISTED_SPORTTERY" : sporttery.dataSource(),
-                toShanghaiTime(snapshot.getCapturedAt()),
-                toShanghaiTime(snapshot.getProviderUpdatedAt()),
-                snapshot.getOfficialHandicap(),
-                snapshot.getHadHomeSp(),
-                snapshot.getHadDrawSp(),
-                snapshot.getHadAwaySp(),
-                snapshot.getHhadHomeSp(),
-                snapshot.getHhadDrawSp(),
-                snapshot.getHhadAwaySp(),
-                snapshot.getSellStatus()
-        );
+        SportteryMarketVo sportteryMarket = toSportteryMarketVo(sporttery);
         List<AsianOddsMarketVo> asianMarkets = asianSnapshots.stream().map(this::toAsianOddsMarketVo).toList();
         List<MatchSourceMappingVo> sourceMappings = mappings.stream().map(this::toSourceMappingVo).toList();
         return new MatchDetailVo(
@@ -265,6 +301,27 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         );
     }
 
+    private SportteryMarketVo toSportteryMarketVo(SportteryPresentation sporttery) {
+        SportteryPoolSnapshot snapshot = sporttery == null ? null : sporttery.snapshot();
+        return snapshot == null
+                ? new SportteryMarketVo(MatchDataAvailabilityEnum.NO_SPORTTERY_SNAPSHOT, null, null, null,
+                null, null, null, null, null, null, null, null)
+                : new SportteryMarketVo(
+                MatchDataAvailabilityEnum.AVAILABLE,
+                sporttery.dataSource() == null ? "PERSISTED_SPORTTERY" : sporttery.dataSource(),
+                toShanghaiTime(snapshot.getCapturedAt()),
+                toShanghaiTime(snapshot.getProviderUpdatedAt()),
+                snapshot.getOfficialHandicap(),
+                snapshot.getHadHomeSp(),
+                snapshot.getHadDrawSp(),
+                snapshot.getHadAwaySp(),
+                snapshot.getHhadHomeSp(),
+                snapshot.getHhadDrawSp(),
+                snapshot.getHhadAwaySp(),
+                snapshot.getSellStatus()
+        );
+    }
+
     private AsianOddsMarketVo toAsianOddsMarketVo(AsianOddsSnapshot snapshot) {
         return new AsianOddsMarketVo(
                 snapshot.getProviderCode(),
@@ -278,6 +335,19 @@ public class MatchQueryServiceImpl implements MatchQueryService {
                 snapshot.getSnapshotType(),
                 toShanghaiTime(snapshot.getCapturedAt()),
                 toShanghaiTime(snapshot.getProviderUpdatedAt())
+        );
+    }
+
+    private MatchPredictionSummaryVo toPredictionSummaryVo(Prediction prediction) {
+        return new MatchPredictionSummaryVo(
+                prediction.getModelVersion(),
+                prediction.getPredictionStatus(),
+                prediction.getHomeWinProb(),
+                prediction.getDrawProb(),
+                prediction.getAwayWinProb(),
+                prediction.getHandicapPick(),
+                prediction.getExpectedTotalGoals(),
+                prediction.getConfidenceLevel()
         );
     }
 

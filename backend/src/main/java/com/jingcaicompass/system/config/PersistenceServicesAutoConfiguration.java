@@ -255,6 +255,7 @@ public class PersistenceServicesAutoConfiguration {
             MatchMapper matchMapper,
             SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
             AsianOddsSnapshotMapper asianOddsSnapshotMapper,
+            PredictionMapper predictionMapper,
             MatchSourceMappingMapper matchSourceMappingMapper,
             RawDataPayloadMapper rawDataPayloadMapper,
             PaginationProperties paginationProperties
@@ -263,6 +264,7 @@ public class PersistenceServicesAutoConfiguration {
                 matchMapper,
                 sportteryPoolSnapshotMapper,
                 asianOddsSnapshotMapper,
+                predictionMapper,
                 matchSourceMappingMapper,
                 rawDataPayloadMapper,
                 paginationProperties

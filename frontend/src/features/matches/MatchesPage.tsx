@@ -1,6 +1,23 @@
 import { Link, useSearchParams } from 'react-router-dom';
-import { MATCH_LIST_SORTS, MATCH_STATUSES, type MatchListSort, type MatchStatus } from '../../services/public';
-import { availabilityLabel, dataSourceLabel, formatHandicap, formatTimestamp, statusLabels } from './matchPresentation';
+import {
+  MATCH_LIST_SORTS,
+  MATCH_STATUSES,
+  type MatchListItemVo,
+  type MatchListSort,
+  type MatchStatus,
+} from '../../services/public';
+import {
+  availabilityLabel,
+  confidenceLabel,
+  dataSourceLabel,
+  formatHandicap,
+  formatNumber,
+  formatProbability,
+  formatTimestamp,
+  handicapPickLabel,
+  predictionStatusLabel,
+  statusLabels,
+} from './matchPresentation';
 import { parseMatchListSearch, todayInShanghai, toMatchListQuery, toMatchListSearchParams, type MatchListSearch } from './matchSearch';
 import { useLeagueOptionsQuery, useMatchListQuery } from './useMatchQueries';
 
@@ -136,33 +153,7 @@ export default function MatchesPage() {
             <section className="state-card">当前筛选条件下暂无比赛。</section>
           ) : (
             <section className="match-list" aria-label="竞彩比赛列表">
-              {page.records.map((match) => (
-                <Link
-                  className="match-card match-card-link"
-                  key={match.matchId}
-                  to={`/matches/${match.matchId}${listSearch ? `?${listSearch}` : ''}`}
-                >
-                  <header>
-                    <span className="match-number">{match.lotteryMatchNo}</span>
-                    <span>{match.leagueName}</span>
-                    <time dateTime={match.kickoffTime}>{formatTimestamp(match.kickoffTime)}</time>
-                  </header>
-                  <div className="teams">
-                    <strong>{match.homeTeamName}</strong>
-                    <span className="versus">VS</span>
-                    <strong>{match.awayTeamName}</strong>
-                  </div>
-                  <footer>
-                    <span className="handicap">{formatHandicap(match.officialHandicap)}</span>
-                    <span className="match-status">{statusLabels[match.matchStatus]}</span>
-                  </footer>
-                  <div className="match-meta">
-                    <span>{availabilityLabel(match.sportteryAvailability)}</span>
-                    <span>{dataSourceLabel(match.sportteryDataSource)}</span>
-                    <span>采集：{formatTimestamp(match.sportteryCapturedAt)}</span>
-                  </div>
-                </Link>
-              ))}
+              {page.records.map((match) => <MatchCard key={match.matchId} match={match} listSearch={listSearch} />)}
             </section>
           )}
 
@@ -187,4 +178,77 @@ export default function MatchesPage() {
       )}
     </main>
   );
+}
+
+function MatchCard({ match, listSearch }: { match: MatchListItemVo; listSearch: string }) {
+  return <Link className="match-card match-card-link" to={`/matches/${match.matchId}${listSearch ? `?${listSearch}` : ''}`}>
+    <header>
+      <span className="match-number">{match.lotteryMatchNo}</span>
+      <span>{match.leagueName}</span>
+      <time dateTime={match.kickoffTime}>{formatTimestamp(match.kickoffTime)}</time>
+    </header>
+    <div className="teams">
+      <strong>{match.homeTeamName}</strong>
+      <span className="versus">VS</span>
+      <strong>{match.awayTeamName}</strong>
+    </div>
+    <div className="match-card-markets">
+      <SportterySummary match={match} />
+      <AsianMainSummary match={match} />
+      <PredictionSummary match={match} />
+    </div>
+    <footer>
+      <span className="handicap">{formatHandicap(match.officialHandicap)}</span>
+      <span className="match-status">{statusLabels[match.matchStatus]}</span>
+    </footer>
+    <div className="match-meta">
+      <span>{availabilityLabel(match.sportteryAvailability)}</span>
+      <span>{dataSourceLabel(match.sportteryDataSource)}</span>
+      <span>采集：{formatTimestamp(match.sportteryCapturedAt)}</span>
+    </div>
+  </Link>;
+}
+
+function SportterySummary({ match }: { match: MatchListItemVo }) {
+  const market = match.sportteryMarket;
+  return <section className="match-market-summary" aria-label={`${match.lotteryMatchNo} 体彩赔率`}>
+    <h2>体彩赔率</h2>
+    {market.availability !== 'AVAILABLE' ? <p>胜平负与让球胜平负暂缺</p> : <>
+      <OddsTriplet label="胜平负" home={market.hadHomeSp} draw={market.hadDrawSp} away={market.hadAwaySp} />
+      <OddsTriplet label={`让球胜平负（${formatHandicap(market.officialHandicap)}）`} home={market.hhadHomeSp} draw={market.hhadDrawSp} away={market.hhadAwaySp} />
+    </>}
+  </section>;
+}
+
+function OddsTriplet({ label, home, draw, away }: {
+  label: string;
+  home: number | null;
+  draw: number | null;
+  away: number | null;
+}) {
+  return <div className="match-odds-triplet"><strong>{label}</strong><span>主 {formatNumber(home)}</span>
+    <span>平 {formatNumber(draw)}</span><span>客 {formatNumber(away)}</span></div>;
+}
+
+function AsianMainSummary({ match }: { match: MatchListItemVo }) {
+  const market = match.asianMainMarket;
+  return <section className="match-market-summary" aria-label={`${match.lotteryMatchNo} 亚盘主盘`}>
+    <h2>亚盘主盘</h2>
+    {!market ? <p>已确认的完整亚盘主盘暂缺</p> : <>
+      <p className="market-provider">{market.bookmakerCode} · {market.providerCode}</p>
+      <div className="match-market-line"><strong>亚洲{formatHandicap(market.handicapLine)}</strong><span>主 {formatNumber(market.homeOdds)} / 客 {formatNumber(market.awayOdds)}</span></div>
+      <div className="match-market-line"><strong>大小球 {formatNumber(market.totalLine)}</strong><span>大 {formatNumber(market.overOdds)} / 小 {formatNumber(market.underOdds)}</span></div>
+    </>}
+  </section>;
+}
+
+function PredictionSummary({ match }: { match: MatchListItemVo }) {
+  return <section className="match-market-summary" aria-label={`${match.lotteryMatchNo} 预测结果`}>
+    <h2>预测结果</h2>
+    {match.publishedPredictions.length === 0 ? <p>暂无已发布预测</p> : match.publishedPredictions.map((prediction) => <article className="match-prediction-summary" key={prediction.modelVersion}>
+      <header><strong>{prediction.modelVersion}</strong><span>{predictionStatusLabel(prediction.predictionStatus)}</span></header>
+      <p>主 {formatProbability(prediction.homeWinProb)} · 平 {formatProbability(prediction.drawProb)} · 客 {formatProbability(prediction.awayWinProb)}</p>
+      <p>{handicapPickLabel(prediction.handicapPick)} · 总进球 {formatNumber(prediction.expectedTotalGoals)} · 置信 {confidenceLabel(prediction.confidenceLevel)}</p>
+    </article>)}
+  </section>;
 }

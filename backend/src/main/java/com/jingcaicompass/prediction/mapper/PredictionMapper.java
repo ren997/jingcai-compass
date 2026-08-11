@@ -57,6 +57,26 @@ public interface PredictionMapper extends BaseMapper<Prediction> {
             @Param("snapshotDate") LocalDate snapshotDate
     );
 
+    /** 按当前分页比赛批量读取每个模型的当前公开版本，草稿永不进入结果。 */
+    @Select("""
+            <script>
+            SELECT DISTINCT ON (p.match_id, p.model_version) p.*
+            FROM predictions p
+            WHERE p.match_id IN
+            <foreach collection="matchIds" item="matchId" open="(" separator="," close=")">
+              #{matchId}
+            </foreach>
+              AND p.prediction_status IN ('PUBLISHED', 'LOCKED')
+            ORDER BY p.match_id,
+                     p.model_version ASC,
+                     p.prediction_version DESC,
+                     p.id DESC
+            </script>
+            """)
+    List<Prediction> selectCurrentPublishedByMatchIds(
+            @Param("matchIds") Collection<Long> matchIds
+    );
+
     /** 按模型和版本顺序读取单场全部公开预测，草稿不会进入公共查询。 */
     @Select("""
             SELECT *

@@ -91,6 +91,21 @@ export type MatchListItemVo = {
   sportteryDataSource: string | null;
   sportteryCapturedAt: string | null;
   sportteryProviderUpdatedAt: string | null;
+  sportteryMarket: SportteryMarketVo;
+  asianMainMarket: AsianOddsMarketVo | null;
+  publishedPredictions: MatchPredictionSummaryVo[];
+};
+
+/** 公开比赛列表中一个模型的当前公开预测摘要。 */
+export type MatchPredictionSummaryVo = {
+  modelVersion: string;
+  predictionStatus: PredictionStatus;
+  homeWinProb: number;
+  drawProb: number;
+  awayWinProb: number;
+  handicapPick: HandicapPick;
+  expectedTotalGoals: number;
+  confidenceLevel: ConfidenceLevel;
 };
 
 export type SportteryMarketVo = {

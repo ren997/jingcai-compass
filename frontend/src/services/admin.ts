@@ -24,6 +24,13 @@ export type NormalizationEntityType = (typeof NORMALIZATION_ENTITY_TYPES)[number
 export const PREDICTION_STATUSES = ['PUBLISHED', 'LOCKED'] as const;
 export type PredictionStatus = (typeof PREDICTION_STATUSES)[number];
 
+export type AdminDraftPredictionListQuery = {
+  lotteryDate?: string;
+  modelVersion?: string;
+  pageNo: number;
+  pageSize: number;
+};
+
 export const LOCK_DIAGNOSTICS = ['OVERDUE', 'SCHEDULED', 'LOCKED'] as const;
 export type LockDiagnostic = (typeof LOCK_DIAGNOSTICS)[number];
 
@@ -132,6 +139,44 @@ export type AdminPredictionMatch = {
   homeTeamName: string;
   awayTeamName: string;
   kickoffTime: string;
+};
+
+/** 发布前由管理员复核的未公开预测；草稿不会进入公共接口。 */
+export type AdminDraftPredictionListItem = {
+  predictionId: number;
+  modelVersion: string;
+  featureVersion: string;
+  generationBatchId: string;
+  generationBatchHash: string;
+  predictionVersion: number;
+  homeWinProb: number;
+  drawProb: number;
+  awayWinProb: number;
+  handicapPick: 'HOME_WIN' | 'DRAW' | 'AWAY_WIN';
+  expectedTotalGoals: number;
+  confidenceLevel: 'LOW' | 'MEDIUM' | 'HIGH';
+  analysisSummary: string;
+  generatedAt: string;
+  match: AdminPredictionMatch;
+};
+
+export type AdminDraftPredictionPage = {
+  records: AdminDraftPredictionListItem[];
+  pageNo: number;
+  pageSize: number;
+  total: number;
+};
+
+export type AdminPredictionPublishResult = {
+  predictionId: number;
+  matchId: number;
+  modelVersion: string;
+  predictionVersion: number;
+  predictionStatus: 'PUBLISHED';
+  publishTime: string;
+  lockTime: string;
+  predictionHash: string;
+  alreadyPublished: boolean;
 };
 
 export type AdminResultFact = {
@@ -465,6 +510,20 @@ export function fetchAdminSyncRunQuotaSummary(businessDate: string, signal?: Abo
 export function fetchAdminPredictionLocks(query: AdminPredictionLockListQuery, signal?: AbortSignal) {
   return requestApi<AdminPredictionStatusPage>('/api/admin/prediction-status/locks/list', {
     method: 'POST', body: query, signal, authenticated: true,
+  });
+}
+
+/** 分页读取仅供管理员发布前复核的 DRAFT 预测。 */
+export function fetchAdminDraftPredictions(query: AdminDraftPredictionListQuery, signal?: AbortSignal) {
+  return requestApi<AdminDraftPredictionPage>('/api/admin/predictions/drafts/list', {
+    method: 'POST', body: query, signal, authenticated: true,
+  });
+}
+
+/** 逐条复用后端既有发布规则，不在前端合并或绕过发布校验。 */
+export function publishAdminPrediction(predictionId: number) {
+  return requestApi<AdminPredictionPublishResult>('/api/admin/predictions/publish', {
+    method: 'POST', body: { predictionId }, authenticated: true,
   });
 }
 

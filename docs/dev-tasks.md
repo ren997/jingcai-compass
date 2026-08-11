@@ -3,11 +3,11 @@
 ## 0. 文档状态
 
 - 文档版本：v0.6
-- 最后更新：2026-08-10
+- 最后更新：2026-08-11
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无（等待 T106/T107 授权与节点条件恢复连续观测）`
+- 当前活动任务：`T106/T107 连续观测授权与节点条件复核`
 - 下一任务：`T106/T107 连续观测授权与节点条件复核`
-- 最近完成增量：`T209 外部待复核身份与赛事组合复核`
+- 最近完成增量：`T608 后台草稿预测管理与发布`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -223,7 +223,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 | M3 预测生成、发布与快照 | `DONE` | T301～T306、T601 已完成预测承载、可解释离线生成、发布、锁定和确定性公开快照；T306 已由 GitHub Actions PostgreSQL 16 回归验证 |
 | M4 赛果与结算 | `DONE` | T401～T406 已完成不可变赛果、自动结算/修正重算及受控人工赛果补录；人工事实仅用于开发验证和模型评估，不替代官方数据源 |
 | M5 公共 API 与前端 | `DONE` | T501、T502、T503、T504、T505、T506、T507 已完成；公开比赛、预测、历史、统计与首页闭环均由持久化事实查询支撑 |
-| M6 后台、稳定性与上线 | `PARTIAL` | T601 管理员鉴权、T602 后台同步/映射复核、T603 基础可观测性与 T606 预测/结算运营状态已完成；业务指标、部署及真实数据源上线条件尚未完成 |
+| M6 后台、稳定性与上线 | `PARTIAL` | T601 管理员鉴权、T602 后台同步/映射复核、T603 基础可观测性、T606 预测/结算运营状态及 T608 草稿预测复核发布已完成；部署及真实数据源上线条件尚未完成 |
 
 ## 5. M0 工程基线
 
@@ -2019,6 +2019,41 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-29：开始执行；范围为锁定、结算和快照的低基数业务指标、数据库事实监测、JSON MDC 日志、Prometheus 规则及响应说明。不开新接口、前端、迁移或 Provider 调用；计划执行 `npm run backend:test`、隔离实例上的 Actuator metrics/prometheus 检查与 `git diff --check`。
   - 2026-07-29：完成。新增基于 PostgreSQL 当前时间的锁定逾期与确认赛果后结算积压事实 Gauge，任务关闭时保留观测但抑制状态告警；结算/重算与快照发布、哈希校验均使用固定低基数计数器。锁定、结算、快照 Job 统一输出 JSON MDC 的 `traceId`、`jobName`、状态和耗时，单条日志仅附 `predictionId` 或 `snapshotId`，不输出 Throwable、预测内容、原始载荷或对象路径。新增生命周期 Prometheus 规则和响应说明；`npm run backend:test` 通过 403 项，隔离实例的 health、metrics、prometheus 均为 200，`git diff --check` 通过；M6 保持 `PARTIAL`，下一任务 T604。
 
+### T608 后台草稿预测管理与发布
+
+- 状态：`DONE`
+- 优先级：P0
+- 依赖：T302、T303、T502、T601
+- 交付物：
+  - 受 JWT 保护的草稿预测分页查询 API
+  - 后台草稿预测管理页与按业务日/模型筛选
+  - 多选、二次确认和逐条发布结果反馈
+- 执行步骤：
+  - [x] 定义仅面向管理员的草稿查询 Dto/Vo，读取 `DRAFT` 预测及对应比赛的可发布复核信息。
+  - [x] 实现受 JWT 保护的草稿查询接口；复用既有单条发布服务，不新增绕过锁定、版本、哈希或审计的批量写入路径。
+  - [x] 实现 `/admin/predictions/drafts` 页面，支持日期和模型筛选、复核字段、多选与发布前二次确认。
+  - [x] 发布时逐条展示成功/失败结果，刷新列表；失败草稿必须保留为 `DRAFT` 并显示可读原因。
+  - [x] 编写后端权限/筛选测试和前端加载、空态、二次确认、部分失败与成功刷新测试。
+  - [x] 使用 2026-08-11 已生成的 8 条本地 `DRAFT` 执行一次实际前端发布验证，不自动发布未经用户确认的其他草稿。
+- 验证命令：
+
+  ```bash
+  mvn -B -ntp -f backend/pom.xml test
+  npm --prefix frontend run test
+  npm --prefix frontend run build
+  git diff --check
+  ```
+
+- 完成标准：
+  - 管理员能够在前端查看且只查看 `DRAFT`，公共页面继续不显示草稿。
+  - 每次发布仍逐条经过既有服务的开赛时效、版本、哈希和审计约束。
+  - 筛选、空态、部分失败和成功发布均有自动化测试；当前 8 条草稿的实际发布结果可追溯。
+- 执行记录：
+  - 2026-08-11：开始执行。范围为补齐管理员草稿查询与发布管理页，复用既有单条发布 API；不新增 migration、不改变公共展示、锁定或快照规则。计划运行后端测试、前端 Vitest/构建、差异检查，并以项目负责人刚生成的本地 8 条 `DRAFT` 作受控前端发布验证。
+  - 2026-08-11：完成。新增仅返回 `DRAFT` 的 JWT 管理员分页查询，并在 `/admin/predictions/drafts` 提供业务日/模型筛选、分页、复核信息、多选、二次确认与逐条发布结果；发布仍调用既有单条服务，部分失败不影响其他项且失败项保留草稿。浏览器实际登录本地后台，选择批次 `t306-baseline-2026-08-11-d93eaf31485538c9` 的 8 条草稿发布，结果为成功 8、失败 0；草稿页刷新后为 0 条，公共比赛详情已显示模型 `t306-odds-baseline-v1`。
+- 验证记录：
+  - 2026-08-11：`mvn -B -ntp -f backend/pom.xml test` 通过（462 项）；`npm --prefix frontend run test` 通过（15 文件、68 项）；`npm --prefix frontend run build` 通过；`git diff --check` 通过。
+
 ### T604 Docker 与 Nginx 部署
 
 - 状态：`BLOCKED`
@@ -2160,6 +2195,7 @@ T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PAR
 ```text
 已完成：T209 真实待复核身份审计与受控清理
 已完成：T401 + T404 + T405 + T601 -> T406 受控人工赛果补录
+已完成：T302 + T303 + T502 + T601 -> T608 草稿预测复核与发布
 下一步：T106/T107 连续观测授权与节点条件复核
 连续证据：T106/T107 -> T108 数据源 Go / No-Go
 生产前置：T108 + T306 + T406 + T604 -> T605 MVP 验收与连续运行
@@ -2169,6 +2205,7 @@ T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PAR
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-08-11 | T608 | `IN_PROGRESS -> DONE` | 新增 JWT 管理员草稿预测分页查询及 `/admin/predictions/drafts` 管理页，支持筛选、复核、多选、二次确认与逐条发布结果。浏览器实际发布批次 `t306-baseline-2026-08-11-d93eaf31485538c9` 的 8 条本地草稿，成功 8、失败 0，刷新后草稿为 0 条，公共详情可见 `t306-odds-baseline-v1`；后端 462 项、前端 68 项、生产构建及差异检查通过。 |
 | 2026-08-10 | T209 / `c3c0494` | `IN_PROGRESS -> DONE` | [PR #23](https://github.com/ren997/jingcai-compass/pull/23) 的首次 [GitHub Actions #31377565822](https://github.com/ren997/jingcai-compass/actions/runs/31377565822) 成功；Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers PostgreSQL 16.14 上执行完整回归，457 个普通测试与 50 个 PostgreSQL IT 通过。真实 local 测试库已完成只读引用图审计；V19 受控孤立清理、引用保护、可空/已确认约束与并发条件更新已验证。最终看板提交将触发第二轮 CI，成功后再正式合并。 |
 | 2026-08-10 | T406 / `ce48e84` | `IN_PROGRESS -> DONE` | [PR #22](https://github.com/ren997/jingcai-compass/pull/22) 的 [GitHub Actions #31364984624](https://github.com/ren997/jingcai-compass/actions/runs/31364984624) 成功；Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers PostgreSQL 16.14 上执行完整回归，457 个普通测试与 48 个 PostgreSQL IT 通过。V18 人工来源/载荷约束、不可变事实、JWT 补录、幂等/并发、官方优先和按比赛结算重算已验证；最终看板提交将触发第二轮 CI，成功后再正式合并。 |
 | 2026-08-10 | T306 / `abd8542` | `IN_PROGRESS -> DONE` | [PR #21](https://github.com/ren997/jingcai-compass/pull/21) 的 [GitHub Actions #31353406368](https://github.com/ren997/jingcai-compass/actions/runs/31353406368) 成功；Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers PostgreSQL 16.14 上执行完整回归，445 个普通测试与 44 个 PostgreSQL IT 均通过。 |

@@ -7,6 +7,7 @@ import {
   SETTLEMENT_DIAGNOSTICS,
   SYNC_STATUSES,
   type AdminSyncRunListQuery,
+  type AdminDraftPredictionListQuery,
   type AdminPredictionLockListQuery,
   type AdminSettlementStatusListQuery,
   type LockDiagnostic,
@@ -159,6 +160,31 @@ export function toPredictionLockSearch(filters: ReturnType<typeof parsePredictio
   if (filters.modelVersion) params.set('modelVersion', filters.modelVersion);
   if (filters.predictionStatuses.length !== PREDICTION_STATUSES.length) params.set('statuses', filters.predictionStatuses.join(','));
   if (filters.lockDiagnostics.length) params.set('diagnostics', filters.lockDiagnostics.join(','));
+  if (filters.pageNo > 1) params.set('page', String(filters.pageNo));
+  return params;
+}
+
+export function parseDraftPredictionSearch(search: URLSearchParams) {
+  return {
+    lotteryDate: validDate(search.get('date')) ?? todayInShanghai(),
+    modelVersion: search.get('modelVersion')?.trim() || undefined,
+    pageNo: validPositive(search.get('page')),
+  };
+}
+
+export function toDraftPredictionQuery(filters: ReturnType<typeof parseDraftPredictionSearch>): AdminDraftPredictionListQuery {
+  return {
+    lotteryDate: filters.lotteryDate,
+    modelVersion: filters.modelVersion,
+    pageNo: filters.pageNo,
+    pageSize: ADMIN_PAGE_SIZE,
+  };
+}
+
+export function toDraftPredictionSearch(filters: ReturnType<typeof parseDraftPredictionSearch>) {
+  const params = new URLSearchParams();
+  if (filters.lotteryDate !== todayInShanghai()) params.set('date', filters.lotteryDate);
+  if (filters.modelVersion) params.set('modelVersion', filters.modelVersion);
   if (filters.pageNo > 1) params.set('page', String(filters.pageNo));
   return params;
 }

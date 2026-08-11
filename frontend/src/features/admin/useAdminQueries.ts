@@ -3,6 +3,7 @@ import {
   confirmMappingReview,
   confirmMappingReviewBundle,
   fetchAdminPredictionLocks,
+  fetchAdminDraftPredictions,
   fetchAdminPredictionStatusDetail,
   fetchAdminSettlementStatuses,
   fetchAdminSyncRunDetail,
@@ -21,10 +22,13 @@ import {
   fetchProviderNormalizationDetail,
   fetchProviderNormalizations,
   recordAdminManualMatchResult,
+  publishAdminPrediction,
   rejectProviderNormalization,
   reopenProviderNormalization,
   type AdminSyncRunListQuery,
   type AdminPredictionLockListQuery,
+  type AdminDraftPredictionListItem,
+  type AdminDraftPredictionListQuery,
   type AdminSettlementStatusListQuery,
   type MappingReviewListQuery,
   type NormalizationEntityType,
@@ -81,6 +85,10 @@ export function providerNormalizationCandidatesQueryKey(entityType: Normalizatio
 
 export function adminPredictionLocksQueryKey(query: AdminPredictionLockListQuery) {
   return ['admin', 'prediction-status', 'locks', query] as const;
+}
+
+export function adminDraftPredictionsQueryKey(query: AdminDraftPredictionListQuery) {
+  return ['admin', 'draft-predictions', 'list', query] as const;
 }
 
 export function adminSettlementStatusesQueryKey(query: AdminSettlementStatusListQuery) {
@@ -223,6 +231,57 @@ export function useAdminPredictionLocksQuery(query: AdminPredictionLockListQuery
   return useQuery({
     queryKey: adminPredictionLocksQueryKey(query),
     queryFn: ({ signal }) => fetchAdminPredictionLocks(query, signal),
+  });
+}
+
+/** 读取与公共展示严格隔离的管理员草稿队列。 */
+export function useAdminDraftPredictionsQuery(query: AdminDraftPredictionListQuery) {
+  return useQuery({
+    queryKey: adminDraftPredictionsQueryKey(query),
+    queryFn: ({ signal }) => fetchAdminDraftPredictions(query, signal),
+  });
+}
+
+type DraftPublishOutcome = {
+  predictionId: number;
+  matchLabel: string;
+  success: boolean;
+  message: string;
+};
+
+/** 按草稿逐条调用发布接口，并保留每一条成功或失败的结果。 */
+export function useAdminDraftPredictionPublishAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (items: AdminDraftPredictionListItem[]): Promise<DraftPublishOutcome[]> => {
+      const settled = await Promise.allSettled(items.map((item) => publishAdminPrediction(item.predictionId)));
+      return settled.map((result, index) => {
+        const item = items[index];
+        const matchLabel = `${item.match.lotteryMatchNo} · ${item.match.homeTeamName} vs ${item.match.awayTeamName}`;
+        if (result.status === 'fulfilled') {
+          return {
+            predictionId: item.predictionId,
+            matchLabel,
+            success: true,
+            message: result.value.alreadyPublished ? '已按既有发布结果返回。' : `发布成功，当前为第 ${result.value.predictionVersion} 版。`,
+          };
+        }
+        return {
+          predictionId: item.predictionId,
+          matchLabel,
+          success: false,
+          message: result.reason instanceof Error ? result.reason.message : '发布失败，请稍后重试。',
+        };
+      });
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'draft-predictions'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'prediction-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['home'] }),
+        queryClient.invalidateQueries({ queryKey: ['matches'] }),
+      ]);
+    },
   });
 }
 

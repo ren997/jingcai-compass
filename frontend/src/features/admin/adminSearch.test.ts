@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseMappingSearch,
+  parseDraftPredictionSearch,
   parsePredictionLockSearch,
   parseSettlementStatusSearch,
   parseSyncRunSearch,
   toMappingQuery,
+  toDraftPredictionQuery,
   toPredictionLockQuery,
   toSettlementStatusQuery,
   toSyncRunQuery,
@@ -43,5 +45,14 @@ describe('admin URL search state', () => {
     expect(toSettlementStatusQuery(settlements)).toEqual({
       lotteryDate: '2026-07-29', modelVersion: undefined, diagnostics: ['SETTLEMENT_MISSING_HAD'], pageNo: 3, pageSize: 20,
     });
+  });
+
+  it('uses the Shanghai business date for draft publication review and drops malformed dates', () => {
+    const draft = parseDraftPredictionSearch(new URLSearchParams('date=2026-08-11&modelVersion=%20baseline-v1%20&page=3'));
+    expect(draft).toMatchObject({ lotteryDate: '2026-08-11', modelVersion: 'baseline-v1', pageNo: 3 });
+    expect(toDraftPredictionQuery(draft)).toEqual({
+      lotteryDate: '2026-08-11', modelVersion: 'baseline-v1', pageNo: 3, pageSize: 20,
+    });
+    expect(parseDraftPredictionSearch(new URLSearchParams('date=2026-02-30')).lotteryDate).toBeTruthy();
   });
 });

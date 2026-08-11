@@ -2,6 +2,9 @@ package com.jingcaicompass.system.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.admin.mapper.AdminAccountMapper;
+import com.jingcaicompass.admin.mapper.AdminDraftPredictionMapper;
+import com.jingcaicompass.admin.service.AdminDraftPredictionQueryService;
+import com.jingcaicompass.admin.service.AdminDraftPredictionQueryServiceImpl;
 import com.jingcaicompass.admin.service.AdminAccountBootstrapRunner;
 import com.jingcaicompass.admin.service.AdminAccountCredentialValidator;
 import com.jingcaicompass.admin.service.AdminAccountTokenValidator;
@@ -565,6 +568,16 @@ public class PersistenceServicesAutoConfiguration {
         return new AdminPredictionStatusQueryServiceImpl(
                 adminPredictionStatusMapper, historyRecordAssembler, paginationProperties
         );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(AdminDraftPredictionQueryService.class)
+    @ConditionalOnBean(AdminDraftPredictionMapper.class)
+    AdminDraftPredictionQueryService adminDraftPredictionQueryService(
+            AdminDraftPredictionMapper adminDraftPredictionMapper,
+            PaginationProperties paginationProperties
+    ) {
+        return new AdminDraftPredictionQueryServiceImpl(adminDraftPredictionMapper, paginationProperties);
     }
 
     @Bean

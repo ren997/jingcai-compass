@@ -1642,6 +1642,125 @@ h1 {
   background: #e4f1e8;
 }
 
+.admin-draft-selection,
+.admin-draft-toolbar,
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-draft-selection {
+  align-self: end;
+  justify-content: space-between;
+  color: #53645a;
+  font-size: 13px;
+}
+
+.admin-draft-toolbar {
+  justify-content: space-between;
+  margin-bottom: 14px;
+  color: #718077;
+  font-size: 12px;
+}
+
+.admin-draft-list {
+  display: grid;
+  gap: 14px;
+}
+
+.admin-draft-card {
+  padding: 16px;
+  border: 1px solid #e0e8e1;
+  border-radius: 12px;
+  background: #fbfdfb;
+}
+
+.admin-draft-card > header {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.admin-draft-card header > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.admin-draft-card header strong {
+  color: #1d5839;
+  overflow-wrap: anywhere;
+}
+
+.admin-draft-card header span:not(.admin-status) {
+  color: #718077;
+  font-size: 12px;
+}
+
+.admin-draft-card dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.admin-draft-card dt {
+  color: #718077;
+  font-size: 11px;
+}
+
+.admin-draft-card dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  color: #263d2e;
+  font-size: 13px;
+}
+
+.admin-draft-card p {
+  margin: 14px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid #e3eae4;
+  color: #53645a;
+  line-height: 1.6;
+}
+
+.admin-publish-feedback {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.admin-publish-feedback li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+}
+
+.admin-publish-feedback li.success {
+  color: #1c7047;
+  background: #edf6ef;
+}
+
+.admin-publish-feedback li.failure {
+  color: #9c3131;
+  background: #fff0f0;
+}
+
+.admin-pagination {
+  justify-content: center;
+  margin-bottom: 18px;
+  color: #53645a;
+  font-size: 13px;
+}
+
 @media (max-width: 680px) {
   .site-header {
     flex-wrap: wrap;
@@ -1848,6 +1967,21 @@ h1 {
     display: grid;
     grid-column: auto;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-draft-card dl {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-draft-selection,
+  .admin-draft-toolbar,
+  .admin-publish-feedback li {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-publish-feedback li {
+    grid-template-columns: 1fr;
   }
 }
 

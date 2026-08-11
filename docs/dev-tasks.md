@@ -2102,6 +2102,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 将可解释基线升级为 V2：以生成时已确认且让球/大小球完整的亚盘主盘产生赢盘/大球或小球方向；不得把赔率隐含值表述为已验证概率、EV 或收益。
   - [x] 更新公共卡片、草稿复核页及自动化测试；不自动生成或发布任何真实 V2 预测。
   - [x] 运行普通测试、前端构建、针对 V20 与 V2 生成的 PostgreSQL 集成验证和差异检查。
+  - [x] 修复草稿查询的持久化条件装配，在后台以二次确认生成当天 V2 草稿；不自动发布。
   - [ ] 建立 Draft PR，完成完整 `-Pintegration verify` 与 GitHub Actions 证据后再收口。
 - 验证命令：
 
@@ -2122,6 +2123,9 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-08-11：开始执行。范围为澄清公共预测标签、扩展基线模型和预测契约以输出亚盘让球赢盘/大小球方向，并让生成快照可追溯；参考 `docs/odds-analysis-records.md` 的 90 分钟结算、走盘/半赢半输与禁止伪造独立概率/EV 原则。不会自动生成或发布新的真实 V2 预测。计划运行普通后端测试、前端 Vitest/构建、PostgreSQL 集成验证和差异检查；当前 GitHub CLI 无登录会话，Draft PR/CI 证据待用户授权登录后补齐。
   - 2026-08-11：本地增量完成。公共卡片、详情与草稿复核均将原标签拆为“竞彩让球胜平负”和“预期总进球”；新增 `t306-odds-baseline-v2` / `t306-sporttery-asian-v2`，仅在已确认且完整的亚盘主盘存在时生成让球赢盘和大小球方向，并记录对应快照。V20 用复合外键、完整性约束和发布后不可变触发器保护该输入；V1 历史数据保持可读且三项亚盘字段为空。未自动生成或发布真实 V2 数据。
   - 2026-08-11：本地验证通过：`mvn -B -ntp -f backend/pom.xml test`（468 项）、`npm --prefix frontend run test -- --run`（69 项）、`npm --prefix frontend run build`、`mvn -B -ntp -f backend/pom.xml -Pintegration '-Dit.test=PostgresApplicationIT,PredictionImportApplicationIT' verify`（11 项，PostgreSQL 16.14，Flyway V1～V20）及 `git diff --check`。完整 `-Pintegration verify` 未在本次运行窗口完成；`gh auth status` 显示未登录，无法创建 Draft PR 或取得 GitHub Actions 证据，故任务为 `PARTIAL`。恢复时先完成完整集成验证，再由具备仓库权限的账号登录 GitHub CLI 并按本看板建立 Draft PR、等待 CI。
+  - 2026-08-11：恢复执行。管理员已授权为当天比赛生成 V2 草稿；实际后台草稿查询却返回服务不可用。范围追加为修复持久化条件装配、在草稿管理页提供受控生成入口，并在生成后复核草稿和关联亚盘快照；仍不自动发布。
+  - 2026-08-11：移除 `AdminDraftPredictionMapper` 的过早条件装配，草稿查询服务重新可用；前端新增“生成 V2 草稿”的二次确认入口，成功后刷新草稿、预测状态及比赛缓存。本地因 8080 短暂不可绑定，开发代理可用 `VITE_API_PROXY_TARGET` 指向隔离端口，不影响默认 8080 行为。
+  - 2026-08-11：以已登录管理员 `admin` 在 `/admin/predictions/drafts` 实测生成 2026-08-11 V2 草稿：候选 10 场、生成/新增 8 条、复用 0 条，批次 `t306-baseline-2026-08-11-87f5a0591c4ab2be`；2 场按 `MISSING_CONFIRMED_ASIAN_MARKET` 跳过。每条草稿均展示亚盘让球、大小球与生成亚盘快照；公共比赛列表仍只有 8 条 `t306-odds-baseline-v1`，V2 已发布数为 0，未执行发布。完整后端测试 468 项、前端测试 70 项及前端生产构建均通过；`gh auth status` 仍未登录，完整 `-Pintegration verify`、Draft PR 与 GitHub Actions 继续待补，故保持 `PARTIAL`。
 
 ### T604 Docker 与 Nginx 部署
 
@@ -2274,6 +2278,7 @@ T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PAR
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-08-11 | T610 | `IN_PROGRESS -> PARTIAL` | 修复草稿查询条件装配并新增后台 V2 草稿生成入口；已登录管理员实测 2026-08-11 生成批次 `t306-baseline-2026-08-11-87f5a0591c4ab2be`，候选 10、新增 8、复用 0，2 场缺已确认完整亚盘而跳过。V2 全为草稿，公共列表保持 8 条 V1、0 条 V2；后端 468 项、前端 70 项和生产构建通过。`gh auth status` 未登录，完整集成、Draft PR 与 Actions 仍待补齐。 |
 | 2026-08-11 | T610 | `IN_PROGRESS -> PARTIAL` | 公共标签澄清为“竞彩让球胜平负”与“预期总进球”；V20 增加绑定已确认完整亚盘快照的让球赢盘/大小球方向、导入与不可变保护，`t306-odds-baseline-v2` 只在完整已确认亚盘主盘存在时生成。后端 468 项、前端 69 项、生产构建及 V20/V2 定向 PostgreSQL 16.14 集成 11 项通过；未自动生成或发布真实 V2 数据。完整集成、Draft PR 与 GitHub Actions 待 GitHub CLI 登录后补齐。 |
 | 2026-08-11 | T609 | `IN_PROGRESS -> DONE` | 公开比赛列表按页批量装配体彩胜平负/让球胜平负、已确认完整亚盘主盘及当前公开预测；`DRAFT` 经 Mapper 与服务双层过滤。浏览器实测周二002显示全部赔率与 `t306-odds-baseline-v1` 预测，已发布的 8 条样本均可访问；后端 463 项、前端 69 项、生产构建和差异检查通过。 |
 | 2026-08-11 | T608 | `IN_PROGRESS -> DONE` | 新增 JWT 管理员草稿预测分页查询及 `/admin/predictions/drafts` 管理页，支持筛选、复核、多选、二次确认与逐条发布结果。浏览器实际发布批次 `t306-baseline-2026-08-11-d93eaf31485538c9` 的 8 条本地草稿，成功 8、失败 0，刷新后草稿为 0 条，公共详情可见 `t306-odds-baseline-v1`；后端 462 项、前端 68 项、生产构建及差异检查通过。 |

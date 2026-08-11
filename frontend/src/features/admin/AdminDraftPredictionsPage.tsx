@@ -1,7 +1,7 @@
 import { Alert, Button, Checkbox, Input, Modal } from 'antd';
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { AdminDraftPredictionListItem } from '../../services/admin';
+import type { AdminBaselinePredictionGeneration, AdminDraftPredictionListItem } from '../../services/admin';
 import {
   asianHandicapPickLabel,
   confidenceLabel,
@@ -18,6 +18,7 @@ import {
 } from './adminSearch';
 import {
   useAdminDraftPredictionPublishAction,
+  useAdminBaselinePredictionGenerationAction,
   useAdminDraftPredictionsQuery,
 } from './useAdminQueries';
 
@@ -33,10 +34,13 @@ export default function AdminDraftPredictionsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const filters = parseDraftPredictionSearch(searchParams);
   const query = useAdminDraftPredictionsQuery(toDraftPredictionQuery(filters));
+  const generate = useAdminBaselinePredictionGenerationAction();
   const publish = useAdminDraftPredictionPublishAction();
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [generateConfirmOpen, setGenerateConfirmOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [feedback, setFeedback] = useState<PublishFeedback[]>([]);
+  const [generationResult, setGenerationResult] = useState<AdminBaselinePredictionGeneration | null>(null);
   const records = query.data?.records ?? [];
   const selectedRecords = useMemo(
     () => records.filter((item) => selectedIds.has(item.predictionId)),
@@ -77,10 +81,17 @@ export default function AdminDraftPredictionsPage() {
     setConfirmOpen(false);
   }
 
+  async function confirmGeneration() {
+    const result = await generate.mutateAsync(filters.lotteryDate);
+    setGenerationResult(result);
+    setGenerateConfirmOpen(false);
+  }
+
   return <main className="admin-page admin-workspace">
     <section className="admin-page-heading"><div><p className="eyebrow">Operations · Draft predictions</p><h1>草稿预测管理</h1>
       <p>草稿不会进入公共页面。请先复核比赛、模型和概率，再逐条经过既有的时效、版本、哈希与审计规则发布。</p></div>
-      <Button loading={query.isFetching} onClick={() => void query.refetch()}>刷新</Button></section>
+      <div className="admin-page-actions"><Button onClick={() => setGenerateConfirmOpen(true)}>生成 V2 草稿</Button>
+        <Button loading={query.isFetching} onClick={() => void query.refetch()}>刷新</Button></div></section>
     <section className="admin-filters" aria-label="草稿预测筛选">
       <label><span>比赛日期</span><input aria-label="草稿比赛日期" type="date" value={filters.lotteryDate}
         onChange={(event) => update({ lotteryDate: event.target.value || filters.lotteryDate, pageNo: 1 })} /></label>
@@ -91,6 +102,8 @@ export default function AdminDraftPredictionsPage() {
     </section>
     {query.isPending && <section className="admin-state-card">正在读取草稿预测……</section>}
     {query.isError && <Alert type="error" showIcon title={`草稿预测暂不可用：${query.error.message}`} />}
+    {generationResult && <Alert type="success" showIcon title="V2 草稿生成完成"
+      description={`候选 ${generationResult.candidateCount} 场 · 已生成 ${generationResult.generatedCount} 条 · 新增 ${generationResult.insertedCount} 条 · 复用 ${generationResult.reusedCount} 条${generationResult.generationBatchId ? ` · 批次 ${generationResult.generationBatchId}` : ''}`} />}
     {feedback.length > 0 && <section className="admin-panel" aria-label="发布结果"><header className="admin-panel-heading"><div><h2>本次发布结果</h2>
       <span>成功 {feedback.filter((item) => item.success).length} 条 · 失败 {feedback.filter((item) => !item.success).length} 条</span></div>
       <Button onClick={() => setFeedback([])}>清除结果</Button></header><ul className="admin-publish-feedback">{feedback.map((item) => <li key={item.predictionId} className={item.success ? 'success' : 'failure'}>
@@ -112,6 +125,11 @@ export default function AdminDraftPredictionsPage() {
       <p>将发布 {selectedRecords.length} 条已选草稿。每条都会重新经过开赛时效、版本、内容哈希和审计校验。</p>
       <p>若某条在发布时校验失败，它会继续保留为草稿，并在本页显示失败原因。</p>
       <ul>{selectedRecords.map((item) => <li key={item.predictionId}>{matchLabel(item)}</li>)}</ul>
+    </Modal>
+    <Modal title="确认生成 V2 草稿" open={generateConfirmOpen} onCancel={() => setGenerateConfirmOpen(false)}
+      confirmLoading={generate.isPending} okText="确认生成草稿" onOk={() => void confirmGeneration()}>
+      <p>将为 {filters.lotteryDate} 仅使用已持久化、已确认且让球/大小球完整的亚盘主盘生成 V2 草稿。</p>
+      <p>不满足输入门槛的比赛会被跳过；生成结果不会自动发布到公共页面。</p>
     </Modal>
   </main>;
 }

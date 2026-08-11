@@ -4,6 +4,7 @@ import {
   confirmMappingReviewBundle,
   fetchAdminPredictionLocks,
   fetchAdminDraftPredictions,
+  generateAdminBaselinePredictions,
   fetchAdminPredictionStatusDetail,
   fetchAdminSettlementStatuses,
   fetchAdminSyncRunDetail,
@@ -29,6 +30,7 @@ import {
   type AdminPredictionLockListQuery,
   type AdminDraftPredictionListItem,
   type AdminDraftPredictionListQuery,
+  type AdminBaselinePredictionGeneration,
   type AdminSettlementStatusListQuery,
   type MappingReviewListQuery,
   type NormalizationEntityType,
@@ -239,6 +241,22 @@ export function useAdminDraftPredictionsQuery(query: AdminDraftPredictionListQue
   return useQuery({
     queryKey: adminDraftPredictionsQueryKey(query),
     queryFn: ({ signal }) => fetchAdminDraftPredictions(query, signal),
+  });
+}
+
+/** 生成成功后刷新草稿、公开比赛和预测状态缓存；生成本身绝不发布。 */
+export function useAdminBaselinePredictionGenerationAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (lotteryDate: string): Promise<AdminBaselinePredictionGeneration> =>
+      generateAdminBaselinePredictions(lotteryDate),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['admin', 'draft-predictions'] }),
+        queryClient.invalidateQueries({ queryKey: ['admin', 'prediction-status'] }),
+        queryClient.invalidateQueries({ queryKey: ['matches'] }),
+      ]);
+    },
   });
 }
 

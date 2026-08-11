@@ -578,7 +578,6 @@ public class PersistenceServicesAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(AdminDraftPredictionQueryService.class)
-    @ConditionalOnBean(AdminDraftPredictionMapper.class)
     AdminDraftPredictionQueryService adminDraftPredictionQueryService(
             AdminDraftPredictionMapper adminDraftPredictionMapper,
             PaginationProperties paginationProperties

@@ -171,6 +171,21 @@ export type AdminDraftPredictionPage = {
   total: number;
 };
 
+/** 管理员按竞彩业务日生成 V2 草稿后的可复核摘要。 */
+export type AdminBaselinePredictionGeneration = {
+  lotteryDate: string;
+  modelVersion: string;
+  featureVersion: string;
+  candidateCount: number;
+  generatedCount: number;
+  insertedCount: number;
+  reusedCount: number;
+  generationBatchId: string | null;
+  generationBatchHash: string | null;
+  generatedAt: string | null;
+  skippedByReason: Record<string, number>;
+};
+
 export type AdminPredictionPublishResult = {
   predictionId: number;
   matchId: number;
@@ -521,6 +536,13 @@ export function fetchAdminPredictionLocks(query: AdminPredictionLockListQuery, s
 export function fetchAdminDraftPredictions(query: AdminDraftPredictionListQuery, signal?: AbortSignal) {
   return requestApi<AdminDraftPredictionPage>('/api/admin/predictions/drafts/list', {
     method: 'POST', body: query, signal, authenticated: true,
+  });
+}
+
+/** 仅基于已持久化且完整的盘口生成 V2 草稿；不会发布预测。 */
+export function generateAdminBaselinePredictions(lotteryDate: string) {
+  return requestApi<AdminBaselinePredictionGeneration>('/api/admin/predictions/baseline/generate', {
+    method: 'POST', body: { lotteryDate }, authenticated: true,
   });
 }
 

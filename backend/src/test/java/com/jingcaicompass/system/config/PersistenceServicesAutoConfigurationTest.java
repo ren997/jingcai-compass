@@ -7,11 +7,13 @@ import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.admin.mapper.AdminAccountMapper;
+import com.jingcaicompass.admin.mapper.AdminDraftPredictionMapper;
 import com.jingcaicompass.admin.mapper.AdminPredictionStatusMapper;
 import com.jingcaicompass.admin.service.AdminAccountBootstrapRunner;
 import com.jingcaicompass.admin.service.AdminAccountCredentialValidator;
 import com.jingcaicompass.admin.service.AdminAccountTokenValidator;
 import com.jingcaicompass.admin.service.AdminAuthService;
+import com.jingcaicompass.admin.service.AdminDraftPredictionQueryService;
 import com.jingcaicompass.admin.service.AdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
@@ -102,6 +104,7 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(PaginationProperties.class, () -> new PaginationProperties(100))
             .withBean(SimpleMeterRegistry.class, SimpleMeterRegistry::new)
             .withBean(AdminAccountMapper.class, PersistenceServicesAutoConfigurationTest::existingAdminMapper)
+            .withBean(AdminDraftPredictionMapper.class, () -> mock(AdminDraftPredictionMapper.class))
             .withBean(AdminPredictionStatusMapper.class, () -> mock(AdminPredictionStatusMapper.class))
             .withBean(AuditLogMapper.class, () -> mock(AuditLogMapper.class))
             .withBean(DataProviderMapper.class, () -> mock(DataProviderMapper.class))
@@ -169,6 +172,7 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(AdminAuthService.class);
                     assertThat(context).hasSingleBean(AdminAccountTokenValidator.class);
                     assertThat(context).hasSingleBean(AdminAccountBootstrapRunner.class);
+                    assertThat(context).hasSingleBean(AdminDraftPredictionQueryService.class);
                     assertThat(context).hasSingleBean(AdminPredictionStatusQueryService.class);
                     assertThat(context).hasSingleBean(AdminSyncRunQueryService.class);
                     assertThat(context).hasSingleBean(MatchMappingReviewService.class);

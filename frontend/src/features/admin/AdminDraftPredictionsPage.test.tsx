@@ -97,4 +97,30 @@ describe('admin draft prediction page', () => {
     expect(await screen.findByText('成功 1 条 · 失败 1 条')).toBeInTheDocument();
     expect(screen.getByText(/比赛已开赛，无法发布（追踪号：draft-page-trace）/)).toBeInTheDocument();
   });
+
+  it('generates V2 drafts only after the administrator confirms the target business date', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/admin/predictions/drafts/list')) return response({ ...page, records: [] });
+      if (url.endsWith('/api/admin/predictions/baseline/generate')) return response({
+        lotteryDate: '2026-08-11', modelVersion: 't306-odds-baseline-v2', featureVersion: 't306-sporttery-asian-v2',
+        candidateCount: 10, generatedCount: 8, insertedCount: 8, reusedCount: 0,
+        generationBatchId: 't306-baseline-2026-08-11-a', generationBatchHash: 'c'.repeat(64),
+        generatedAt: '2026-08-11T02:00:00Z', skippedByReason: { MISSING_CONFIRMED_ASIAN_MARKET: 2 },
+      });
+      return response(null);
+    });
+    renderPage();
+
+    await user.click(await screen.findByRole('button', { name: '生成 V2 草稿' }));
+    expect(await screen.findByText(/将为 2026-08-11 .*生成 V2 草稿/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '确认生成草稿' }));
+
+    expect(await screen.findByText('V2 草稿生成完成')).toBeInTheDocument();
+    expect(screen.getByText(/候选 10 场 · 已生成 8 条 · 新增 8 条/)).toBeInTheDocument();
+    expect(fetch).toHaveBeenCalledWith('/api/admin/predictions/baseline/generate', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ lotteryDate: '2026-08-11' }),
+    }));
+  });
 });

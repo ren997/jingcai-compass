@@ -27,7 +27,9 @@ import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -122,11 +124,15 @@ class MatchQueryServiceTest {
         sporttery.setHhadDrawSp(BigDecimal.valueOf(3.8));
         sporttery.setHhadAwaySp(BigDecimal.valueOf(1.45));
         AsianOddsSnapshot asianMain = asianOddsSnapshot("BOOK_A", "0", "2026-07-22T10:01:00Z");
+        asianMain.setId(9001L);
         asianMain.setMatchId(105L);
         asianMain.setTotalLine(BigDecimal.valueOf(2.5));
         asianMain.setOverOdds(BigDecimal.valueOf(1.82));
         asianMain.setUnderOdds(BigDecimal.valueOf(2.02));
         Prediction prediction = publishedPrediction(105L, "baseline-v1");
+        prediction.setAsianOddsSnapshotId(9001L);
+        prediction.setAsianHandicapPick(AsianHandicapPickEnum.HOME_COVER);
+        prediction.setTotalGoalsPick(TotalGoalsPickEnum.UNDER);
         Prediction lockedPrediction = publishedPrediction(105L, "baseline-v2");
         lockedPrediction.setPredictionStatus(PredictionStatusEnum.LOCKED);
         Prediction draftPrediction = publishedPrediction(105L, "draft-v1");
@@ -137,6 +143,7 @@ class MatchQueryServiceTest {
         when(rawDataPayloadMapper.selectList(any())).thenReturn(List.of());
         when(asianOddsSnapshotMapper.selectLatestCompleteConfirmedLinesByMatchIds(anyCollection()))
                 .thenReturn(List.of(asianMain));
+        when(asianOddsSnapshotMapper.selectBatchIds(List.of(9001L))).thenReturn(List.of(asianMain));
         when(predictionMapper.selectCurrentPublishedByMatchIds(anyCollection()))
                 .thenReturn(List.of(prediction, lockedPrediction, draftPrediction));
 
@@ -157,6 +164,9 @@ class MatchQueryServiceTest {
             assertThat(item.publishedPredictions().getFirst()).satisfies(summary -> {
                 assertThat(summary.predictionStatus()).isEqualTo(PredictionStatusEnum.PUBLISHED);
                 assertThat(summary.homeWinProb()).isEqualByComparingTo("0.37");
+                assertThat(summary.asianHandicapPick()).isEqualTo(AsianHandicapPickEnum.HOME_COVER);
+                assertThat(summary.totalGoalsPick()).isEqualTo(TotalGoalsPickEnum.UNDER);
+                assertThat(summary.asianMarket().bookmakerCode()).isEqualTo("BOOK_A");
             });
         });
         verify(asianOddsSnapshotMapper).selectLatestCompleteConfirmedLinesByMatchIds(anyCollection());

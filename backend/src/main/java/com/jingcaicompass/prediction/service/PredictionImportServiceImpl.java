@@ -4,11 +4,15 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
+import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
+import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.prediction.dto.PredictionImportBatchDto;
 import com.jingcaicompass.prediction.dto.PredictionImportDto;
 import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
 import com.jingcaicompass.prediction.entity.Prediction;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
@@ -60,6 +64,7 @@ public class PredictionImportServiceImpl implements PredictionImportService {
 
     private final PredictionImportFileParser fileParser;
     private final MatchMapper matchMapper;
+    private final AsianOddsSnapshotMapper asianOddsSnapshotMapper;
     private final PredictionMapper predictionMapper;
     private final PredictionImportWriter importWriter;
     private final Clock clock;
@@ -67,12 +72,14 @@ public class PredictionImportServiceImpl implements PredictionImportService {
     public PredictionImportServiceImpl(
             PredictionImportFileParser fileParser,
             MatchMapper matchMapper,
+            AsianOddsSnapshotMapper asianOddsSnapshotMapper,
             PredictionMapper predictionMapper,
             PredictionImportWriter importWriter,
             Clock clock
     ) {
         this.fileParser = fileParser;
         this.matchMapper = matchMapper;
+        this.asianOddsSnapshotMapper = asianOddsSnapshotMapper;
         this.predictionMapper = predictionMapper;
         this.importWriter = importWriter;
         this.clock = clock;
@@ -95,6 +102,7 @@ public class PredictionImportServiceImpl implements PredictionImportService {
 
         // 4) 批量加载比赛并确认当前仍允许导入
         validateMatches(batch.predictions());
+        validateAsianMarkets(batch.predictions());
 
         // 5) 为每个比赛/模型分配下一历史版本，构造完整 DRAFT 集合
         List<Prediction> predictions = buildDraftPredictions(batch);
@@ -170,6 +178,12 @@ public class PredictionImportServiceImpl implements PredictionImportService {
         if (item.generatedAt() == null) {
             throw invalid(fieldPrefix + ".generatedAt must not be null");
         }
+        AsianMarketPrediction asianMarketPrediction = normalizeAsianMarketPrediction(
+                item,
+                fieldPrefix,
+                modelVersion,
+                featureVersion
+        );
 
         return new PredictionImportDto(
                 item.matchId(),
@@ -182,7 +196,42 @@ public class PredictionImportServiceImpl implements PredictionImportService {
                 expectedGoals,
                 item.confidenceLevel(),
                 summary,
-                item.generatedAt().truncatedTo(ChronoUnit.MICROS)
+                item.generatedAt().truncatedTo(ChronoUnit.MICROS),
+                asianMarketPrediction.asianOddsSnapshotId(),
+                asianMarketPrediction.asianHandicapPick(),
+                asianMarketPrediction.totalGoalsPick()
+        );
+    }
+
+    private AsianMarketPrediction normalizeAsianMarketPrediction(
+            PredictionImportDto item,
+            String fieldPrefix,
+            String modelVersion,
+            String featureVersion
+    ) {
+        boolean hasAsianSnapshot = item.asianOddsSnapshotId() != null;
+        boolean hasAsianHandicapPick = item.asianHandicapPick() != null;
+        boolean hasTotalGoalsPick = item.totalGoalsPick() != null;
+        if (!hasAsianSnapshot && !hasAsianHandicapPick && !hasTotalGoalsPick) {
+            if (BaselinePredictionGenerationServiceImpl.MODEL_VERSION.equals(modelVersion)
+                    || BaselinePredictionGenerationServiceImpl.FEATURE_VERSION.equals(featureVersion)) {
+                throw invalid(fieldPrefix + ".Asian market prediction fields are required for baseline V2");
+            }
+            return AsianMarketPrediction.EMPTY;
+        }
+        if (!hasAsianSnapshot || item.asianOddsSnapshotId() <= 0) {
+            throw invalid(fieldPrefix + ".asianOddsSnapshotId must be positive when Asian market predictions exist");
+        }
+        if (!hasAsianHandicapPick) {
+            throw invalid(fieldPrefix + ".asianHandicapPick must not be null when Asian market predictions exist");
+        }
+        if (!hasTotalGoalsPick) {
+            throw invalid(fieldPrefix + ".totalGoalsPick must not be null when Asian market predictions exist");
+        }
+        return new AsianMarketPrediction(
+                item.asianOddsSnapshotId(),
+                item.asianHandicapPick(),
+                item.totalGoalsPick()
         );
     }
 
@@ -256,6 +305,9 @@ public class PredictionImportServiceImpl implements PredictionImportService {
                 && decimalEquals(prediction.getAwayWinProb(), item.awayWinProb())
                 && prediction.getHandicapPick() == item.handicapPick()
                 && decimalEquals(prediction.getExpectedTotalGoals(), item.expectedTotalGoals())
+                && Objects.equals(prediction.getAsianOddsSnapshotId(), item.asianOddsSnapshotId())
+                && prediction.getAsianHandicapPick() == item.asianHandicapPick()
+                && prediction.getTotalGoalsPick() == item.totalGoalsPick()
                 && prediction.getConfidenceLevel() == item.confidenceLevel()
                 && Objects.equals(prediction.getAnalysisSummary(), item.analysisSummary())
                 && Objects.equals(prediction.getGeneratedAt(), item.generatedAt());
@@ -306,6 +358,9 @@ public class PredictionImportServiceImpl implements PredictionImportService {
             prediction.setAwayWinProb(item.awayWinProb());
             prediction.setHandicapPick(item.handicapPick());
             prediction.setExpectedTotalGoals(item.expectedTotalGoals());
+            prediction.setAsianOddsSnapshotId(item.asianOddsSnapshotId());
+            prediction.setAsianHandicapPick(item.asianHandicapPick());
+            prediction.setTotalGoalsPick(item.totalGoalsPick());
             prediction.setConfidenceLevel(item.confidenceLevel());
             prediction.setAnalysisSummary(item.analysisSummary());
             prediction.setGeneratedAt(item.generatedAt());
@@ -379,5 +434,52 @@ public class PredictionImportServiceImpl implements PredictionImportService {
     }
 
     private record PredictionKey(Long matchId, String modelVersion) {
+    }
+
+    private void validateAsianMarkets(List<PredictionImportDto> predictions) {
+        List<Long> snapshotIds = predictions.stream()
+                .map(PredictionImportDto::asianOddsSnapshotId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (snapshotIds.isEmpty()) {
+            return;
+        }
+        Map<Long, AsianOddsSnapshot> snapshots = asianOddsSnapshotMapper.selectBatchIds(snapshotIds).stream()
+                .collect(java.util.stream.Collectors.toMap(AsianOddsSnapshot::getId, snapshot -> snapshot));
+        for (PredictionImportDto prediction : predictions) {
+            if (prediction.asianOddsSnapshotId() == null) {
+                continue;
+            }
+            AsianOddsSnapshot snapshot = snapshots.get(prediction.asianOddsSnapshotId());
+            if (!isCompleteAsianMarketForMatch(snapshot, prediction.matchId())) {
+                throw invalid("confirmed complete Asian market snapshot not found for prediction: "
+                        + prediction.matchId() + "/" + prediction.asianOddsSnapshotId());
+            }
+        }
+    }
+
+    private boolean isCompleteAsianMarketForMatch(AsianOddsSnapshot snapshot, Long matchId) {
+        return snapshot != null
+                && Objects.equals(snapshot.getMatchId(), matchId)
+                && snapshot.getCapturedAt() != null
+                && snapshot.getHandicapLine() != null
+                && snapshot.getTotalLine() != null
+                && positive(snapshot.getHomeOdds())
+                && positive(snapshot.getAwayOdds())
+                && positive(snapshot.getOverOdds())
+                && positive(snapshot.getUnderOdds());
+    }
+
+    private boolean positive(BigDecimal value) {
+        return value != null && value.compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    private record AsianMarketPrediction(
+            Long asianOddsSnapshotId,
+            AsianHandicapPickEnum asianHandicapPick,
+            TotalGoalsPickEnum totalGoalsPick
+    ) {
+        private static final AsianMarketPrediction EMPTY = new AsianMarketPrediction(null, null, null);
     }
 }

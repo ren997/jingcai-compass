@@ -1,11 +1,13 @@
 import type {
   ConfidenceLevel,
   HandicapPick,
+  AsianHandicapPick,
   MatchDataAvailability,
   MatchStatus,
   OddsSnapshotType,
   PredictionStatus,
   PublicSnapshotAvailability,
+  TotalGoalsPick,
 } from '../../services/public';
 
 export const statusLabels: Record<MatchStatus, string> = {
@@ -38,9 +40,19 @@ const predictionStatusLabels: Record<PredictionStatus, string> = {
 };
 
 const handicapPickLabels: Record<HandicapPick, string> = {
-  HOME_WIN: '让球主胜',
-  DRAW: '让球平局',
-  AWAY_WIN: '让球客胜',
+  HOME_WIN: '主胜',
+  DRAW: '平局',
+  AWAY_WIN: '客胜',
+};
+
+const asianHandicapPickLabels: Record<AsianHandicapPick, string> = {
+  HOME_COVER: '主队赢盘',
+  AWAY_COVER: '客队赢盘',
+};
+
+const totalGoalsPickLabels: Record<TotalGoalsPick, string> = {
+  OVER: '大球',
+  UNDER: '小球',
 };
 
 const confidenceLabels: Record<ConfidenceLevel, string> = {
@@ -97,6 +109,14 @@ export function predictionStatusLabel(value: PredictionStatus) {
 
 export function handicapPickLabel(value: HandicapPick) {
   return handicapPickLabels[value];
+}
+
+export function asianHandicapPickLabel(value: AsianHandicapPick | null | undefined) {
+  return value ? asianHandicapPickLabels[value] : '暂缺';
+}
+
+export function totalGoalsPickLabel(value: TotalGoalsPick | null | undefined) {
+  return value ? totalGoalsPickLabels[value] : '暂缺';
 }
 
 export function confidenceLabel(value: ConfidenceLevel) {

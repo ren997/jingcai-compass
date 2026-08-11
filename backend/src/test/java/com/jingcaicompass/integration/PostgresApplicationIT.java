@@ -38,7 +38,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V19 与数据库原生行为。
+ * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V20 与数据库原生行为。
  */
 @Testcontainers
 @ActiveProfiles("integration")
@@ -102,8 +102,8 @@ class PostgresApplicationIT {
                 .filter(info -> info.getVersion() != null)
                 .toArray(MigrationInfo[]::new);
 
-        assertThat(applied).hasSize(19);
-        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("19");
+        assertThat(applied).hasSize(20);
+        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("20");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
@@ -171,6 +171,130 @@ class PostgresApplicationIT {
                 "external_display_name", "external_normalized_key", "external_scope");
         assertThat(providerTeamMappingColumns).contains(
                 "external_display_name", "external_normalized_key", "external_scope");
+
+        List<String> predictionColumns = jdbcTemplate.queryForList(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'predictions'
+                """,
+                String.class
+        );
+        assertThat(predictionColumns).contains(
+                "asian_odds_snapshot_id", "asian_handicap_pick", "total_goals_pick"
+        );
+    }
+
+    @Test
+    void enforcesAsianPredictionCompletenessSnapshotMatchAndPublishedImmutability() {
+        long firstMatchId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO matches (
+                    lottery_match_no, lottery_date, league_name, home_team_name, away_team_name,
+                    kickoff_time, match_status
+                )
+                VALUES ('T610-001', DATE '2036-01-01', 'T610 League', 'T610 Home', 'T610 Away',
+                        TIMESTAMPTZ '2036-01-01 12:00:00+08', 'SCHEDULED')
+                RETURNING id
+                """,
+                Long.class
+        );
+        long secondMatchId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO matches (
+                    lottery_match_no, lottery_date, league_name, home_team_name, away_team_name,
+                    kickoff_time, match_status
+                )
+                VALUES ('T610-002', DATE '2036-01-01', 'T610 League', 'T610 Other Home', 'T610 Other Away',
+                        TIMESTAMPTZ '2036-01-01 13:00:00+08', 'SCHEDULED')
+                RETURNING id
+                """,
+                Long.class
+        );
+        long asianSnapshotId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO asian_odds_snapshots (
+                    match_id, provider_code, bookmaker_code, handicap_line, home_odds, away_odds,
+                    total_line, over_odds, under_odds, snapshot_type, captured_at, raw_payload_hash
+                )
+                VALUES (?, 'T610_ASIAN', 'T610_BOOK', -0.50, 1.85, 1.95, 2.50, 1.82, 2.02,
+                        'PRE_KICKOFF', TIMESTAMPTZ '2036-01-01 10:00:00+08', ?)
+                RETURNING id
+                """,
+                Long.class,
+                firstMatchId,
+                "b".repeat(64)
+        );
+
+        long predictionId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, home_win_prob, draw_prob, away_win_prob, handicap_pick,
+                    expected_total_goals, asian_odds_snapshot_id, asian_handicap_pick, total_goals_pick,
+                    confidence_level, analysis_summary, generated_at
+                )
+                VALUES (?, 't306-odds-baseline-v2', 't306-sporttery-asian-v2', 'T610-BATCH', ?, 1,
+                        0.400000, 0.300000, 0.300000, 'HOME_WIN', 2.50, ?, 'HOME_COVER', 'UNDER',
+                        'MEDIUM', 'T610 可解释基线。', TIMESTAMPTZ '2036-01-01 10:01:00+08')
+                RETURNING id
+                """,
+                Long.class,
+                firstMatchId,
+                "c".repeat(64),
+                asianSnapshotId
+        );
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, home_win_prob, draw_prob, away_win_prob, handicap_pick,
+                    expected_total_goals, asian_odds_snapshot_id, asian_handicap_pick, total_goals_pick,
+                    confidence_level, analysis_summary, generated_at
+                )
+                VALUES (?, 'model-invalid', 'feature-invalid', 'T610-INCOMPLETE', ?, 1,
+                        0.400000, 0.300000, 0.300000, 'HOME_WIN', 2.50, ?, 'HOME_COVER', NULL,
+                        'LOW', '不完整亚盘预测。', TIMESTAMPTZ '2036-01-01 10:01:00+08')
+                """,
+                firstMatchId,
+                "d".repeat(64),
+                asianSnapshotId
+        )).isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, home_win_prob, draw_prob, away_win_prob, handicap_pick,
+                    expected_total_goals, asian_odds_snapshot_id, asian_handicap_pick, total_goals_pick,
+                    confidence_level, analysis_summary, generated_at
+                )
+                VALUES (?, 'model-wrong-match', 'feature-wrong-match', 'T610-WRONG-MATCH', ?, 1,
+                        0.400000, 0.300000, 0.300000, 'HOME_WIN', 2.50, ?, 'HOME_COVER', 'UNDER',
+                        'LOW', '错误比赛快照。', TIMESTAMPTZ '2036-01-01 10:01:00+08')
+                """,
+                secondMatchId,
+                "e".repeat(64),
+                asianSnapshotId
+        )).isInstanceOf(DataAccessException.class);
+
+        jdbcTemplate.update(
+                """
+                UPDATE predictions
+                SET prediction_status = 'PUBLISHED',
+                    publish_time = TIMESTAMPTZ '2036-01-01 10:02:00+08',
+                    lock_time = TIMESTAMPTZ '2036-01-01 11:00:00+08',
+                    prediction_hash = ?
+                WHERE id = ?
+                """,
+                "f".repeat(64),
+                predictionId
+        );
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE predictions SET total_goals_pick = 'OVER' WHERE id = ?",
+                predictionId
+        )).isInstanceOf(DataAccessException.class);
     }
 
     @Test

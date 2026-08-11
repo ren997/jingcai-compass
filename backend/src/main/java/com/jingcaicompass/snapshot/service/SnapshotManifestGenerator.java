@@ -34,7 +34,8 @@ import org.springframework.util.StringUtils;
 @Component
 public class SnapshotManifestGenerator {
 
-    public static final int MANIFEST_SCHEMA_VERSION = 1;
+    public static final int LEGACY_MANIFEST_SCHEMA_VERSION = 1;
+    public static final int MANIFEST_SCHEMA_VERSION = 2;
     private static final int PROBABILITY_SCALE = 6;
     private static final int EXPECTED_GOALS_SCALE = 2;
     private static final String SHA256_PATTERN = "^[0-9a-f]{64}$";
@@ -89,7 +90,7 @@ public class SnapshotManifestGenerator {
         // 2) 使用 JVM 固定字符串比较与数字顺序排序，隔离数据库 collation 差异
         items.sort(ITEM_ORDER);
         PredictionSnapshotManifestDto manifest = new PredictionSnapshotManifestDto(
-                MANIFEST_SCHEMA_VERSION,
+                manifestSchemaVersion(items),
                 businessDate.toString(),
                 items.size(),
                 List.copyOf(items)
@@ -103,6 +104,12 @@ public class SnapshotManifestGenerator {
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("snapshot manifest serialization failed", exception);
         }
+    }
+
+    private int manifestSchemaVersion(List<PredictionSnapshotManifestItemDto> items) {
+        return items.stream().anyMatch(item ->
+                item.predictionHashSchemaVersion() == PredictionContentHasher.HASH_SCHEMA_VERSION
+        ) ? MANIFEST_SCHEMA_VERSION : LEGACY_MANIFEST_SCHEMA_VERSION;
     }
 
     private PredictionSnapshotManifestItemDto toManifestItem(Prediction prediction) {
@@ -127,7 +134,7 @@ public class SnapshotManifestGenerator {
         }
 
         return new PredictionSnapshotManifestItemDto(
-                PredictionContentHasher.HASH_SCHEMA_VERSION,
+                predictionContentHasher.hashSchemaVersion(source),
                 requirePositive(source.getId(), "predictionId"),
                 requirePositive(source.getMatchId(), "matchId"),
                 requireText(source.getModelVersion(), "modelVersion"),
@@ -147,6 +154,9 @@ public class SnapshotManifestGenerator {
                         "expectedTotalGoals",
                         EXPECTED_GOALS_SCALE
                 ),
+                source.getAsianOddsSnapshotId(),
+                source.getAsianHandicapPick() == null ? null : source.getAsianHandicapPick().getCode(),
+                source.getTotalGoalsPick() == null ? null : source.getTotalGoalsPick().getCode(),
                 Objects.requireNonNull(
                         source.getConfidenceLevel(),
                         "confidenceLevel must not be null"

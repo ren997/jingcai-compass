@@ -36,6 +36,10 @@ export type PredictionStatus = 'PUBLISHED' | 'LOCKED';
 
 export type HandicapPick = 'HOME_WIN' | 'DRAW' | 'AWAY_WIN';
 
+export type AsianHandicapPick = 'HOME_COVER' | 'AWAY_COVER';
+
+export type TotalGoalsPick = 'OVER' | 'UNDER';
+
 export type ConfidenceLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type PublicSnapshotAvailability = 'AVAILABLE' | 'UNAVAILABLE';
@@ -105,6 +109,9 @@ export type MatchPredictionSummaryVo = {
   awayWinProb: number;
   handicapPick: HandicapPick;
   expectedTotalGoals: number;
+  asianHandicapPick?: AsianHandicapPick | null;
+  totalGoalsPick?: TotalGoalsPick | null;
+  asianMarket?: PredictionAsianMarketVo | null;
   confidenceLevel: ConfidenceLevel;
 };
 
@@ -134,6 +141,22 @@ export type AsianOddsMarketVo = {
   underOdds: number | null;
   snapshotType: OddsSnapshotType;
   capturedAt: string | null;
+  providerUpdatedAt: string | null;
+};
+
+/** 模型生成时绑定的已确认完整亚盘快照；与列表中的“当前亚盘主盘”可能不同。 */
+export type PredictionAsianMarketVo = {
+  asianOddsSnapshotId: number;
+  providerCode: string;
+  bookmakerCode: string;
+  handicapLine: number;
+  homeOdds: number;
+  awayOdds: number;
+  totalLine: number;
+  overOdds: number;
+  underOdds: number;
+  snapshotType: OddsSnapshotType;
+  capturedAt: string;
   providerUpdatedAt: string | null;
 };
 
@@ -197,6 +220,9 @@ export type PredictionVersionVo = {
   awayWinProb: number;
   handicapPick: HandicapPick;
   expectedTotalGoals: number;
+  asianHandicapPick?: AsianHandicapPick | null;
+  totalGoalsPick?: TotalGoalsPick | null;
+  asianMarket?: PredictionAsianMarketVo | null;
   confidenceLevel: ConfidenceLevel;
   analysisSummary: string;
   generatedAt: string;

@@ -9,9 +9,11 @@ import com.jingcaicompass.prediction.dto.PredictionLockResultDto;
 import com.jingcaicompass.prediction.dto.PredictionPublishDto;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.BaselinePredictionSkipReasonEnum;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.service.BaselinePredictionGenerationService;
 import com.jingcaicompass.prediction.service.PredictionImportService;
@@ -227,8 +229,11 @@ class PredictionImportApplicationIT {
                 .eq(Prediction::getGenerationBatchId, first.generationBatchId()));
         assertThat(saved.getMatchId()).isEqualTo(FIRST_MATCH_ID);
         assertThat(saved.getPredictionStatus()).isEqualTo(PredictionStatusEnum.DRAFT);
-        assertThat(saved.getModelVersion()).isEqualTo("t306-odds-baseline-v1");
-        assertThat(saved.getFeatureVersion()).isEqualTo("t306-sporttery-asian-v1");
+        assertThat(saved.getModelVersion()).isEqualTo("t306-odds-baseline-v2");
+        assertThat(saved.getFeatureVersion()).isEqualTo("t306-sporttery-asian-v2");
+        assertThat(saved.getAsianOddsSnapshotId()).isNotNull();
+        assertThat(saved.getAsianHandicapPick()).isEqualTo(AsianHandicapPickEnum.HOME_COVER);
+        assertThat(saved.getTotalGoalsPick()).isEqualTo(TotalGoalsPickEnum.OVER);
         assertThat(saved.getHomeWinProb().add(saved.getDrawProb()).add(saved.getAwayWinProb()))
                 .isEqualByComparingTo("1.000000");
 

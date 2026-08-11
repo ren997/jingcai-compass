@@ -8,6 +8,7 @@ import {
 import NotFoundPage from '../../pages/NotFoundPage';
 import {
   availabilityLabel,
+  asianHandicapPickLabel,
   confidenceLabel,
   dataSourceLabel,
   formatProbability,
@@ -19,6 +20,7 @@ import {
   publicSnapshotAvailabilityLabel,
   snapshotTypeLabel,
   statusLabels,
+  totalGoalsPickLabel,
 } from './matchPresentation';
 import {
   useMatchDetailQuery,
@@ -160,8 +162,11 @@ export default function MatchDetailPage() {
                       </header>
                       <dl className="metadata-list prediction-metadata">
                         <div><dt>主胜 / 平局 / 客胜</dt><dd>{formatProbability(prediction.homeWinProb)} / {formatProbability(prediction.drawProb)} / {formatProbability(prediction.awayWinProb)}</dd></div>
-                        <div><dt>让球倾向</dt><dd>{handicapPickLabel(prediction.handicapPick)}</dd></div>
+                        <div><dt>竞彩让球胜平负</dt><dd>{handicapPickLabel(prediction.handicapPick)}</dd></div>
                         <div><dt>预期总进球</dt><dd>{formatNumber(prediction.expectedTotalGoals)}</dd></div>
+                        {prediction.asianHandicapPick && <div><dt>亚盘让球</dt><dd>{asianHandicapPickLabel(prediction.asianHandicapPick)}</dd></div>}
+                        {prediction.totalGoalsPick && <div><dt>亚盘大小球</dt><dd>{totalGoalsPickLabel(prediction.totalGoalsPick)}</dd></div>}
+                        {prediction.asianMarket && <div><dt>生成亚盘快照</dt><dd>#{prediction.asianMarket.asianOddsSnapshotId} · {prediction.asianMarket.bookmakerCode} · 亚洲{formatHandicap(prediction.asianMarket.handicapLine)} 主 {formatNumber(prediction.asianMarket.homeOdds)} / 客 {formatNumber(prediction.asianMarket.awayOdds)}；大小球 {formatNumber(prediction.asianMarket.totalLine)} 大 {formatNumber(prediction.asianMarket.overOdds)} / 小 {formatNumber(prediction.asianMarket.underOdds)} · {formatTimestamp(prediction.asianMarket.capturedAt)}</dd></div>}
                         <div><dt>置信等级</dt><dd>{confidenceLabel(prediction.confidenceLevel)}</dd></div>
                         <div><dt>生成 / 发布时间</dt><dd>{formatTimestamp(prediction.generatedAt)} / {formatTimestamp(prediction.publishTime)}</dd></div>
                         <div><dt>锁定时间</dt><dd>{formatTimestamp(prediction.lockTime)}</dd></div>

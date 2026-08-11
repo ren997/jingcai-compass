@@ -7,7 +7,9 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import java.math.BigDecimal;
 import java.time.Instant;
 import lombok.Data;
@@ -56,6 +58,15 @@ public class Prediction {
 
     /** 预期总进球 */
     private BigDecimal expectedTotalGoals;
+
+    /** 生成时使用的已确认完整亚盘快照 ID */
+    private Long asianOddsSnapshotId;
+
+    /** 亚盘让球赢盘方向 */
+    private AsianHandicapPickEnum asianHandicapPick;
+
+    /** 亚盘大小球方向 */
+    private TotalGoalsPickEnum totalGoalsPick;
 
     /**
      * 模型置信等级

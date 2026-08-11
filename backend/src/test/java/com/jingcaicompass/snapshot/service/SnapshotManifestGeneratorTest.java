@@ -7,7 +7,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.service.PredictionContentHasher;
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
@@ -93,6 +95,25 @@ class SnapshotManifestGeneratorTest {
                 );
         assertThat(first.bytes()).containsExactly(second.bytes());
         assertThat(first.sha256()).isEqualTo(second.sha256());
+    }
+
+    @Test
+    void includesAsianMarketDirectionsInV2Manifest() {
+        Prediction prediction = publishedPrediction(303_002L, 303_102L, "model-v2", 1);
+        prediction.setAsianOddsSnapshotId(9901L);
+        prediction.setAsianHandicapPick(AsianHandicapPickEnum.AWAY_COVER);
+        prediction.setTotalGoalsPick(TotalGoalsPickEnum.UNDER);
+        prediction.setPredictionHash(predictionContentHasher.sha256Hex(prediction, PUBLISH_TIME, LOCK_TIME));
+
+        String json = new String(generator.generate(SNAPSHOT_DATE, List.of(prediction)).bytes(), StandardCharsets.UTF_8);
+
+        assertThat(json).contains(
+                "\"schemaVersion\":2",
+                "\"predictionHashSchemaVersion\":2",
+                "\"asianOddsSnapshotId\":9901",
+                "\"asianHandicapPick\":\"AWAY_COVER\"",
+                "\"totalGoalsPick\":\"UNDER\""
+        );
     }
 
     @Test

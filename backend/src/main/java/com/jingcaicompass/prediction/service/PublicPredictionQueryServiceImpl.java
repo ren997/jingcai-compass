@@ -3,6 +3,8 @@ package com.jingcaicompass.prediction.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.mapper.MatchMapper;
+import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
+import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.prediction.dto.PredictionDetailQueryDto;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
@@ -11,6 +13,7 @@ import com.jingcaicompass.prediction.vo.PredictionModelDetailVo;
 import com.jingcaicompass.prediction.vo.PredictionSnapshotVerificationVo;
 import com.jingcaicompass.prediction.vo.PredictionSnapshotVo;
 import com.jingcaicompass.prediction.vo.PredictionVersionVo;
+import com.jingcaicompass.prediction.vo.PredictionAsianMarketVo;
 import com.jingcaicompass.snapshot.dto.PredictionSnapshotManifestDto;
 import com.jingcaicompass.snapshot.dto.PredictionSnapshotManifestItemDto;
 import com.jingcaicompass.snapshot.dto.PublicPredictionSnapshotDownloadDto;
@@ -41,6 +44,7 @@ public class PublicPredictionQueryServiceImpl implements PublicPredictionQuerySe
 
     private final MatchMapper matchMapper;
     private final PredictionMapper predictionMapper;
+    private final AsianOddsSnapshotMapper asianOddsSnapshotMapper;
     private final PredictionSnapshotMapper snapshotMapper;
     private final SnapshotStorage snapshotStorage;
     private final ObjectMapper objectMapper;
@@ -48,15 +52,28 @@ public class PublicPredictionQueryServiceImpl implements PublicPredictionQuerySe
     public PublicPredictionQueryServiceImpl(
             MatchMapper matchMapper,
             PredictionMapper predictionMapper,
+            AsianOddsSnapshotMapper asianOddsSnapshotMapper,
             PredictionSnapshotMapper snapshotMapper,
             SnapshotStorage snapshotStorage,
             ObjectMapper objectMapper
     ) {
         this.matchMapper = matchMapper;
         this.predictionMapper = predictionMapper;
+        this.asianOddsSnapshotMapper = asianOddsSnapshotMapper;
         this.snapshotMapper = snapshotMapper;
         this.snapshotStorage = snapshotStorage;
         this.objectMapper = objectMapper;
+    }
+
+    /** 兼容仅验证历史 V1 公开预测的无亚盘快照测试构造。 */
+    public PublicPredictionQueryServiceImpl(
+            MatchMapper matchMapper,
+            PredictionMapper predictionMapper,
+            PredictionSnapshotMapper snapshotMapper,
+            SnapshotStorage snapshotStorage,
+            ObjectMapper objectMapper
+    ) {
+        this(matchMapper, predictionMapper, null, snapshotMapper, snapshotStorage, objectMapper);
     }
 
     @Override
@@ -74,6 +91,7 @@ public class PublicPredictionQueryServiceImpl implements PublicPredictionQuerySe
 
         // 2) 每个模型最后一个公开版本为当前版本，按精确 ID 和哈希查询可关联快照。
         Map<String, List<Prediction>> predictionsByModel = groupByModel(publicPredictions);
+        Map<Long, AsianOddsSnapshot> asianMarkets = loadAsianMarkets(publicPredictions);
         Set<PredictionIdentity> currentIdentities = currentIdentities(predictionsByModel);
         Map<PredictionIdentity, PredictionSnapshotVo> snapshots = findVerifiedSnapshots(
                 match.getLotteryDate(),
@@ -97,7 +115,8 @@ public class PublicPredictionQueryServiceImpl implements PublicPredictionQuerySe
                         version,
                         replacesId,
                         PublicSnapshotAvailabilityEnum.UNAVAILABLE,
-                        null
+                        null,
+                        predictionAsianMarket(asianMarkets, version)
                 ));
             }
             models.add(new PredictionModelDetailVo(
@@ -108,7 +127,8 @@ public class PublicPredictionQueryServiceImpl implements PublicPredictionQuerySe
                             snapshot == null
                                     ? PublicSnapshotAvailabilityEnum.UNAVAILABLE
                                     : PublicSnapshotAvailabilityEnum.AVAILABLE,
-                            snapshot
+                            snapshot,
+                            predictionAsianMarket(asianMarkets, current)
                     ),
                     history
             ));
@@ -243,7 +263,8 @@ public class PublicPredictionQueryServiceImpl implements PublicPredictionQuerySe
             Prediction prediction,
             Long replacesPredictionId,
             PublicSnapshotAvailabilityEnum snapshotAvailability,
-            PredictionSnapshotVo snapshot
+            PredictionSnapshotVo snapshot,
+            AsianOddsSnapshot asianMarket
     ) {
         return new PredictionVersionVo(
                 prediction.getId(),
@@ -256,6 +277,9 @@ public class PublicPredictionQueryServiceImpl implements PublicPredictionQuerySe
                 prediction.getAwayWinProb(),
                 prediction.getHandicapPick(),
                 prediction.getExpectedTotalGoals(),
+                prediction.getAsianHandicapPick(),
+                prediction.getTotalGoalsPick(),
+                asianMarket == null ? null : toAsianMarketVo(asianMarket),
                 prediction.getConfidenceLevel(),
                 prediction.getAnalysisSummary(),
                 prediction.getGeneratedAt(),
@@ -264,6 +288,49 @@ public class PublicPredictionQueryServiceImpl implements PublicPredictionQuerySe
                 prediction.getPredictionHash(),
                 snapshotAvailability,
                 snapshot
+        );
+    }
+
+    private Map<Long, AsianOddsSnapshot> loadAsianMarkets(List<Prediction> predictions) {
+        Set<Long> snapshotIds = new LinkedHashSet<>();
+        for (Prediction prediction : predictions) {
+            if (prediction.getAsianOddsSnapshotId() != null) {
+                snapshotIds.add(prediction.getAsianOddsSnapshotId());
+            }
+        }
+        if (snapshotIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, AsianOddsSnapshot> result = new LinkedHashMap<>();
+        for (AsianOddsSnapshot snapshot : asianOddsSnapshotMapper.selectBatchIds(snapshotIds)) {
+            result.put(snapshot.getId(), snapshot);
+        }
+        return result;
+    }
+
+    private AsianOddsSnapshot predictionAsianMarket(
+            Map<Long, AsianOddsSnapshot> asianMarkets,
+            Prediction prediction
+    ) {
+        return prediction.getAsianOddsSnapshotId() == null
+                ? null
+                : asianMarkets.get(prediction.getAsianOddsSnapshotId());
+    }
+
+    private PredictionAsianMarketVo toAsianMarketVo(AsianOddsSnapshot snapshot) {
+        return new PredictionAsianMarketVo(
+                snapshot.getId(),
+                snapshot.getProviderCode(),
+                snapshot.getBookmakerCode(),
+                snapshot.getHandicapLine(),
+                snapshot.getHomeOdds(),
+                snapshot.getAwayOdds(),
+                snapshot.getTotalLine(),
+                snapshot.getOverOdds(),
+                snapshot.getUnderOdds(),
+                snapshot.getSnapshotType(),
+                snapshot.getCapturedAt(),
+                snapshot.getProviderUpdatedAt()
         );
     }
 

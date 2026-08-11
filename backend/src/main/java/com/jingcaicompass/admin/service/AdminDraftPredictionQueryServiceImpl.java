@@ -7,6 +7,7 @@ import com.jingcaicompass.admin.mapper.AdminDraftPredictionRow;
 import com.jingcaicompass.admin.vo.AdminDraftPredictionListItemVo;
 import com.jingcaicompass.admin.vo.AdminDraftPredictionPageVo;
 import com.jingcaicompass.admin.vo.AdminPredictionMatchVo;
+import com.jingcaicompass.prediction.vo.PredictionAsianMarketVo;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import java.util.List;
 import javax.sql.DataSource;
@@ -54,10 +55,31 @@ public class AdminDraftPredictionQueryServiceImpl implements AdminDraftPredictio
         return new AdminDraftPredictionListItemVo(
                 row.getPredictionId(), row.getModelVersion(), row.getFeatureVersion(), row.getGenerationBatchId(),
                 row.getGenerationBatchHash(), row.getPredictionVersion(), row.getHomeWinProb(), row.getDrawProb(),
-                row.getAwayWinProb(), row.getHandicapPick(), row.getExpectedTotalGoals(), row.getConfidenceLevel(),
+                row.getAwayWinProb(), row.getHandicapPick(), row.getExpectedTotalGoals(), row.getAsianHandicapPick(),
+                row.getTotalGoalsPick(), asianMarket(row), row.getConfidenceLevel(),
                 row.getAnalysisSummary(), row.getGeneratedAt(),
                 new AdminPredictionMatchVo(row.getMatchId(), row.getLotteryDate(), row.getLotteryMatchNo(),
                         row.getLeagueName(), row.getHomeTeamName(), row.getAwayTeamName(), row.getKickoffTime())
+        );
+    }
+
+    private PredictionAsianMarketVo asianMarket(AdminDraftPredictionRow row) {
+        if (row.getAsianOddsSnapshotId() == null) {
+            return null;
+        }
+        return new PredictionAsianMarketVo(
+                row.getAsianOddsSnapshotId(),
+                row.getAsianProviderCode(),
+                row.getAsianBookmakerCode(),
+                row.getAsianHandicapLine(),
+                row.getAsianHomeOdds(),
+                row.getAsianAwayOdds(),
+                row.getAsianTotalLine(),
+                row.getAsianOverOdds(),
+                row.getAsianUnderOdds(),
+                row.getAsianSnapshotType(),
+                row.getAsianCapturedAt(),
+                row.getAsianProviderUpdatedAt()
         );
     }
 

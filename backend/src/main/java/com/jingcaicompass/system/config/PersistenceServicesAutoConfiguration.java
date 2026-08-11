@@ -236,6 +236,7 @@ public class PersistenceServicesAutoConfiguration {
     PublicPredictionQueryService publicPredictionQueryService(
             MatchMapper matchMapper,
             PredictionMapper predictionMapper,
+            AsianOddsSnapshotMapper asianOddsSnapshotMapper,
             PredictionSnapshotMapper predictionSnapshotMapper,
             SnapshotStorage snapshotStorage,
             ObjectMapper objectMapper
@@ -243,6 +244,7 @@ public class PersistenceServicesAutoConfiguration {
         return new PublicPredictionQueryServiceImpl(
                 matchMapper,
                 predictionMapper,
+                asianOddsSnapshotMapper,
                 predictionSnapshotMapper,
                 snapshotStorage,
                 objectMapper
@@ -384,6 +386,7 @@ public class PersistenceServicesAutoConfiguration {
     PredictionImportService predictionImportService(
             PredictionImportFileParser predictionImportFileParser,
             MatchMapper matchMapper,
+            AsianOddsSnapshotMapper asianOddsSnapshotMapper,
             PredictionMapper predictionMapper,
             PredictionImportWriter predictionImportWriter,
             Clock predictionImportClock
@@ -391,6 +394,7 @@ public class PersistenceServicesAutoConfiguration {
         return new PredictionImportServiceImpl(
                 predictionImportFileParser,
                 matchMapper,
+                asianOddsSnapshotMapper,
                 predictionMapper,
                 predictionImportWriter,
                 predictionImportClock

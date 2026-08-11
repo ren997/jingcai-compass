@@ -13,8 +13,10 @@ import com.jingcaicompass.prediction.dto.PredictionImportDto;
 import com.jingcaicompass.prediction.dto.PredictionImportFileDto;
 import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
 import com.jingcaicompass.prediction.enums.BaselinePredictionSkipReasonEnum;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.vo.BaselinePredictionGenerationVo;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -53,8 +55,8 @@ import org.springframework.util.StringUtils;
 @ConditionalOnBean(DataSource.class)
 public class BaselinePredictionGenerationServiceImpl implements BaselinePredictionGenerationService {
 
-    static final String MODEL_VERSION = "t306-odds-baseline-v1";
-    static final String FEATURE_VERSION = "t306-sporttery-asian-v1";
+    static final String MODEL_VERSION = "t306-odds-baseline-v2";
+    static final String FEATURE_VERSION = "t306-sporttery-asian-v2";
     private static final Logger LOG = LoggerFactory.getLogger(BaselinePredictionGenerationServiceImpl.class);
     private static final int PROBABILITY_SCALE = 6;
     private static final BigDecimal HALF = new BigDecimal("0.5");
@@ -271,6 +273,8 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
         HandicapPickEnum handicapPick = pick(
                 sporttery.getHhadHomeSp(), sporttery.getHhadDrawSp(), sporttery.getHhadAwaySp()
         );
+        AsianHandicapPickEnum asianHandicapPick = asianHandicapPick(asian.getHomeOdds(), asian.getAwayOdds());
+        TotalGoalsPickEnum totalGoalsPick = totalGoalsPick(asian.getOverOdds(), asian.getUnderOdds());
         BigDecimal expectedGoals = expectedGoals(asian.getTotalLine(), asian.getOverOdds(), asian.getUnderOdds());
         ConfidenceLevelEnum confidence = confidence(sporttery, asian);
         return new PredictionImportDto(
@@ -283,8 +287,19 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 handicapPick,
                 expectedGoals,
                 confidence,
-                summary(probabilities, sporttery, asian, handicapPick, expectedGoals),
-                generatedAt
+                summary(
+                        probabilities,
+                        sporttery,
+                        asian,
+                        handicapPick,
+                        asianHandicapPick,
+                        totalGoalsPick,
+                        expectedGoals
+                ),
+                generatedAt,
+                asian.getId(),
+                asianHandicapPick,
+                totalGoalsPick
         );
     }
 
@@ -330,6 +345,18 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
         return HandicapPickEnum.AWAY_WIN;
     }
 
+    private AsianHandicapPickEnum asianHandicapPick(BigDecimal homeOdds, BigDecimal awayOdds) {
+        return homeOdds.compareTo(awayOdds) <= 0
+                ? AsianHandicapPickEnum.HOME_COVER
+                : AsianHandicapPickEnum.AWAY_COVER;
+    }
+
+    private TotalGoalsPickEnum totalGoalsPick(BigDecimal overOdds, BigDecimal underOdds) {
+        return overOdds.compareTo(underOdds) <= 0
+                ? TotalGoalsPickEnum.OVER
+                : TotalGoalsPickEnum.UNDER;
+    }
+
     private BigDecimal expectedGoals(BigDecimal totalLine, BigDecimal overOdds, BigDecimal underOdds) {
         BigDecimal overImplied = inverse(overOdds);
         BigDecimal underImplied = inverse(underOdds);
@@ -362,6 +389,8 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
             SportteryPoolSnapshot sporttery,
             AsianOddsSnapshot asian,
             HandicapPickEnum handicapPick,
+            AsianHandicapPickEnum asianHandicapPick,
+            TotalGoalsPickEnum totalGoalsPick,
             BigDecimal expectedGoals
     ) {
         return "可解释基线：体彩胜平负 SP 归一化为主胜 "
@@ -369,10 +398,13 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 + "、平局 " + probabilities.draw().toPlainString()
                 + "、客胜 " + probabilities.away().toPlainString()
                 + "；官方让球 " + sporttery.getOfficialHandicap().toPlainString()
-                + " 的让球倾向为 " + handicapPick.getDesc()
-                + "；亚洲让球 " + asian.getHandicapLine().toPlainString()
-                + "、大小球 " + asian.getTotalLine().toPlainString()
-                + " 推导预期总进球 " + expectedGoals.toPlainString() + "。";
+                + " 的竞彩让球胜平负倾向为 " + handicapPick.getDesc()
+                + "；亚盘快照 #" + asian.getId()
+                + "（" + asian.getBookmakerCode() + " / " + asian.getProviderCode() + "）让球 "
+                + asian.getHandicapLine().toPlainString() + " 为 " + asianHandicapPick.getDesc()
+                + "，大小球 " + asian.getTotalLine().toPlainString() + " 为 " + totalGoalsPick.getDesc()
+                + "；预期总进球 " + expectedGoals.toPlainString()
+                + "。以上亚盘方向为可解释赔率基线，不代表独立校准概率或正期望。";
     }
 
     private String batchId(LocalDate lotteryDate, List<PredictionImportDto> predictions) {
@@ -391,6 +423,9 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 + "|" + prediction.awayWinProb().toPlainString()
                 + "|" + prediction.handicapPick().getCode()
                 + "|" + prediction.expectedTotalGoals().toPlainString()
+                + "|" + prediction.asianOddsSnapshotId()
+                + "|" + prediction.asianHandicapPick().getCode()
+                + "|" + prediction.totalGoalsPick().getCode()
                 + "|" + prediction.confidenceLevel().getCode()
                 + "|" + prediction.analysisSummary()
                 + "|" + prediction.generatedAt();

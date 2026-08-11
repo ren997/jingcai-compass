@@ -1,4 +1,5 @@
 import { requestApi } from './http';
+import type { AsianHandicapPick, PredictionAsianMarketVo, TotalGoalsPick } from './public';
 import type { AdminSession } from '../types/api';
 import type { PageResult } from './public';
 
@@ -154,6 +155,9 @@ export type AdminDraftPredictionListItem = {
   awayWinProb: number;
   handicapPick: 'HOME_WIN' | 'DRAW' | 'AWAY_WIN';
   expectedTotalGoals: number;
+  asianHandicapPick?: AsianHandicapPick | null;
+  totalGoalsPick?: TotalGoalsPick | null;
+  asianMarket?: PredictionAsianMarketVo | null;
   confidenceLevel: 'LOW' | 'MEDIUM' | 'HIGH';
   analysisSummary: string;
   generatedAt: string;

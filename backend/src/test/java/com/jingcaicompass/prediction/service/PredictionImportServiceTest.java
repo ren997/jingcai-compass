@@ -14,13 +14,17 @@ import com.baomidou.mybatisplus.core.conditions.Wrapper;
 import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
+import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
+import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.prediction.dto.PredictionImportBatchDto;
 import com.jingcaicompass.prediction.dto.PredictionImportDto;
 import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
@@ -54,6 +58,9 @@ class PredictionImportServiceTest {
     private MatchMapper matchMapper;
 
     @Mock
+    private AsianOddsSnapshotMapper asianOddsSnapshotMapper;
+
+    @Mock
     private PredictionMapper predictionMapper;
 
     @Mock
@@ -66,6 +73,7 @@ class PredictionImportServiceTest {
         service = new PredictionImportServiceImpl(
                 fileParser,
                 matchMapper,
+                asianOddsSnapshotMapper,
                 predictionMapper,
                 importWriter,
                 Clock.fixed(NOW, ZoneOffset.UTC)
@@ -158,6 +166,80 @@ class PredictionImportServiceTest {
 
         assertInvalid(() -> service.importFile(new byte[] {1}), "duplicate match/model");
         verifyNoInteractions(matchMapper, predictionMapper, importWriter);
+    }
+
+    @Test
+    void rejectsIncompleteAsianMarketPredictionBeforeDatabaseAccess() {
+        PredictionImportDto first = validItem(1L);
+        PredictionImportDto incomplete = new PredictionImportDto(
+                first.matchId(),
+                first.modelVersion(),
+                first.featureVersion(),
+                first.homeWinProb(),
+                first.drawProb(),
+                first.awayWinProb(),
+                first.handicapPick(),
+                first.expectedTotalGoals(),
+                first.confidenceLevel(),
+                first.analysisSummary(),
+                first.generatedAt(),
+                3001L,
+                AsianHandicapPickEnum.HOME_COVER,
+                null
+        );
+        when(fileParser.parse(any())).thenReturn(batch("batch-incomplete-asian", List.of(incomplete)));
+
+        assertInvalid(() -> service.importFile(new byte[] {1}), "totalGoalsPick must not be null");
+        verifyNoInteractions(matchMapper, predictionMapper, importWriter);
+    }
+
+    @Test
+    void requiresAndPersistsCompleteAsianMarketPredictionForBaselineV2() {
+        PredictionImportDto item = baselineV2Item(1L);
+        when(fileParser.parse(any())).thenReturn(batch("batch-asian-v2", List.of(item)));
+        when(predictionMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(matchMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                match(1L, MatchStatusEnum.SCHEDULED, NOW.plusSeconds(3600))
+        ));
+        when(asianOddsSnapshotMapper.selectBatchIds(List.of(9001L))).thenReturn(List.of(completeAsianSnapshot(1L)));
+        when(predictionMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(importWriter.writeAll(anyList())).thenAnswer(invocation -> {
+            List<Prediction> predictions = invocation.getArgument(0);
+            predictions.getFirst().setId(201L);
+            return predictions;
+        });
+
+        PredictionImportResultDto result = service.importFile(new byte[] {1});
+
+        assertThat(result.insertedCount()).isOne();
+        ArgumentCaptor<List<Prediction>> captor = ArgumentCaptor.forClass(List.class);
+        verify(importWriter).writeAll(captor.capture());
+        assertThat(captor.getValue()).singleElement().satisfies(prediction -> {
+            assertThat(prediction.getAsianOddsSnapshotId()).isEqualTo(9001L);
+            assertThat(prediction.getAsianHandicapPick()).isEqualTo(AsianHandicapPickEnum.HOME_COVER);
+            assertThat(prediction.getTotalGoalsPick()).isEqualTo(TotalGoalsPickEnum.UNDER);
+        });
+    }
+
+    @Test
+    void rejectsBaselineV2WithoutAsianMarketPredictionBeforeDatabaseAccess() {
+        PredictionImportDto legacyShape = new PredictionImportDto(
+                1L,
+                BaselinePredictionGenerationServiceImpl.MODEL_VERSION,
+                BaselinePredictionGenerationServiceImpl.FEATURE_VERSION,
+                new BigDecimal("0.4"),
+                new BigDecimal("0.3"),
+                new BigDecimal("0.3"),
+                HandicapPickEnum.HOME_WIN,
+                new BigDecimal("2.5"),
+                ConfidenceLevelEnum.HIGH,
+                "两队均有机会",
+                Instant.parse("2026-07-26T00:00:00Z")
+        );
+        when(fileParser.parse(any())).thenReturn(batch("batch-v2-missing-asian", List.of(legacyShape)));
+
+        assertInvalid(() -> service.importFile(new byte[] {1}), "Asian market prediction fields are required");
+        verifyNoInteractions(matchMapper, asianOddsSnapshotMapper, predictionMapper, importWriter);
     }
 
     @Test
@@ -301,6 +383,39 @@ class PredictionImportServiceTest {
                 summary,
                 Instant.parse("2026-07-26T00:00:00.123456789Z")
         );
+    }
+
+    private static PredictionImportDto baselineV2Item(Long matchId) {
+        return new PredictionImportDto(
+                matchId,
+                BaselinePredictionGenerationServiceImpl.MODEL_VERSION,
+                BaselinePredictionGenerationServiceImpl.FEATURE_VERSION,
+                new BigDecimal("0.4"),
+                new BigDecimal("0.3"),
+                new BigDecimal("0.3"),
+                HandicapPickEnum.HOME_WIN,
+                new BigDecimal("2.5"),
+                ConfidenceLevelEnum.HIGH,
+                "两队均有机会，需关注临场变化",
+                Instant.parse("2026-07-26T00:00:00.123456789Z"),
+                9001L,
+                AsianHandicapPickEnum.HOME_COVER,
+                TotalGoalsPickEnum.UNDER
+        );
+    }
+
+    private static AsianOddsSnapshot completeAsianSnapshot(Long matchId) {
+        AsianOddsSnapshot snapshot = new AsianOddsSnapshot();
+        snapshot.setId(9001L);
+        snapshot.setMatchId(matchId);
+        snapshot.setHandicapLine(new BigDecimal("-0.5"));
+        snapshot.setHomeOdds(new BigDecimal("1.80"));
+        snapshot.setAwayOdds(new BigDecimal("2.05"));
+        snapshot.setTotalLine(new BigDecimal("2.50"));
+        snapshot.setOverOdds(new BigDecimal("1.85"));
+        snapshot.setUnderOdds(new BigDecimal("2.00"));
+        snapshot.setCapturedAt(NOW.minusSeconds(60));
+        return snapshot;
     }
 
     private static MatchEntity match(Long id, MatchStatusEnum status, Instant kickoff) {

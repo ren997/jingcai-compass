@@ -19,6 +19,8 @@ import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
 import com.jingcaicompass.prediction.enums.BaselinePredictionSkipReasonEnum;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.vo.BaselinePredictionGenerationVo;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -107,8 +109,11 @@ class BaselinePredictionGenerationServiceTest {
             assertThat(prediction.awayWinProb()).isEqualByComparingTo("0.276250");
             assertThat(prediction.handicapPick()).isEqualTo(HandicapPickEnum.HOME_WIN);
             assertThat(prediction.expectedTotalGoals()).isEqualByComparingTo("2.51");
+            assertThat(prediction.asianOddsSnapshotId()).isEqualTo(501L);
+            assertThat(prediction.asianHandicapPick()).isEqualTo(AsianHandicapPickEnum.HOME_COVER);
+            assertThat(prediction.totalGoalsPick()).isEqualTo(TotalGoalsPickEnum.OVER);
             assertThat(prediction.confidenceLevel()).isEqualTo(ConfidenceLevelEnum.MEDIUM);
-            assertThat(prediction.analysisSummary()).contains("可解释基线", "官方让球 -1");
+            assertThat(prediction.analysisSummary()).contains("可解释基线", "官方让球 -1", "不代表独立校准概率");
             assertThat(prediction.generatedAt()).isEqualTo(Instant.parse("2026-08-10T02:00:00Z"));
         });
         assertThat(result.candidateCount()).isEqualTo(1);
@@ -165,7 +170,10 @@ class BaselinePredictionGenerationServiceTest {
 
     private AsianOddsSnapshot asian(long matchId) {
         AsianOddsSnapshot snapshot = new AsianOddsSnapshot();
+        snapshot.setId(501L);
         snapshot.setMatchId(matchId);
+        snapshot.setProviderCode("ASIAN_TEST");
+        snapshot.setBookmakerCode("BOOK_A");
         snapshot.setHandicapLine(new BigDecimal("-0.50"));
         snapshot.setHomeOdds(new BigDecimal("1.90"));
         snapshot.setAwayOdds(new BigDecimal("1.90"));

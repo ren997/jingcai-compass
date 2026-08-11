@@ -28,6 +28,7 @@ import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
+import com.jingcaicompass.prediction.vo.PredictionAsianMarketVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -211,14 +212,38 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         if (matchIds.isEmpty()) {
             return Map.of();
         }
-        return predictionMapper.selectCurrentPublishedByMatchIds(matchIds).stream()
+        List<Prediction> predictions = predictionMapper.selectCurrentPublishedByMatchIds(matchIds).stream()
                 .filter(prediction -> prediction.getPredictionStatus() == PredictionStatusEnum.PUBLISHED
                         || prediction.getPredictionStatus() == PredictionStatusEnum.LOCKED)
+                .toList();
+        Map<Long, AsianOddsSnapshot> asianSnapshots = loadPredictionAsianMarkets(predictions);
+        return predictions.stream()
                 .collect(Collectors.groupingBy(
                         Prediction::getMatchId,
                         java.util.LinkedHashMap::new,
-                        Collectors.mapping(this::toPredictionSummaryVo, Collectors.toList())
+                        Collectors.mapping(
+                                prediction -> toPredictionSummaryVo(
+                                        prediction,
+                                        prediction.getAsianOddsSnapshotId() == null
+                                                ? null
+                                                : asianSnapshots.get(prediction.getAsianOddsSnapshotId())
+                                ),
+                                Collectors.toList()
+                        )
                 ));
+    }
+
+    private Map<Long, AsianOddsSnapshot> loadPredictionAsianMarkets(List<Prediction> predictions) {
+        List<Long> snapshotIds = predictions.stream()
+                .map(Prediction::getAsianOddsSnapshotId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        if (snapshotIds.isEmpty()) {
+            return Map.of();
+        }
+        return asianOddsSnapshotMapper.selectBatchIds(snapshotIds).stream()
+                .collect(Collectors.toMap(AsianOddsSnapshot::getId, snapshot -> snapshot));
     }
 
     private List<Long> matchIds(Collection<MatchEntity> matches) {
@@ -338,7 +363,7 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         );
     }
 
-    private MatchPredictionSummaryVo toPredictionSummaryVo(Prediction prediction) {
+    private MatchPredictionSummaryVo toPredictionSummaryVo(Prediction prediction, AsianOddsSnapshot asianMarket) {
         return new MatchPredictionSummaryVo(
                 prediction.getModelVersion(),
                 prediction.getPredictionStatus(),
@@ -347,7 +372,27 @@ public class MatchQueryServiceImpl implements MatchQueryService {
                 prediction.getAwayWinProb(),
                 prediction.getHandicapPick(),
                 prediction.getExpectedTotalGoals(),
+                prediction.getAsianHandicapPick(),
+                prediction.getTotalGoalsPick(),
+                asianMarket == null ? null : toPredictionAsianMarketVo(asianMarket),
                 prediction.getConfidenceLevel()
+        );
+    }
+
+    private PredictionAsianMarketVo toPredictionAsianMarketVo(AsianOddsSnapshot snapshot) {
+        return new PredictionAsianMarketVo(
+                snapshot.getId(),
+                snapshot.getProviderCode(),
+                snapshot.getBookmakerCode(),
+                snapshot.getHandicapLine(),
+                snapshot.getHomeOdds(),
+                snapshot.getAwayOdds(),
+                snapshot.getTotalLine(),
+                snapshot.getOverOdds(),
+                snapshot.getUnderOdds(),
+                snapshot.getSnapshotType(),
+                snapshot.getCapturedAt(),
+                snapshot.getProviderUpdatedAt()
         );
     }
 

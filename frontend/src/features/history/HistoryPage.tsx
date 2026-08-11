@@ -180,7 +180,7 @@ export default function HistoryPage() {
                         <div><dt>发布时间</dt><dd>{formatTimestamp(record.publishTime)}</dd></div>
                         <div><dt>锁定时间</dt><dd>{formatTimestamp(record.lockTime)}</dd></div>
                         <div><dt>主胜 / 平局 / 客胜</dt><dd>{formatProbability(record.homeWinProb)} / {formatProbability(record.drawProb)} / {formatProbability(record.awayWinProb)}</dd></div>
-                        <div><dt>让球倾向</dt><dd>{handicapPickLabel(record.handicapPick)}</dd></div>
+                        <div><dt>竞彩让球胜平负</dt><dd>{handicapPickLabel(record.handicapPick)}</dd></div>
                         <div><dt>当前赛果</dt><dd>{factScore(fact)}{fact ? ` · ${factStatusLabel(fact.factStatus)} · ${factSourceLabel(fact.resultSource)}` : ''}</dd></div>
                         <div><dt>比赛状态</dt><dd>{fact ? statusLabels[fact.matchStatus] : '待赛果'}</dd></div>
                       </dl>

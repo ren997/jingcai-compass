@@ -23,7 +23,8 @@ import org.springframework.util.StringUtils;
 @Component
 public class PredictionContentHasher {
 
-    public static final int HASH_SCHEMA_VERSION = 1;
+    public static final int LEGACY_HASH_SCHEMA_VERSION = 1;
+    public static final int HASH_SCHEMA_VERSION = 2;
     private static final int PROBABILITY_SCALE = 6;
     private static final int EXPECTED_GOALS_SCALE = 2;
     private static final BigDecimal MIN_PROBABILITY_SUM = new BigDecimal("0.999999");
@@ -59,8 +60,8 @@ public class PredictionContentHasher {
             throw new IllegalArgumentException("probability sum must be within 1 +/- 0.000001");
         }
 
-        CanonicalPrediction canonical = new CanonicalPrediction(
-                HASH_SCHEMA_VERSION,
+        CanonicalPredictionV1 base = new CanonicalPredictionV1(
+                LEGACY_HASH_SCHEMA_VERSION,
                 requirePositive(prediction.getId(), "predictionId"),
                 requirePositive(prediction.getMatchId(), "matchId"),
                 requireText(prediction.getModelVersion(), "modelVersion"),
@@ -83,6 +84,43 @@ public class PredictionContentHasher {
                 formatInstant(normalizedLockTime)
         );
 
+        if (!hasAsianMarketPrediction(prediction)) {
+            return sha256Hex(base);
+        }
+
+        CanonicalPredictionV2 canonical = new CanonicalPredictionV2(
+                HASH_SCHEMA_VERSION,
+                base.predictionId(),
+                base.matchId(),
+                base.modelVersion(),
+                base.featureVersion(),
+                base.generationBatchId(),
+                base.generationBatchHash(),
+                base.predictionVersion(),
+                base.homeWinProb(),
+                base.drawProb(),
+                base.awayWinProb(),
+                base.handicapPick(),
+                base.expectedTotalGoals(),
+                requirePositive(prediction.getAsianOddsSnapshotId(), "asianOddsSnapshotId"),
+                prediction.getAsianHandicapPick().getCode(),
+                prediction.getTotalGoalsPick().getCode(),
+                base.confidenceLevel(),
+                base.analysisSummary(),
+                base.generatedAt(),
+                base.publishTime(),
+                base.lockTime()
+        );
+        return sha256Hex(canonical);
+    }
+
+    /** 返回当前预测内容所使用的规范化哈希结构版本。 */
+    public int hashSchemaVersion(Prediction prediction) {
+        Objects.requireNonNull(prediction, "prediction must not be null");
+        return hasAsianMarketPrediction(prediction) ? HASH_SCHEMA_VERSION : LEGACY_HASH_SCHEMA_VERSION;
+    }
+
+    private String sha256Hex(Object canonical) {
         try {
             // 1) 使用固定 record 字段顺序生成无缩进 UTF-8 JSON
             byte[] canonicalBytes = canonicalObjectMapper.writeValueAsString(canonical)
@@ -97,6 +135,19 @@ public class PredictionContentHasher {
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 algorithm is unavailable", exception);
         }
+    }
+
+    private boolean hasAsianMarketPrediction(Prediction prediction) {
+        boolean hasSnapshot = prediction.getAsianOddsSnapshotId() != null;
+        boolean hasHandicapPick = prediction.getAsianHandicapPick() != null;
+        boolean hasTotalGoalsPick = prediction.getTotalGoalsPick() != null;
+        if (!hasSnapshot && !hasHandicapPick && !hasTotalGoalsPick) {
+            return false;
+        }
+        if (!hasSnapshot || !hasHandicapPick || !hasTotalGoalsPick) {
+            throw new IllegalArgumentException("Asian market prediction fields must be all present or all absent");
+        }
+        return true;
     }
 
     private BigDecimal normalizeProbability(BigDecimal value, String field) {
@@ -186,7 +237,7 @@ public class PredictionContentHasher {
             "publishTime",
             "lockTime"
     })
-    private record CanonicalPrediction(
+    private record CanonicalPredictionV1(
             int hashSchemaVersion,
             Long predictionId,
             Long matchId,
@@ -200,6 +251,54 @@ public class PredictionContentHasher {
             BigDecimal awayWinProb,
             String handicapPick,
             BigDecimal expectedTotalGoals,
+            String confidenceLevel,
+            String analysisSummary,
+            String generatedAt,
+            String publishTime,
+            String lockTime
+    ) {
+    }
+
+    @JsonPropertyOrder({
+            "hashSchemaVersion",
+            "predictionId",
+            "matchId",
+            "modelVersion",
+            "featureVersion",
+            "generationBatchId",
+            "generationBatchHash",
+            "predictionVersion",
+            "homeWinProb",
+            "drawProb",
+            "awayWinProb",
+            "handicapPick",
+            "expectedTotalGoals",
+            "asianOddsSnapshotId",
+            "asianHandicapPick",
+            "totalGoalsPick",
+            "confidenceLevel",
+            "analysisSummary",
+            "generatedAt",
+            "publishTime",
+            "lockTime"
+    })
+    private record CanonicalPredictionV2(
+            int hashSchemaVersion,
+            Long predictionId,
+            Long matchId,
+            String modelVersion,
+            String featureVersion,
+            String generationBatchId,
+            String generationBatchHash,
+            Integer predictionVersion,
+            BigDecimal homeWinProb,
+            BigDecimal drawProb,
+            BigDecimal awayWinProb,
+            String handicapPick,
+            BigDecimal expectedTotalGoals,
+            Long asianOddsSnapshotId,
+            String asianHandicapPick,
+            String totalGoalsPick,
             String confidenceLevel,
             String analysisSummary,
             String generatedAt,

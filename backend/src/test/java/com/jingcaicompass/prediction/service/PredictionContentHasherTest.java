@@ -7,6 +7,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import java.math.BigDecimal;
 import java.time.Instant;
 import org.junit.jupiter.api.BeforeEach;
@@ -44,6 +46,21 @@ class PredictionContentHasherTest {
                 .isEqualTo("3cca51633125f5d94a9ac0f9e621738c801903718143e6b70f14791b000c8cc8")
                 .isEqualTo(secondHash)
                 .matches("^[0-9a-f]{64}$");
+    }
+
+    @Test
+    void includesBoundAsianMarketDirectionsInV2Hash() {
+        Prediction prediction = prediction();
+        prediction.setAsianOddsSnapshotId(901L);
+        prediction.setAsianHandicapPick(AsianHandicapPickEnum.AWAY_COVER);
+        prediction.setTotalGoalsPick(TotalGoalsPickEnum.UNDER);
+
+        String first = hasher.sha256Hex(prediction, PUBLISH_TIME, LOCK_TIME);
+        prediction.setTotalGoalsPick(TotalGoalsPickEnum.OVER);
+        String second = hasher.sha256Hex(prediction, PUBLISH_TIME, LOCK_TIME);
+
+        assertThat(hasher.hashSchemaVersion(prediction)).isEqualTo(PredictionContentHasher.HASH_SCHEMA_VERSION);
+        assertThat(first).isNotEqualTo(second).matches("^[0-9a-f]{64}$");
     }
 
     @Test

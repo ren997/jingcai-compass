@@ -1,6 +1,7 @@
 package com.jingcaicompass.snapshot.dto;
 
 import com.fasterxml.jackson.annotation.JsonPropertyOrder;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.math.BigDecimal;
 
 /**
@@ -19,6 +20,9 @@ import java.math.BigDecimal;
  * @param awayWinProb 客胜概率
  * @param handicapPick 让球胜平负倾向
  * @param expectedTotalGoals 预期总进球
+ * @param asianOddsSnapshotId 生成时使用的亚盘快照 ID；历史 V1 预测为空
+ * @param asianHandicapPick 亚盘让球赢盘方向；历史 V1 预测为空
+ * @param totalGoalsPick 亚盘大小球方向；历史 V1 预测为空
  * @param confidenceLevel 置信等级
  * @param analysisSummary 合规公开分析摘要
  * @param generatedAt 模型生成时间，UTC 微秒格式
@@ -40,6 +44,9 @@ import java.math.BigDecimal;
         "awayWinProb",
         "handicapPick",
         "expectedTotalGoals",
+        "asianOddsSnapshotId",
+        "asianHandicapPick",
+        "totalGoalsPick",
         "confidenceLevel",
         "analysisSummary",
         "generatedAt",
@@ -47,6 +54,7 @@ import java.math.BigDecimal;
         "lockTime",
         "predictionHash"
 })
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public record PredictionSnapshotManifestItemDto(
         int predictionHashSchemaVersion,
         Long predictionId,
@@ -61,6 +69,9 @@ public record PredictionSnapshotManifestItemDto(
         BigDecimal awayWinProb,
         String handicapPick,
         BigDecimal expectedTotalGoals,
+        Long asianOddsSnapshotId,
+        String asianHandicapPick,
+        String totalGoalsPick,
         String confidenceLevel,
         String analysisSummary,
         String generatedAt,

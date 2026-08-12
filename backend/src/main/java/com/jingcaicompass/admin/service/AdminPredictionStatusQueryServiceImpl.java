@@ -144,7 +144,8 @@ public class AdminPredictionStatusQueryServiceImpl implements AdminPredictionSta
                 item.predictionId(), item.modelVersion(), item.featureVersion(), item.predictionVersion(), item.predictionStatus(),
                 item.publishTime(), item.lockTime(), item.predictionHash(),
                 new AdminPredictionMatchVo(item.match().matchId(), item.match().lotteryDate(), item.match().lotteryMatchNo(),
-                        item.match().leagueName(), item.match().homeTeamName(), item.match().awayTeamName(), item.match().kickoffTime()),
+                        item.match().leagueName(), item.match().homeTeamName(), item.match().awayTeamName(), item.match().kickoffTime(),
+                        null),
                 lockDiagnostics(item, referenceTime), currentFact == null ? null : toFact(currentFact), had, hhad,
                 settlementDiagnostics(currentFact, had, hhad)
         );

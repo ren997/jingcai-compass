@@ -3,12 +3,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { AdminBaselinePredictionGeneration, AdminDraftPredictionListItem } from '../../services/admin';
 import {
-  asianHandicapPickLabel,
+  asianHandicapPredictionLabel,
   confidenceLabel,
   formatNumber,
   formatProbability,
   formatTimestamp,
-  handicapPickLabel,
+  sportteryHandicapPredictionLabel,
   totalGoalsPickLabel,
 } from '../matches/matchPresentation';
 import {
@@ -151,8 +151,8 @@ function DraftCard({
     <dl><div><dt>模型 / 特征</dt><dd>{item.modelVersion} / {item.featureVersion}</dd></div>
       <div><dt>生成时间</dt><dd>{formatTimestamp(item.generatedAt)}</dd></div><div><dt>生成批次</dt><dd title={item.generationBatchId}>{item.generationBatchId}</dd></div>
       <div><dt>主胜 / 平 / 客胜</dt><dd>{formatProbability(item.homeWinProb)} / {formatProbability(item.drawProb)} / {formatProbability(item.awayWinProb)}</dd></div>
-      <div><dt>竞彩让球胜平负</dt><dd>{handicapPickLabel(item.handicapPick)}</dd></div><div><dt>预期总进球 / 置信度</dt><dd>{formatNumber(item.expectedTotalGoals)} / {confidenceLabel(item.confidenceLevel)}</dd></div>
-      {item.asianHandicapPick && <div><dt>亚盘让球</dt><dd>{asianHandicapPickLabel(item.asianHandicapPick)}</dd></div>}{item.totalGoalsPick && <div><dt>亚盘大小球</dt><dd>{totalGoalsPickLabel(item.totalGoalsPick)}</dd></div>}
+      <div><dt>竞彩让球胜平负</dt><dd>{sportteryHandicapPredictionLabel(item.match.officialHandicap, item.handicapPick)}</dd></div><div><dt>预期总进球 / 置信度</dt><dd>{formatNumber(item.expectedTotalGoals)} / {confidenceLabel(item.confidenceLevel)}</dd></div>
+      {item.asianHandicapPick && <div><dt>亚盘让球</dt><dd>{asianHandicapPredictionLabel(item.asianMarket?.handicapLine, item.asianHandicapPick)}</dd></div>}{item.totalGoalsPick && <div><dt>亚盘大小球</dt><dd>{totalGoalsPickLabel(item.totalGoalsPick)}</dd></div>}
       {item.asianMarket && <div><dt>生成亚盘快照</dt><dd>#{item.asianMarket.asianOddsSnapshotId} · {item.asianMarket.bookmakerCode} · 亚洲{formatNumber(item.asianMarket.handicapLine)} 主 {formatNumber(item.asianMarket.homeOdds)} / 客 {formatNumber(item.asianMarket.awayOdds)}；大小球 {formatNumber(item.asianMarket.totalLine)} 大 {formatNumber(item.asianMarket.overOdds)} / 小 {formatNumber(item.asianMarket.underOdds)} · {formatTimestamp(item.asianMarket.capturedAt)}</dd></div>}
     </dl><p>{item.analysisSummary}</p>
   </article>;

@@ -51,6 +51,7 @@ class AdminDraftPredictionQueryServiceTest {
             assertThat(page.records()).singleElement().satisfies(item -> {
                 assertThat(item.generationBatchId()).isEqualTo("batch-20260811");
                 assertThat(item.match().lotteryMatchNo()).isEqualTo("周一001");
+                assertThat(item.match().officialHandicap()).isEqualByComparingTo("-1");
                 assertThat(item.homeWinProb()).isEqualByComparingTo("0.4600");
                 assertThat(item.asianHandicapPick()).isEqualTo(AsianHandicapPickEnum.HOME_COVER);
                 assertThat(item.totalGoalsPick()).isEqualTo(TotalGoalsPickEnum.OVER);
@@ -95,6 +96,7 @@ class AdminDraftPredictionQueryServiceTest {
         row.setHomeTeamName("主队");
         row.setAwayTeamName("客队");
         row.setKickoffTime(Instant.parse("2026-08-11T12:00:00Z"));
+        row.setOfficialHandicap(new BigDecimal("-1"));
         return row;
     }
 }

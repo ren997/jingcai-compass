@@ -59,7 +59,8 @@ public class AdminDraftPredictionQueryServiceImpl implements AdminDraftPredictio
                 row.getTotalGoalsPick(), asianMarket(row), row.getConfidenceLevel(),
                 row.getAnalysisSummary(), row.getGeneratedAt(),
                 new AdminPredictionMatchVo(row.getMatchId(), row.getLotteryDate(), row.getLotteryMatchNo(),
-                        row.getLeagueName(), row.getHomeTeamName(), row.getAwayTeamName(), row.getKickoffTime())
+                        row.getLeagueName(), row.getHomeTeamName(), row.getAwayTeamName(), row.getKickoffTime(),
+                        row.getOfficialHandicap())
         );
     }
 

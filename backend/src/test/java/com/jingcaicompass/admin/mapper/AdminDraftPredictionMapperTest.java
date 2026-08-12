@@ -23,7 +23,7 @@ class AdminDraftPredictionMapperTest {
         BoundSql countSql = configuration.getMappedStatement(statement("countDraftPredictions"))
                 .getBoundSql(Map.of("criteria", criteria));
 
-        assertThat(listSql.getSql()).contains("p.prediction_status = 'DRAFT'", "ORDER BY m.kickoff_time ASC, p.id ASC")
+        assertThat(listSql.getSql()).contains("p.prediction_status = 'DRAFT'", "official_handicap", "LEFT JOIN LATERAL", "ORDER BY m.kickoff_time ASC, p.id ASC")
                 .doesNotContain("baseline-v1");
         assertThat(countSql.getSql()).contains("p.prediction_status = 'DRAFT'").doesNotContain("baseline-v1");
         assertThat(listSql.getParameterMappings()).hasSize(4);

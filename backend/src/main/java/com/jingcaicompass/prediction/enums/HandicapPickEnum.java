@@ -8,15 +8,15 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import lombok.Getter;
 
-/** 让球胜平负倾向枚举 */
+/** 体彩让球胜平负倾向枚举；结果必须结合体彩官方让球线解读。 */
 @Getter
 public enum HandicapPickEnum {
-    HOME_WIN("HOME_WIN", "主胜"),
-    DRAW("DRAW", "平局"),
-    AWAY_WIN("AWAY_WIN", "客胜");
+    HOME_WIN("HOME_WIN", "让球胜"),
+    DRAW("DRAW", "让球平"),
+    AWAY_WIN("AWAY_WIN", "让球负");
 
     public static final String DESC =
-            "让球胜平负倾向: HOME_WIN-主胜, DRAW-平局, AWAY_WIN-客胜";
+            "体彩让球胜平负倾向: HOME_WIN-让球胜, DRAW-让球平, AWAY_WIN-让球负";
 
     private static final Map<String, HandicapPickEnum> CODE_MAP = Stream.of(values())
             .collect(Collectors.toMap(HandicapPickEnum::getCode, Function.identity()));

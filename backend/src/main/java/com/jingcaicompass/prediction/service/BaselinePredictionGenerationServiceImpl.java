@@ -398,7 +398,8 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 + "、平局 " + probabilities.draw().toPlainString()
                 + "、客胜 " + probabilities.away().toPlainString()
                 + "；官方让球 " + sporttery.getOfficialHandicap().toPlainString()
-                + " 的竞彩让球胜平负倾向为 " + handicapPick.getDesc()
+                + " 的竞彩让球胜平负（主队 " + sporttery.getOfficialHandicap().toPlainString()
+                + "）倾向为 " + handicapPick.getDesc()
                 + "；亚盘快照 #" + asian.getId()
                 + "（" + asian.getBookmakerCode() + " / " + asian.getProviderCode() + "）让球 "
                 + asian.getHandicapLine().toPlainString() + " 为 " + asianHandicapPick.getDesc()

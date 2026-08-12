@@ -140,6 +140,8 @@ export type AdminPredictionMatch = {
   homeTeamName: string;
   awayTeamName: string;
   kickoffTime: string;
+  /** 体彩让球胜平负使用的官方让球线；状态页历史兼容时可缺省。 */
+  officialHandicap?: number | null;
 };
 
 /** 发布前由管理员复核的未公开预测；草稿不会进入公共接口。 */

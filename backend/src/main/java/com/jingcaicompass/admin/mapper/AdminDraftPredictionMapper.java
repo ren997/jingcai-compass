@@ -46,9 +46,17 @@ public interface AdminDraftPredictionMapper {
                    m.league_name,
                    m.home_team_name,
                    m.away_team_name,
-                   m.kickoff_time
+                   m.kickoff_time,
+                   s.official_handicap
             FROM predictions p
             INNER JOIN matches m ON m.id = p.match_id
+            LEFT JOIN LATERAL (
+                SELECT official_handicap
+                FROM sporttery_pool_snapshots
+                WHERE match_id = p.match_id
+                ORDER BY captured_at DESC, id DESC
+                LIMIT 1
+            ) s ON TRUE
             LEFT JOIN asian_odds_snapshots a
                 ON a.id = p.asian_odds_snapshot_id
                AND a.match_id = p.match_id

@@ -26,7 +26,7 @@ class PredictionEnumsTest {
     void exposesReadableDescriptionsAndUnknownCodesAsNull() {
         assertThat(PredictionStatusEnum.LOCKED.getDesc()).isEqualTo("已锁定");
         assertThat(ConfidenceLevelEnum.MEDIUM.getDesc()).isEqualTo("中");
-        assertThat(HandicapPickEnum.HOME_WIN.getDesc()).isEqualTo("主胜");
+        assertThat(HandicapPickEnum.HOME_WIN.getDesc()).isEqualTo("让球胜");
         assertThat(PredictionSnapshotStatusEnum.PUBLISHED.getDesc()).isEqualTo("已发布");
         assertThat(SnapshotStorageTypeEnum.LOCAL.getDesc()).isEqualTo("本地文件");
         assertThat(PredictionStatusEnum.fromCode("UNKNOWN")).isNull();

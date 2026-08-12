@@ -40,9 +40,9 @@ const predictionStatusLabels: Record<PredictionStatus, string> = {
 };
 
 const handicapPickLabels: Record<HandicapPick, string> = {
-  HOME_WIN: '主胜',
-  DRAW: '平局',
-  AWAY_WIN: '客胜',
+  HOME_WIN: '让球胜',
+  DRAW: '让球平',
+  AWAY_WIN: '让球负',
 };
 
 const asianHandicapPickLabels: Record<AsianHandicapPick, string> = {
@@ -109,6 +109,23 @@ export function predictionStatusLabel(value: PredictionStatus) {
 
 export function handicapPickLabel(value: HandicapPick) {
   return handicapPickLabels[value];
+}
+
+/** 体彩让球胜平负必须同时展示官方让球，避免被误读为普通胜平负。 */
+export function sportteryHandicapPredictionLabel(
+  officialHandicap: number | null | undefined,
+  pick: HandicapPick,
+) {
+  return `竞彩让球胜平负（${formatHandicap(officialHandicap)}）：${handicapPickLabel(pick)}`;
+}
+
+/** 亚盘方向必须同时展示该方向绑定的亚洲让球线。 */
+export function asianHandicapPredictionLabel(
+  handicapLine: number | null | undefined,
+  pick: AsianHandicapPick | null | undefined,
+) {
+  const lineLabel = handicapLine === 0 ? '平手' : formatHandicap(handicapLine);
+  return `亚盘让球（${lineLabel}）：${asianHandicapPickLabel(pick)}`;
 }
 
 export function asianHandicapPickLabel(value: AsianHandicapPick | null | undefined) {

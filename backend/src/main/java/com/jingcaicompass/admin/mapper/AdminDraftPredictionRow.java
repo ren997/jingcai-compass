@@ -49,4 +49,6 @@ public class AdminDraftPredictionRow {
     private String homeTeamName;
     private String awayTeamName;
     private Instant kickoffTime;
+    /** 体彩让球胜平负使用的官方让球线。 */
+    private BigDecimal officialHandicap;
 }

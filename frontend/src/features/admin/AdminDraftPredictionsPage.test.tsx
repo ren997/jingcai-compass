@@ -12,7 +12,7 @@ const first: AdminDraftPredictionPage['records'][number] = {
   generationBatchId: 't306-baseline-2026-08-11-a', generationBatchHash: 'a'.repeat(64), predictionVersion: 1,
   homeWinProb: 0.46, drawProb: 0.28, awayWinProb: 0.26, handicapPick: 'HOME_WIN', expectedTotalGoals: 2.5,
   confidenceLevel: 'MEDIUM', analysisSummary: '主队盘口与体彩概率一致。', generatedAt: '2026-08-11T01:00:00Z',
-  match: { matchId: 27, lotteryDate: '2026-08-11', lotteryMatchNo: '周一001', leagueName: '欧冠', homeTeamName: '主队', awayTeamName: '客队', kickoffTime: '2026-08-11T12:00:00Z' },
+  match: { matchId: 27, lotteryDate: '2026-08-11', lotteryMatchNo: '周一001', leagueName: '欧冠', homeTeamName: '主队', awayTeamName: '客队', kickoffTime: '2026-08-11T12:00:00Z', officialHandicap: -1 },
 };
 const second: AdminDraftPredictionPage['records'][number] = {
   ...first, predictionId: 102, match: { ...first.match, matchId: 28, lotteryMatchNo: '周一002', homeTeamName: '另一主队', awayTeamName: '另一客队' },
@@ -122,5 +122,34 @@ describe('admin draft prediction page', () => {
     expect(fetch).toHaveBeenCalledWith('/api/admin/predictions/baseline/generate', expect.objectContaining({
       method: 'POST', body: JSON.stringify({ lotteryDate: '2026-08-11' }),
     }));
+  });
+
+  it('labels sporttery and Asian handicap directions with their distinct lines', async () => {
+    vi.mocked(fetch).mockResolvedValue(response({
+      ...page,
+      records: [{
+        ...first,
+        handicapPick: 'AWAY_WIN',
+        asianHandicapPick: 'HOME_COVER',
+        asianMarket: {
+          asianOddsSnapshotId: 501,
+          providerCode: 'THE_ODDS_API',
+          bookmakerCode: 'BOOK_A',
+          handicapLine: 0,
+          homeOdds: 1.85,
+          awayOdds: 1.98,
+          totalLine: 2,
+          overOdds: 1.82,
+          underOdds: 2.02,
+          snapshotType: 'PRE_KICKOFF',
+          capturedAt: '2026-08-11T01:00:00Z',
+          providerUpdatedAt: null,
+        },
+      }],
+    }));
+    renderPage();
+
+    expect(await screen.findByText('竞彩让球胜平负（主队 -1）：让球负')).toBeInTheDocument();
+    expect(screen.getByText('亚盘让球（平手）：主队赢盘')).toBeInTheDocument();
   });
 });

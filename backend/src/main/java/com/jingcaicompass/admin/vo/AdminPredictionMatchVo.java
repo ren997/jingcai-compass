@@ -1,5 +1,6 @@
 package com.jingcaicompass.admin.vo;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 
@@ -11,6 +12,8 @@ public record AdminPredictionMatchVo(
         String leagueName,
         String homeTeamName,
         String awayTeamName,
-        Instant kickoffTime
+        Instant kickoffTime,
+        /** 体彩让球胜平负使用的官方让球线。 */
+        BigDecimal officialHandicap
 ) {
 }

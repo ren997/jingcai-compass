@@ -87,6 +87,8 @@ export default function MatchDetailPage() {
   if (!detail) {
     return null;
   }
+  const asianModels = (predictionQuery.data?.modelPredictions ?? [])
+    .filter((model) => model.currentPrediction.predictionType === 'ASIAN');
 
   return (
     <main className="page">
@@ -129,7 +131,7 @@ export default function MatchDetailPage() {
           </div>
           {predictionQuery.isSuccess && (
             <span className="availability-badge">
-              {predictionQuery.data?.modelPredictions.length ?? 0} 个当前模型
+              {asianModels.length} 个当前模型
             </span>
           )}
         </div>
@@ -140,11 +142,11 @@ export default function MatchDetailPage() {
         {predictionQuery.isSuccess && (
           <>
             {predictionQuery.isStale && <p className="data-stale">预测数据可能已过期，请刷新。</p>}
-            {(predictionQuery.data?.modelPredictions ?? []).length === 0 ? (
-              <p className="missing-data">当前没有可公开展示的模型预测。</p>
+            {asianModels.length === 0 ? (
+              <p className="missing-data">当前没有可公开展示的亚盘预测。</p>
             ) : (
               <div className="prediction-model-list">
-                {(predictionQuery.data?.modelPredictions ?? []).map((model) => {
+                {asianModels.map((model) => {
                   const prediction = model.currentPrediction;
                   const snapshot = prediction.snapshot;
                   const verification = snapshotVerification.data?.snapshotId === snapshot?.snapshotId
@@ -161,13 +163,9 @@ export default function MatchDetailPage() {
                         <span>{predictionStatusLabel(prediction.predictionStatus)} · 第 {prediction.predictionVersion} 版</span>
                       </header>
                       <dl className="metadata-list prediction-metadata">
-                        <div><dt>主胜 / 平局 / 客胜</dt><dd>{formatProbability(prediction.homeWinProb)} / {formatProbability(prediction.drawProb)} / {formatProbability(prediction.awayWinProb)}</dd></div>
-                        <div><dt>竞彩让球胜平负</dt><dd>{sportteryHandicapPredictionLabel(detail.sportteryMarket.officialHandicap, prediction.handicapPick)}</dd></div>
-                        <div><dt>预期总进球</dt><dd>{formatNumber(prediction.expectedTotalGoals)}</dd></div>
-                        {prediction.asianHandicapPick && <div><dt>亚盘让球</dt><dd>{asianHandicapPredictionLabel(prediction.asianMarket?.handicapLine, prediction.asianHandicapPick)}</dd></div>}
-                        {prediction.totalGoalsPick && <div><dt>亚盘大小球</dt><dd>{totalGoalsPickLabel(prediction.totalGoalsPick)}</dd></div>}
+                        {prediction.asianHandicapPick && <div><dt>亚盘让球</dt><dd>{asianHandicapPredictionLabel(prediction.asianMarket?.handicapLine, prediction.asianHandicapPick)} · 置信：{confidenceLabel(prediction.asianHandicapConfidenceLevel)}</dd></div>}
+                        {prediction.totalGoalsPick && <div><dt>亚盘大小球</dt><dd>{formatNumber(prediction.asianMarket?.totalLine)}：{totalGoalsPickLabel(prediction.totalGoalsPick)} · 置信：{confidenceLabel(prediction.totalGoalsConfidenceLevel)}</dd></div>}
                         {prediction.asianMarket && <div><dt>生成亚盘快照</dt><dd>#{prediction.asianMarket.asianOddsSnapshotId} · {prediction.asianMarket.bookmakerCode} · 亚洲{formatHandicap(prediction.asianMarket.handicapLine)} 主 {formatNumber(prediction.asianMarket.homeOdds)} / 客 {formatNumber(prediction.asianMarket.awayOdds)}；大小球 {formatNumber(prediction.asianMarket.totalLine)} 大 {formatNumber(prediction.asianMarket.overOdds)} / 小 {formatNumber(prediction.asianMarket.underOdds)} · {formatTimestamp(prediction.asianMarket.capturedAt)}</dd></div>}
-                        <div><dt>置信等级</dt><dd>{confidenceLabel(prediction.confidenceLevel)}</dd></div>
                         <div><dt>生成 / 发布时间</dt><dd>{formatTimestamp(prediction.generatedAt)} / {formatTimestamp(prediction.publishTime)}</dd></div>
                         <div><dt>锁定时间</dt><dd>{formatTimestamp(prediction.lockTime)}</dd></div>
                         <div><dt>特征版本</dt><dd>{prediction.featureVersion}</dd></div>

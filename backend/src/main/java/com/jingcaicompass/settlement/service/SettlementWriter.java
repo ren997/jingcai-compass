@@ -12,6 +12,7 @@ import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.settlement.dto.MarketSettlementInputDto;
 import com.jingcaicompass.settlement.entity.Settlement;
@@ -78,7 +79,8 @@ public class SettlementWriter {
 
         // 1) 依次锁定预测与比赛，串行化重复 Job 和赛果事实变更。
         Prediction prediction = predictionMapper.selectByIdForUpdate(predictionId);
-        if (prediction == null || prediction.getPredictionStatus() != PredictionStatusEnum.LOCKED) {
+        if (prediction == null || prediction.getPredictionStatus() != PredictionStatusEnum.LOCKED
+                || (prediction.getPredictionType() != null && prediction.getPredictionType() != PredictionTypeEnum.SPORTTERY)) {
             return SettlementWriteResult.skipped();
         }
         MatchEntity match = matchMapper.selectByIdForUpdate(prediction.getMatchId());

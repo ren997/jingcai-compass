@@ -13,6 +13,7 @@ import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.service.BaselinePredictionGenerationService;
@@ -229,13 +230,18 @@ class PredictionImportApplicationIT {
                 .eq(Prediction::getGenerationBatchId, first.generationBatchId()));
         assertThat(saved.getMatchId()).isEqualTo(FIRST_MATCH_ID);
         assertThat(saved.getPredictionStatus()).isEqualTo(PredictionStatusEnum.DRAFT);
-        assertThat(saved.getModelVersion()).isEqualTo("t306-odds-baseline-v2");
-        assertThat(saved.getFeatureVersion()).isEqualTo("t306-sporttery-asian-v2");
+        assertThat(saved.getModelVersion()).isEqualTo("t306-asian-baseline-v3");
+        assertThat(saved.getFeatureVersion()).isEqualTo("t306-asian-mainline-v3");
+        assertThat(saved.getPredictionType()).isEqualTo(PredictionTypeEnum.ASIAN);
         assertThat(saved.getAsianOddsSnapshotId()).isNotNull();
-        assertThat(saved.getAsianHandicapPick()).isEqualTo(AsianHandicapPickEnum.HOME_COVER);
+        assertThat(saved.getAsianHandicapPick()).isNull();
         assertThat(saved.getTotalGoalsPick()).isEqualTo(TotalGoalsPickEnum.OVER);
-        assertThat(saved.getHomeWinProb().add(saved.getDrawProb()).add(saved.getAwayWinProb()))
-                .isEqualByComparingTo("1.000000");
+        assertThat(saved.getAsianHandicapConfidenceLevel()).isNull();
+        assertThat(saved.getTotalGoalsConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.MEDIUM);
+        assertThat(saved.getHomeWinProb()).isNull();
+        assertThat(saved.getDrawProb()).isNull();
+        assertThat(saved.getAwayWinProb()).isNull();
+        assertThat(saved.getConfidenceLevel()).isNull();
 
         // 3) 输入快照未变化时重跑复用同一批次，不产生第二条预测版本
         BaselinePredictionGenerationVo second = baselinePredictionGenerationService.generateAndImport(
@@ -270,6 +276,42 @@ class PredictionImportApplicationIT {
         assertThat(lockedPrediction.getPublishTime()).isNotNull();
         assertThat(lockedPrediction.getLockTime()).isNotNull();
         assertThat(lockedPrediction.getPredictionHash()).isEqualTo(published.predictionHash());
+    }
+
+    @Test
+    void skipsWholeMatchWhenBothAsianDirectionsAreLowConfidence() {
+        // 1) 已确认完整盘口存在，但两个市场水位完全均衡，均不足以发布。
+        insertFutureMatch(FIRST_MATCH_ID, "T610-LOW-001");
+        insertLowConfidenceAsianMarket(FIRST_MATCH_ID);
+        jdbcTemplate.update(
+                """
+                INSERT INTO match_source_mappings (
+                    match_id, provider_code, external_match_id, mapping_status,
+                    mapping_confidence, mapping_method, confirmed_by
+                ) VALUES (?, 'STUB', 't610-low-confidence', 'MANUAL_CONFIRMED',
+                          1.0000, 'MANUAL_REVIEW', 't610-it')
+                """,
+                FIRST_MATCH_ID
+        );
+
+        // 2) 两项都是 LOW 时不产生 DRAFT，也没有后续发布入口。
+        BaselinePredictionGenerationVo result = baselinePredictionGenerationService.generateAndImport(
+                LocalDate.of(2026, 7, 27),
+                "t610-it"
+        );
+
+        assertThat(result.generatedCount()).isZero();
+        assertThat(result.insertedCount()).isZero();
+        assertThat(result.generationBatchId()).isNull();
+        assertThat(result.skippedByReason()).containsEntry(
+                BaselinePredictionSkipReasonEnum.LOW_CONFIDENCE_ASIAN_MARKETS,
+                1
+        );
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM predictions WHERE match_id = ?",
+                Integer.class,
+                FIRST_MATCH_ID
+        )).isZero();
     }
 
     @Test
@@ -439,6 +481,24 @@ class PredictionImportApplicationIT {
                 """,
                 matchId,
                 asianHash.repeat(64)
+        );
+    }
+
+    private void insertLowConfidenceAsianMarket(long matchId) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO asian_odds_snapshots (
+                    match_id, provider_code, bookmaker_code,
+                    handicap_line, home_odds, away_odds,
+                    total_line, over_odds, under_odds,
+                    snapshot_type, captured_at, raw_payload_hash
+                ) VALUES (?, 'STUB', 't610-low-bookmaker',
+                          -0.50, 1.90, 1.90,
+                          2.50, 1.90, 1.90,
+                          'FIRST_SEEN', TIMESTAMPTZ '2026-07-26 10:00:00+08', ?)
+                """,
+                matchId,
+                "a".repeat(64)
         );
     }
 

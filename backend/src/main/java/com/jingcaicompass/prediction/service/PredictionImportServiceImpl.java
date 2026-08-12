@@ -12,6 +12,7 @@ import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -155,6 +156,56 @@ public class PredictionImportServiceImpl implements PredictionImportService {
         }
         String modelVersion = requireText(item.modelVersion(), fieldPrefix + ".modelVersion", 64);
         String featureVersion = requireText(item.featureVersion(), fieldPrefix + ".featureVersion", 64);
+        PredictionTypeEnum predictionType = item.predictionType() == null
+                ? PredictionTypeEnum.SPORTTERY
+                : item.predictionType();
+        SportteryCorePrediction sportteryCore = normalizeSportteryCorePrediction(item, fieldPrefix, predictionType);
+        String summary = requireText(item.analysisSummary(), fieldPrefix + ".analysisSummary", 1000);
+        validateSummary(summary, fieldPrefix);
+        if (item.generatedAt() == null) {
+            throw invalid(fieldPrefix + ".generatedAt must not be null");
+        }
+        AsianMarketPrediction asianMarketPrediction = normalizeAsianMarketPrediction(
+                item,
+                fieldPrefix,
+                modelVersion,
+                featureVersion
+        );
+
+        return new PredictionImportDto(
+                item.matchId(),
+                modelVersion,
+                featureVersion,
+                sportteryCore.homeWinProb(),
+                sportteryCore.drawProb(),
+                sportteryCore.awayWinProb(),
+                sportteryCore.handicapPick(),
+                sportteryCore.expectedTotalGoals(),
+                sportteryCore.confidenceLevel(),
+                summary,
+                item.generatedAt().truncatedTo(ChronoUnit.MICROS),
+                asianMarketPrediction.asianOddsSnapshotId(),
+                asianMarketPrediction.asianHandicapPick(),
+                asianMarketPrediction.totalGoalsPick(),
+                asianMarketPrediction.asianHandicapConfidenceLevel(),
+                asianMarketPrediction.totalGoalsConfidenceLevel(),
+                predictionType
+        );
+    }
+
+    private SportteryCorePrediction normalizeSportteryCorePrediction(
+            PredictionImportDto item,
+            String fieldPrefix,
+            PredictionTypeEnum predictionType
+    ) {
+        if (predictionType == PredictionTypeEnum.ASIAN) {
+            if (item.homeWinProb() != null || item.drawProb() != null || item.awayWinProb() != null
+                    || item.handicapPick() != null || item.expectedTotalGoals() != null
+                    || item.confidenceLevel() != null) {
+                throw invalid(fieldPrefix + ".sporttery prediction fields must be absent for Asian prediction");
+            }
+            return SportteryCorePrediction.EMPTY;
+        }
         BigDecimal home = normalizeProbability(item.homeWinProb(), fieldPrefix + ".homeWinProb");
         BigDecimal draw = normalizeProbability(item.drawProb(), fieldPrefix + ".drawProb");
         BigDecimal away = normalizeProbability(item.awayWinProb(), fieldPrefix + ".awayWinProb");
@@ -173,34 +224,7 @@ public class PredictionImportServiceImpl implements PredictionImportService {
         if (item.confidenceLevel() == null) {
             throw invalid(fieldPrefix + ".confidenceLevel must not be null");
         }
-        String summary = requireText(item.analysisSummary(), fieldPrefix + ".analysisSummary", 1000);
-        validateSummary(summary, fieldPrefix);
-        if (item.generatedAt() == null) {
-            throw invalid(fieldPrefix + ".generatedAt must not be null");
-        }
-        AsianMarketPrediction asianMarketPrediction = normalizeAsianMarketPrediction(
-                item,
-                fieldPrefix,
-                modelVersion,
-                featureVersion
-        );
-
-        return new PredictionImportDto(
-                item.matchId(),
-                modelVersion,
-                featureVersion,
-                home,
-                draw,
-                away,
-                item.handicapPick(),
-                expectedGoals,
-                item.confidenceLevel(),
-                summary,
-                item.generatedAt().truncatedTo(ChronoUnit.MICROS),
-                asianMarketPrediction.asianOddsSnapshotId(),
-                asianMarketPrediction.asianHandicapPick(),
-                asianMarketPrediction.totalGoalsPick()
-        );
+        return new SportteryCorePrediction(home, draw, away, item.handicapPick(), expectedGoals, item.confidenceLevel());
     }
 
     private AsianMarketPrediction normalizeAsianMarketPrediction(
@@ -212,6 +236,36 @@ public class PredictionImportServiceImpl implements PredictionImportService {
         boolean hasAsianSnapshot = item.asianOddsSnapshotId() != null;
         boolean hasAsianHandicapPick = item.asianHandicapPick() != null;
         boolean hasTotalGoalsPick = item.totalGoalsPick() != null;
+        boolean hasAsianHandicapConfidence = item.asianHandicapConfidenceLevel() != null;
+        boolean hasTotalGoalsConfidence = item.totalGoalsConfidenceLevel() != null;
+        if (item.predictionType() == PredictionTypeEnum.ASIAN) {
+            if (!hasAsianSnapshot || item.asianOddsSnapshotId() <= 0) {
+                throw invalid(fieldPrefix + ".asianOddsSnapshotId must be positive for Asian prediction");
+            }
+            validateAsianDirectionConfidence(
+                    hasAsianHandicapPick,
+                    item.asianHandicapConfidenceLevel(),
+                    fieldPrefix + ".asianHandicapConfidenceLevel"
+            );
+            validateAsianDirectionConfidence(
+                    hasTotalGoalsPick,
+                    item.totalGoalsConfidenceLevel(),
+                    fieldPrefix + ".totalGoalsConfidenceLevel"
+            );
+            if (!hasAsianHandicapPick && !hasTotalGoalsPick) {
+                throw invalid(fieldPrefix + " must contain at least one publishable Asian market direction");
+            }
+            return new AsianMarketPrediction(
+                    item.asianOddsSnapshotId(),
+                    item.asianHandicapPick(),
+                    item.totalGoalsPick(),
+                    item.asianHandicapConfidenceLevel(),
+                    item.totalGoalsConfidenceLevel()
+            );
+        }
+        if (hasAsianHandicapConfidence || hasTotalGoalsConfidence) {
+            throw invalid(fieldPrefix + ".Asian direction confidence is only supported for Asian prediction");
+        }
         if (!hasAsianSnapshot && !hasAsianHandicapPick && !hasTotalGoalsPick) {
             if (BaselinePredictionGenerationServiceImpl.MODEL_VERSION.equals(modelVersion)
                     || BaselinePredictionGenerationServiceImpl.FEATURE_VERSION.equals(featureVersion)) {
@@ -228,11 +282,21 @@ public class PredictionImportServiceImpl implements PredictionImportService {
         if (!hasTotalGoalsPick) {
             throw invalid(fieldPrefix + ".totalGoalsPick must not be null when Asian market predictions exist");
         }
-        return new AsianMarketPrediction(
-                item.asianOddsSnapshotId(),
-                item.asianHandicapPick(),
-                item.totalGoalsPick()
-        );
+        return new AsianMarketPrediction(item.asianOddsSnapshotId(), item.asianHandicapPick(), item.totalGoalsPick(), null, null);
+    }
+
+    private void validateAsianDirectionConfidence(
+            boolean hasDirection,
+            com.jingcaicompass.prediction.enums.ConfidenceLevelEnum confidence,
+            String field
+    ) {
+        if (!hasDirection && confidence != null) {
+            throw invalid(field + " must be absent when the Asian direction is absent");
+        }
+        if (hasDirection && (confidence == null
+                || confidence == com.jingcaicompass.prediction.enums.ConfidenceLevelEnum.LOW)) {
+            throw invalid(field + " must be MEDIUM or HIGH for a publishable Asian direction");
+        }
     }
 
     private BigDecimal normalizeProbability(BigDecimal value, String field) {
@@ -278,7 +342,7 @@ public class PredictionImportServiceImpl implements PredictionImportService {
         }
         if (existing.size() != batch.predictions().size()
                 || existing.stream().anyMatch(item ->
-                        !batch.generationBatchHash().equals(item.getGenerationBatchHash()))) {
+                !batch.generationBatchHash().equals(item.getGenerationBatchHash()))) {
             throw batchConflict(batch.generationBatchId());
         }
 
@@ -308,6 +372,9 @@ public class PredictionImportServiceImpl implements PredictionImportService {
                 && Objects.equals(prediction.getAsianOddsSnapshotId(), item.asianOddsSnapshotId())
                 && prediction.getAsianHandicapPick() == item.asianHandicapPick()
                 && prediction.getTotalGoalsPick() == item.totalGoalsPick()
+                && prediction.getAsianHandicapConfidenceLevel() == item.asianHandicapConfidenceLevel()
+                && prediction.getTotalGoalsConfidenceLevel() == item.totalGoalsConfidenceLevel()
+                && effectivePredictionType(prediction.getPredictionType()) == item.predictionType()
                 && prediction.getConfidenceLevel() == item.confidenceLevel()
                 && Objects.equals(prediction.getAnalysisSummary(), item.analysisSummary())
                 && Objects.equals(prediction.getGeneratedAt(), item.generatedAt());
@@ -353,6 +420,7 @@ public class PredictionImportServiceImpl implements PredictionImportService {
             prediction.setGenerationBatchId(batch.generationBatchId());
             prediction.setGenerationBatchHash(batch.generationBatchHash());
             prediction.setPredictionVersion(nextVersion);
+            prediction.setPredictionType(item.predictionType());
             prediction.setHomeWinProb(item.homeWinProb());
             prediction.setDrawProb(item.drawProb());
             prediction.setAwayWinProb(item.awayWinProb());
@@ -361,6 +429,8 @@ public class PredictionImportServiceImpl implements PredictionImportService {
             prediction.setAsianOddsSnapshotId(item.asianOddsSnapshotId());
             prediction.setAsianHandicapPick(item.asianHandicapPick());
             prediction.setTotalGoalsPick(item.totalGoalsPick());
+            prediction.setAsianHandicapConfidenceLevel(item.asianHandicapConfidenceLevel());
+            prediction.setTotalGoalsConfidenceLevel(item.totalGoalsConfidenceLevel());
             prediction.setConfidenceLevel(item.confidenceLevel());
             prediction.setAnalysisSummary(item.analysisSummary());
             prediction.setGeneratedAt(item.generatedAt());
@@ -412,7 +482,11 @@ public class PredictionImportServiceImpl implements PredictionImportService {
     }
 
     private boolean decimalEquals(BigDecimal left, BigDecimal right) {
-        return left != null && right != null && left.compareTo(right) == 0;
+        return left == null ? right == null : right != null && left.compareTo(right) == 0;
+    }
+
+    private PredictionTypeEnum effectivePredictionType(PredictionTypeEnum value) {
+        return value == null ? PredictionTypeEnum.SPORTTERY : value;
     }
 
     private BusinessException batchConflict(String batchId) {
@@ -478,8 +552,21 @@ public class PredictionImportServiceImpl implements PredictionImportService {
     private record AsianMarketPrediction(
             Long asianOddsSnapshotId,
             AsianHandicapPickEnum asianHandicapPick,
-            TotalGoalsPickEnum totalGoalsPick
+            TotalGoalsPickEnum totalGoalsPick,
+            com.jingcaicompass.prediction.enums.ConfidenceLevelEnum asianHandicapConfidenceLevel,
+            com.jingcaicompass.prediction.enums.ConfidenceLevelEnum totalGoalsConfidenceLevel
     ) {
-        private static final AsianMarketPrediction EMPTY = new AsianMarketPrediction(null, null, null);
+        private static final AsianMarketPrediction EMPTY = new AsianMarketPrediction(null, null, null, null, null);
+    }
+
+    private record SportteryCorePrediction(
+            BigDecimal homeWinProb,
+            BigDecimal drawProb,
+            BigDecimal awayWinProb,
+            com.jingcaicompass.prediction.enums.HandicapPickEnum handicapPick,
+            BigDecimal expectedTotalGoals,
+            com.jingcaicompass.prediction.enums.ConfidenceLevelEnum confidenceLevel
+    ) {
+        private static final SportteryCorePrediction EMPTY = new SportteryCorePrediction(null, null, null, null, null, null);
     }
 }

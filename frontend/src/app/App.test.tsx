@@ -52,12 +52,31 @@ const match: MatchListItemVo = {
   publishedPredictions: [{
     modelVersion: 'model-v1',
     predictionStatus: 'PUBLISHED',
-    homeWinProb: 0.45,
-    drawProb: 0.3,
-    awayWinProb: 0.25,
-    handicapPick: 'HOME_WIN',
-    expectedTotalGoals: 2.5,
-    confidenceLevel: 'HIGH',
+    predictionType: 'ASIAN',
+    homeWinProb: null,
+    drawProb: null,
+    awayWinProb: null,
+    handicapPick: null,
+    expectedTotalGoals: null,
+    asianHandicapPick: 'HOME_COVER',
+    totalGoalsPick: 'OVER',
+    asianHandicapConfidenceLevel: 'MEDIUM',
+    totalGoalsConfidenceLevel: 'HIGH',
+    confidenceLevel: null,
+    asianMarket: {
+      asianOddsSnapshotId: 601,
+      providerCode: 'ODDS_API',
+      bookmakerCode: 'BOOK_A',
+      handicapLine: -0.5,
+      homeOdds: 1.92,
+      awayOdds: 1.96,
+      totalLine: 2.5,
+      overOdds: 1.88,
+      underOdds: 2.02,
+      snapshotType: 'PRE_KICKOFF',
+      capturedAt: '2026-07-22T10:01:00+08:00',
+      providerUpdatedAt: '2026-07-22T10:00:00+08:00',
+    },
   }],
 };
 
@@ -115,12 +134,17 @@ const predictionDetail: PredictionDetailVo = {
       replacesPredictionId: 101,
       predictionStatus: 'LOCKED',
       featureVersion: 'feature-v2',
-      homeWinProb: 0.45,
-      drawProb: 0.3,
-      awayWinProb: 0.25,
-      handicapPick: 'HOME_WIN',
-      expectedTotalGoals: 2.5,
-      confidenceLevel: 'HIGH',
+      predictionType: 'ASIAN',
+      homeWinProb: null,
+      drawProb: null,
+      awayWinProb: null,
+      handicapPick: null,
+      expectedTotalGoals: null,
+      asianHandicapPick: 'HOME_COVER',
+      totalGoalsPick: 'OVER',
+      asianHandicapConfidenceLevel: 'MEDIUM',
+      totalGoalsConfidenceLevel: 'HIGH',
+      confidenceLevel: null,
       analysisSummary: '主队近期状态稳定。',
       generatedAt: '2026-07-22T08:00:00+08:00',
       publishTime: '2026-07-22T08:01:00+08:00',
@@ -382,7 +406,8 @@ describe('App routes', () => {
     expect(screen.getByText('BOOK_A · ODDS_API')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '预测结果' })).toBeInTheDocument();
     expect(screen.getByText('model-v1')).toBeInTheDocument();
-    expect(screen.getByText('主 45.0% · 平 30.0% · 客 25.0%')).toBeInTheDocument();
+    expect(screen.getByText(/亚盘让球（主队 -0.5）：主队赢盘/)).toBeInTheDocument();
+    expect(screen.getByText(/亚盘大小球（2.5）：大球/)).toBeInTheDocument();
   });
 
   it('renders public detail in separate Sporttery and Asian Odds sections and preserves the list URL', async () => {
@@ -433,7 +458,7 @@ describe('App routes', () => {
     mockPublicMatches({ prediction: { matchId: 42, modelPredictions: [] } });
     renderApp('/matches/42');
 
-    expect(await screen.findByText('当前没有可公开展示的模型预测。')).toBeInTheDocument();
+    expect(await screen.findByText('当前没有可公开展示的亚盘预测。')).toBeInTheDocument();
   });
 
   it('shows a traceable prediction error without hiding the base match detail', async () => {

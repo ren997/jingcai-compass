@@ -22,6 +22,7 @@ import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
 import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
@@ -194,9 +195,9 @@ class PredictionImportServiceTest {
     }
 
     @Test
-    void requiresAndPersistsCompleteAsianMarketPredictionForBaselineV2() {
-        PredictionImportDto item = baselineV2Item(1L);
-        when(fileParser.parse(any())).thenReturn(batch("batch-asian-v2", List.of(item)));
+    void requiresAndPersistsPublishableAsianMarketPredictionForBaselineV3() {
+        PredictionImportDto item = baselineV3Item(1L);
+        when(fileParser.parse(any())).thenReturn(batch("batch-asian-v3", List.of(item)));
         when(predictionMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
         when(matchMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
                 match(1L, MatchStatusEnum.SCHEDULED, NOW.plusSeconds(3600))
@@ -215,30 +216,35 @@ class PredictionImportServiceTest {
         ArgumentCaptor<List<Prediction>> captor = ArgumentCaptor.forClass(List.class);
         verify(importWriter).writeAll(captor.capture());
         assertThat(captor.getValue()).singleElement().satisfies(prediction -> {
+            assertThat(prediction.getPredictionType()).isEqualTo(PredictionTypeEnum.ASIAN);
+            assertThat(prediction.getHomeWinProb()).isNull();
             assertThat(prediction.getAsianOddsSnapshotId()).isEqualTo(9001L);
             assertThat(prediction.getAsianHandicapPick()).isEqualTo(AsianHandicapPickEnum.HOME_COVER);
             assertThat(prediction.getTotalGoalsPick()).isEqualTo(TotalGoalsPickEnum.UNDER);
+            assertThat(prediction.getAsianHandicapConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.HIGH);
+            assertThat(prediction.getTotalGoalsConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.MEDIUM);
         });
     }
 
     @Test
-    void rejectsBaselineV2WithoutAsianMarketPredictionBeforeDatabaseAccess() {
-        PredictionImportDto legacyShape = new PredictionImportDto(
+    void rejectsBaselineV3WithLowConfidenceDirectionBeforeDatabaseAccess() {
+        PredictionImportDto lowConfidence = new PredictionImportDto(
                 1L,
                 BaselinePredictionGenerationServiceImpl.MODEL_VERSION,
                 BaselinePredictionGenerationServiceImpl.FEATURE_VERSION,
-                new BigDecimal("0.4"),
-                new BigDecimal("0.3"),
-                new BigDecimal("0.3"),
-                HandicapPickEnum.HOME_WIN,
-                new BigDecimal("2.5"),
-                ConfidenceLevelEnum.HIGH,
+                null, null, null, null, null, null,
                 "两队均有机会",
-                Instant.parse("2026-07-26T00:00:00Z")
+                Instant.parse("2026-07-26T00:00:00Z"),
+                9001L,
+                AsianHandicapPickEnum.HOME_COVER,
+                null,
+                ConfidenceLevelEnum.LOW,
+                null,
+                PredictionTypeEnum.ASIAN
         );
-        when(fileParser.parse(any())).thenReturn(batch("batch-v2-missing-asian", List.of(legacyShape)));
+        when(fileParser.parse(any())).thenReturn(batch("batch-v3-low", List.of(lowConfidence)));
 
-        assertInvalid(() -> service.importFile(new byte[] {1}), "Asian market prediction fields are required");
+        assertInvalid(() -> service.importFile(new byte[] {1}), "must be MEDIUM or HIGH");
         verifyNoInteractions(matchMapper, asianOddsSnapshotMapper, predictionMapper, importWriter);
     }
 
@@ -282,11 +288,24 @@ class PredictionImportServiceTest {
     }
 
     @Test
-    void rejectsSameBatchIdWithDifferentHashOrIncompleteRecordSet() {
+    void rejectsSameBatchIdWithIncompleteRecordSet() {
         PredictionImportDto item = validItem(1L);
-        Prediction existing = prediction(91L, "batch-conflict", "b".repeat(64), 1, item);
-        when(fileParser.parse(any())).thenReturn(batch("batch-conflict", List.of(item)));
-        when(predictionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(existing));
+        when(fileParser.parse(any())).thenReturn(batch("batch-conflict", List.of(item, validItem(2L))));
+        when(predictionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+                prediction(91L, "batch-conflict", "b".repeat(64), 1, item)
+        ));
+
+        assertBusinessConflict(() -> service.importFile(new byte[] {1}));
+        verifyNoInteractions(matchMapper, importWriter);
+    }
+
+    @Test
+    void rejectsSameBatchIdWithDifferentOriginalFileHash() {
+        PredictionImportDto item = validItem(1L);
+        when(fileParser.parse(any())).thenReturn(batch("batch-hash-conflict", List.of(item)));
+        when(predictionMapper.selectList(any(Wrapper.class))).thenReturn(List.of(
+                prediction(91L, "batch-hash-conflict", "b".repeat(64), 1, item)
+        ));
 
         assertBusinessConflict(() -> service.importFile(new byte[] {1}));
         verifyNoInteractions(matchMapper, importWriter);
@@ -385,22 +404,25 @@ class PredictionImportServiceTest {
         );
     }
 
-    private static PredictionImportDto baselineV2Item(Long matchId) {
+    private static PredictionImportDto baselineV3Item(Long matchId) {
         return new PredictionImportDto(
                 matchId,
                 BaselinePredictionGenerationServiceImpl.MODEL_VERSION,
                 BaselinePredictionGenerationServiceImpl.FEATURE_VERSION,
-                new BigDecimal("0.4"),
-                new BigDecimal("0.3"),
-                new BigDecimal("0.3"),
-                HandicapPickEnum.HOME_WIN,
-                new BigDecimal("2.5"),
-                ConfidenceLevelEnum.HIGH,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
                 "两队均有机会，需关注临场变化",
                 Instant.parse("2026-07-26T00:00:00.123456789Z"),
                 9001L,
                 AsianHandicapPickEnum.HOME_COVER,
-                TotalGoalsPickEnum.UNDER
+                TotalGoalsPickEnum.UNDER,
+                ConfidenceLevelEnum.HIGH,
+                ConfidenceLevelEnum.MEDIUM,
+                PredictionTypeEnum.ASIAN
         );
     }
 
@@ -441,11 +463,17 @@ class PredictionImportServiceTest {
         prediction.setGenerationBatchId(batchId);
         prediction.setGenerationBatchHash(hash);
         prediction.setPredictionVersion(version);
-        prediction.setHomeWinProb(item.homeWinProb().setScale(6));
-        prediction.setDrawProb(item.drawProb().setScale(6));
-        prediction.setAwayWinProb(item.awayWinProb().setScale(6));
+        prediction.setPredictionType(item.predictionType());
+        prediction.setHomeWinProb(item.homeWinProb() == null ? null : item.homeWinProb().setScale(6));
+        prediction.setDrawProb(item.drawProb() == null ? null : item.drawProb().setScale(6));
+        prediction.setAwayWinProb(item.awayWinProb() == null ? null : item.awayWinProb().setScale(6));
         prediction.setHandicapPick(item.handicapPick());
-        prediction.setExpectedTotalGoals(item.expectedTotalGoals().setScale(2));
+        prediction.setExpectedTotalGoals(item.expectedTotalGoals() == null ? null : item.expectedTotalGoals().setScale(2));
+        prediction.setAsianOddsSnapshotId(item.asianOddsSnapshotId());
+        prediction.setAsianHandicapPick(item.asianHandicapPick());
+        prediction.setTotalGoalsPick(item.totalGoalsPick());
+        prediction.setAsianHandicapConfidenceLevel(item.asianHandicapConfidenceLevel());
+        prediction.setTotalGoalsConfidenceLevel(item.totalGoalsConfidenceLevel());
         prediction.setConfidenceLevel(item.confidenceLevel());
         prediction.setAnalysisSummary(item.analysisSummary().trim());
         prediction.setGeneratedAt(item.generatedAt().truncatedTo(java.time.temporal.ChronoUnit.MICROS));

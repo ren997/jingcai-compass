@@ -4,9 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.jingcaicompass.prediction.entity.Prediction;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.snapshot.entity.PredictionSnapshot;
 import com.jingcaicompass.snapshot.enums.PredictionSnapshotStatusEnum;
@@ -38,7 +41,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V20 与数据库原生行为。
+ * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V21 与数据库原生行为。
  */
 @Testcontainers
 @ActiveProfiles("integration")
@@ -102,8 +105,8 @@ class PostgresApplicationIT {
                 .filter(info -> info.getVersion() != null)
                 .toArray(MigrationInfo[]::new);
 
-        assertThat(applied).hasSize(20);
-        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("20");
+        assertThat(applied).hasSize(21);
+        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("21");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
@@ -182,12 +185,13 @@ class PostgresApplicationIT {
                 String.class
         );
         assertThat(predictionColumns).contains(
-                "asian_odds_snapshot_id", "asian_handicap_pick", "total_goals_pick"
+                "prediction_type", "asian_odds_snapshot_id", "asian_handicap_pick", "total_goals_pick",
+                "asian_handicap_confidence_level", "total_goals_confidence_level"
         );
     }
 
     @Test
-    void enforcesAsianPredictionCompletenessSnapshotMatchAndPublishedImmutability() {
+    void enforcesAsianPredictionCompletenessConfidenceAndPublishedImmutability() {
         long firstMatchId = jdbcTemplate.queryForObject(
                 """
                 INSERT INTO matches (
@@ -196,18 +200,6 @@ class PostgresApplicationIT {
                 )
                 VALUES ('T610-001', DATE '2036-01-01', 'T610 League', 'T610 Home', 'T610 Away',
                         TIMESTAMPTZ '2036-01-01 12:00:00+08', 'SCHEDULED')
-                RETURNING id
-                """,
-                Long.class
-        );
-        long secondMatchId = jdbcTemplate.queryForObject(
-                """
-                INSERT INTO matches (
-                    lottery_match_no, lottery_date, league_name, home_team_name, away_team_name,
-                    kickoff_time, match_status
-                )
-                VALUES ('T610-002', DATE '2036-01-01', 'T610 League', 'T610 Other Home', 'T610 Other Away',
-                        TIMESTAMPTZ '2036-01-01 13:00:00+08', 'SCHEDULED')
                 RETURNING id
                 """,
                 Long.class
@@ -231,13 +223,13 @@ class PostgresApplicationIT {
                 """
                 INSERT INTO predictions (
                     match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
-                    prediction_version, home_win_prob, draw_prob, away_win_prob, handicap_pick,
-                    expected_total_goals, asian_odds_snapshot_id, asian_handicap_pick, total_goals_pick,
-                    confidence_level, analysis_summary, generated_at
+                    prediction_version, prediction_type, asian_odds_snapshot_id, asian_handicap_pick,
+                    total_goals_pick, asian_handicap_confidence_level, total_goals_confidence_level,
+                    analysis_summary, generated_at
                 )
-                VALUES (?, 't306-odds-baseline-v2', 't306-sporttery-asian-v2', 'T610-BATCH', ?, 1,
-                        0.400000, 0.300000, 0.300000, 'HOME_WIN', 2.50, ?, 'HOME_COVER', 'UNDER',
-                        'MEDIUM', 'T610 可解释基线。', TIMESTAMPTZ '2036-01-01 10:01:00+08')
+                VALUES (?, 't306-asian-baseline-v3', 't306-asian-mainline-v3', 'T610-BATCH', ?, 1,
+                        'ASIAN', ?, 'HOME_COVER', 'UNDER', 'HIGH', 'MEDIUM',
+                        'T610 亚盘可解释基线。', TIMESTAMPTZ '2036-01-01 10:01:00+08')
                 RETURNING id
                 """,
                 Long.class,
@@ -250,13 +242,12 @@ class PostgresApplicationIT {
                 """
                 INSERT INTO predictions (
                     match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
-                    prediction_version, home_win_prob, draw_prob, away_win_prob, handicap_pick,
-                    expected_total_goals, asian_odds_snapshot_id, asian_handicap_pick, total_goals_pick,
-                    confidence_level, analysis_summary, generated_at
+                    prediction_version, prediction_type, asian_odds_snapshot_id, asian_handicap_pick,
+                    asian_handicap_confidence_level, analysis_summary, generated_at
                 )
-                VALUES (?, 'model-invalid', 'feature-invalid', 'T610-INCOMPLETE', ?, 1,
-                        0.400000, 0.300000, 0.300000, 'HOME_WIN', 2.50, ?, 'HOME_COVER', NULL,
-                        'LOW', '不完整亚盘预测。', TIMESTAMPTZ '2036-01-01 10:01:00+08')
+                VALUES (?, 'model-low', 'feature-low', 'T610-LOW', ?, 1,
+                        'ASIAN', ?, 'HOME_COVER', 'LOW',
+                        '低置信亚盘预测。', TIMESTAMPTZ '2036-01-01 10:01:00+08')
                 """,
                 firstMatchId,
                 "d".repeat(64),
@@ -266,15 +257,14 @@ class PostgresApplicationIT {
                 """
                 INSERT INTO predictions (
                     match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
-                    prediction_version, home_win_prob, draw_prob, away_win_prob, handicap_pick,
-                    expected_total_goals, asian_odds_snapshot_id, asian_handicap_pick, total_goals_pick,
-                    confidence_level, analysis_summary, generated_at
+                    prediction_version, prediction_type, asian_odds_snapshot_id, asian_handicap_pick,
+                    analysis_summary, generated_at
                 )
-                VALUES (?, 'model-wrong-match', 'feature-wrong-match', 'T610-WRONG-MATCH', ?, 1,
-                        0.400000, 0.300000, 0.300000, 'HOME_WIN', 2.50, ?, 'HOME_COVER', 'UNDER',
-                        'LOW', '错误比赛快照。', TIMESTAMPTZ '2036-01-01 10:01:00+08')
+                VALUES (?, 'model-missing-confidence', 'feature-missing-confidence', 'T610-MISSING', ?, 1,
+                        'ASIAN', ?, 'HOME_COVER',
+                        '缺置信度的亚盘预测。', TIMESTAMPTZ '2036-01-01 10:01:00+08')
                 """,
-                secondMatchId,
+                firstMatchId,
                 "e".repeat(64),
                 asianSnapshotId
         )).isInstanceOf(DataAccessException.class);
@@ -292,7 +282,7 @@ class PostgresApplicationIT {
                 predictionId
         );
         assertThatThrownBy(() -> jdbcTemplate.update(
-                "UPDATE predictions SET total_goals_pick = 'OVER' WHERE id = ?",
+                "UPDATE predictions SET asian_handicap_confidence_level = 'MEDIUM' WHERE id = ?",
                 predictionId
         )).isInstanceOf(DataAccessException.class);
     }
@@ -415,6 +405,7 @@ class PostgresApplicationIT {
         prediction.setGenerationBatchId("batch-mapper-v1");
         prediction.setGenerationBatchHash("a".repeat(64));
         prediction.setPredictionVersion(1);
+        prediction.setPredictionType(PredictionTypeEnum.SPORTTERY);
         prediction.setHomeWinProb(new BigDecimal("0.400000"));
         prediction.setDrawProb(new BigDecimal("0.300000"));
         prediction.setAwayWinProb(new BigDecimal("0.300000"));
@@ -431,6 +422,30 @@ class PostgresApplicationIT {
         assertThat(savedPrediction.getHandicapPick()).isEqualTo(HandicapPickEnum.HOME_WIN);
         assertThat(savedPrediction.getConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.HIGH);
         assertThat(savedPrediction.getHomeWinProb()).isEqualByComparingTo("0.400000");
+
+        Prediction asianPrediction = new Prediction();
+        asianPrediction.setMatchId(matchId);
+        asianPrediction.setModelVersion("asian-mapper-v3");
+        asianPrediction.setFeatureVersion("asian-feature-v3");
+        asianPrediction.setGenerationBatchId("asian-batch-mapper-v3");
+        asianPrediction.setGenerationBatchHash("b".repeat(64));
+        asianPrediction.setPredictionVersion(1);
+        asianPrediction.setPredictionType(PredictionTypeEnum.ASIAN);
+        asianPrediction.setAsianOddsSnapshotId(insertAsianSnapshot(matchId, "a"));
+        asianPrediction.setAsianHandicapPick(AsianHandicapPickEnum.HOME_COVER);
+        asianPrediction.setAsianHandicapConfidenceLevel(ConfidenceLevelEnum.HIGH);
+        asianPrediction.setTotalGoalsPick(TotalGoalsPickEnum.OVER);
+        asianPrediction.setTotalGoalsConfidenceLevel(ConfidenceLevelEnum.MEDIUM);
+        asianPrediction.setAnalysisSummary("T610 亚盘 Mapper 枚举往返验证");
+        asianPrediction.setGeneratedAt(Instant.parse("2026-07-26T01:00:00Z"));
+        asianPrediction.setPredictionStatus(PredictionStatusEnum.DRAFT);
+
+        assertThat(predictionMapper.insert(asianPrediction)).isEqualTo(1);
+        Prediction savedAsianPrediction = predictionMapper.selectById(asianPrediction.getId());
+        assertThat(savedAsianPrediction.getPredictionType()).isEqualTo(PredictionTypeEnum.ASIAN);
+        assertThat(savedAsianPrediction.getHomeWinProb()).isNull();
+        assertThat(savedAsianPrediction.getAsianHandicapConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.HIGH);
+        assertThat(savedAsianPrediction.getTotalGoalsConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.MEDIUM);
 
         PredictionSnapshot snapshot = new PredictionSnapshot();
         snapshot.setSnapshotDate(LocalDate.of(2026, 8, 1));
@@ -713,6 +728,23 @@ class PostgresApplicationIT {
                 """,
                 Long.class,
                 lotteryMatchNo
+        );
+    }
+
+    private Long insertAsianSnapshot(Long matchId, String rawHashSeed) {
+        return jdbcTemplate.queryForObject(
+                """
+                INSERT INTO asian_odds_snapshots (
+                    match_id, provider_code, bookmaker_code, handicap_line, home_odds, away_odds,
+                    total_line, over_odds, under_odds, snapshot_type, captured_at, raw_payload_hash
+                )
+                VALUES (?, 'T610_MAPPER', 'T610_MAPPER_BOOK', -0.50, 1.85, 1.95, 2.50, 1.82, 2.02,
+                        'PRE_KICKOFF', TIMESTAMPTZ '2026-07-26 01:00:00+00', ?)
+                RETURNING id
+                """,
+                Long.class,
+                matchId,
+                rawHashSeed.substring(0, 1).repeat(64)
         );
     }
 

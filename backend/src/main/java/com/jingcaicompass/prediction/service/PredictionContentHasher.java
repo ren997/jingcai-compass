@@ -6,6 +6,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.jingcaicompass.prediction.entity.Prediction;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +26,7 @@ public class PredictionContentHasher {
 
     public static final int LEGACY_HASH_SCHEMA_VERSION = 1;
     public static final int HASH_SCHEMA_VERSION = 2;
+    public static final int ASIAN_HASH_SCHEMA_VERSION = 3;
     private static final int PROBABILITY_SCALE = 6;
     private static final int EXPECTED_GOALS_SCALE = 2;
     private static final BigDecimal MIN_PROBABILITY_SUM = new BigDecimal("0.999999");
@@ -52,6 +54,9 @@ public class PredictionContentHasher {
             throw new IllegalArgumentException("publishTime must be before lockTime");
         }
 
+        if (effectivePredictionType(prediction) == PredictionTypeEnum.ASIAN) {
+            return sha256Asian(prediction, normalizedPublishTime, normalizedLockTime);
+        }
         BigDecimal home = normalizeProbability(prediction.getHomeWinProb(), "homeWinProb");
         BigDecimal draw = normalizeProbability(prediction.getDrawProb(), "drawProb");
         BigDecimal away = normalizeProbability(prediction.getAwayWinProb(), "awayWinProb");
@@ -117,7 +122,48 @@ public class PredictionContentHasher {
     /** 返回当前预测内容所使用的规范化哈希结构版本。 */
     public int hashSchemaVersion(Prediction prediction) {
         Objects.requireNonNull(prediction, "prediction must not be null");
+        if (effectivePredictionType(prediction) == PredictionTypeEnum.ASIAN) {
+            return ASIAN_HASH_SCHEMA_VERSION;
+        }
         return hasAsianMarketPrediction(prediction) ? HASH_SCHEMA_VERSION : LEGACY_HASH_SCHEMA_VERSION;
+    }
+
+    private String sha256Asian(Prediction prediction, Instant publishTime, Instant lockTime) {
+        if (prediction.getHomeWinProb() != null || prediction.getDrawProb() != null
+                || prediction.getAwayWinProb() != null || prediction.getHandicapPick() != null
+                || prediction.getExpectedTotalGoals() != null || prediction.getConfidenceLevel() != null) {
+            throw new IllegalArgumentException("Asian prediction must not contain Sporttery fields");
+        }
+        boolean hasHandicap = prediction.getAsianHandicapPick() != null;
+        boolean hasTotals = prediction.getTotalGoalsPick() != null;
+        if (prediction.getAsianOddsSnapshotId() == null || (!hasHandicap && !hasTotals)
+                || (hasHandicap != (prediction.getAsianHandicapConfidenceLevel() != null))
+                || (hasTotals != (prediction.getTotalGoalsConfidenceLevel() != null))) {
+            throw new IllegalArgumentException("Asian prediction direction and confidence fields are inconsistent");
+        }
+        return sha256Hex(new CanonicalPredictionV3(
+                ASIAN_HASH_SCHEMA_VERSION,
+                requirePositive(prediction.getId(), "predictionId"),
+                requirePositive(prediction.getMatchId(), "matchId"),
+                requireText(prediction.getModelVersion(), "modelVersion"),
+                requireText(prediction.getFeatureVersion(), "featureVersion"),
+                requireText(prediction.getGenerationBatchId(), "generationBatchId"),
+                requireSha256(prediction.getGenerationBatchHash(), "generationBatchHash"),
+                requirePositive(prediction.getPredictionVersion(), "predictionVersion"),
+                requirePositive(prediction.getAsianOddsSnapshotId(), "asianOddsSnapshotId"),
+                hasHandicap ? prediction.getAsianHandicapPick().getCode() : null,
+                hasHandicap ? prediction.getAsianHandicapConfidenceLevel().getCode() : null,
+                hasTotals ? prediction.getTotalGoalsPick().getCode() : null,
+                hasTotals ? prediction.getTotalGoalsConfidenceLevel().getCode() : null,
+                requireText(prediction.getAnalysisSummary(), "analysisSummary"),
+                formatInstant(requireInstant(prediction.getGeneratedAt(), "generatedAt")),
+                formatInstant(publishTime),
+                formatInstant(lockTime)
+        ));
+    }
+
+    private PredictionTypeEnum effectivePredictionType(Prediction prediction) {
+        return prediction.getPredictionType() == null ? PredictionTypeEnum.SPORTTERY : prediction.getPredictionType();
     }
 
     private String sha256Hex(Object canonical) {
@@ -300,6 +346,33 @@ public class PredictionContentHasher {
             String asianHandicapPick,
             String totalGoalsPick,
             String confidenceLevel,
+            String analysisSummary,
+            String generatedAt,
+            String publishTime,
+            String lockTime
+    ) {
+    }
+
+    @JsonPropertyOrder({
+            "hashSchemaVersion", "predictionId", "matchId", "modelVersion", "featureVersion",
+            "generationBatchId", "generationBatchHash", "predictionVersion", "asianOddsSnapshotId",
+            "asianHandicapPick", "asianHandicapConfidenceLevel", "totalGoalsPick",
+            "totalGoalsConfidenceLevel", "analysisSummary", "generatedAt", "publishTime", "lockTime"
+    })
+    private record CanonicalPredictionV3(
+            int hashSchemaVersion,
+            Long predictionId,
+            Long matchId,
+            String modelVersion,
+            String featureVersion,
+            String generationBatchId,
+            String generationBatchHash,
+            Integer predictionVersion,
+            Long asianOddsSnapshotId,
+            String asianHandicapPick,
+            String asianHandicapConfidenceLevel,
+            String totalGoalsPick,
+            String totalGoalsConfidenceLevel,
             String analysisSummary,
             String generatedAt,
             String publishTime,

@@ -18,7 +18,6 @@ import com.jingcaicompass.prediction.dto.PredictionImportBatchDto;
 import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
 import com.jingcaicompass.prediction.enums.BaselinePredictionSkipReasonEnum;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
-import com.jingcaicompass.prediction.enums.HandicapPickEnum;
 import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
@@ -78,8 +77,6 @@ class BaselinePredictionGenerationServiceTest {
     void generatesDeterministicDraftInputFromConfirmedMarkets() {
         MatchEntity match = scheduledMatch(101L);
         when(matchMapper.selectPublicDailyMatches(LOTTERY_DATE)).thenReturn(List.of(match));
-        when(sportteryPoolSnapshotMapper.selectLatestByMatchIds(List.of(101L)))
-                .thenReturn(List.of(sporttery(101L)));
         when(asianOddsSnapshotMapper.selectLatestCompleteConfirmedLinesByMatchIds(List.of(101L)))
                 .thenReturn(List.of(asian(101L)));
         when(predictionImportService.importFile(any())).thenAnswer(invocation -> {
@@ -99,21 +96,23 @@ class BaselinePredictionGenerationServiceTest {
         ArgumentCaptor<byte[]> contentCaptor = ArgumentCaptor.forClass(byte[].class);
         verify(predictionImportService).importFile(contentCaptor.capture());
         PredictionImportBatchDto batch = parser.parse(contentCaptor.getValue());
-        assertThat(batch.generationBatchId()).startsWith("t306-baseline-2026-08-11-");
+        assertThat(batch.generationBatchId()).startsWith("t306-asian-2026-08-11-");
         assertThat(batch.predictions()).singleElement().satisfies(prediction -> {
             assertThat(prediction.matchId()).isEqualTo(101L);
             assertThat(prediction.modelVersion()).isEqualTo(BaselinePredictionGenerationServiceImpl.MODEL_VERSION);
             assertThat(prediction.featureVersion()).isEqualTo(BaselinePredictionGenerationServiceImpl.FEATURE_VERSION);
-            assertThat(prediction.homeWinProb()).isEqualByComparingTo("0.473750");
-            assertThat(prediction.drawProb()).isEqualByComparingTo("0.250000");
-            assertThat(prediction.awayWinProb()).isEqualByComparingTo("0.276250");
-            assertThat(prediction.handicapPick()).isEqualTo(HandicapPickEnum.HOME_WIN);
-            assertThat(prediction.expectedTotalGoals()).isEqualByComparingTo("2.51");
+            assertThat(prediction.homeWinProb()).isNull();
+            assertThat(prediction.drawProb()).isNull();
+            assertThat(prediction.awayWinProb()).isNull();
+            assertThat(prediction.handicapPick()).isNull();
+            assertThat(prediction.expectedTotalGoals()).isNull();
             assertThat(prediction.asianOddsSnapshotId()).isEqualTo(501L);
-            assertThat(prediction.asianHandicapPick()).isEqualTo(AsianHandicapPickEnum.HOME_COVER);
+            assertThat(prediction.asianHandicapPick()).isNull();
             assertThat(prediction.totalGoalsPick()).isEqualTo(TotalGoalsPickEnum.OVER);
-            assertThat(prediction.confidenceLevel()).isEqualTo(ConfidenceLevelEnum.MEDIUM);
-            assertThat(prediction.analysisSummary()).contains("可解释基线", "官方让球 -1", "不代表独立校准概率");
+            assertThat(prediction.asianHandicapConfidenceLevel()).isNull();
+            assertThat(prediction.totalGoalsConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.MEDIUM);
+            assertThat(prediction.confidenceLevel()).isNull();
+            assertThat(prediction.analysisSummary()).contains("亚盘专用", "低置信度不发布", "不代表独立校准概率");
             assertThat(prediction.generatedAt()).isEqualTo(Instant.parse("2026-08-10T02:00:00Z"));
         });
         assertThat(result.candidateCount()).isEqualTo(1);
@@ -129,8 +128,6 @@ class BaselinePredictionGenerationServiceTest {
     void skipsMatchWithoutConfirmedCompleteAsianMarketAndDoesNotImportEmptyBatch() {
         MatchEntity match = scheduledMatch(102L);
         when(matchMapper.selectPublicDailyMatches(LOTTERY_DATE)).thenReturn(List.of(match));
-        when(sportteryPoolSnapshotMapper.selectLatestByMatchIds(List.of(102L)))
-                .thenReturn(List.of(sporttery(102L)));
         when(asianOddsSnapshotMapper.selectLatestCompleteConfirmedLinesByMatchIds(List.of(102L)))
                 .thenReturn(List.of());
 

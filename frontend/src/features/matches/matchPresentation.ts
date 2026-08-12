@@ -91,7 +91,10 @@ export function formatNumber(value: number | null | undefined) {
   return value === null || value === undefined ? '—' : String(value);
 }
 
-export function formatProbability(value: number) {
+export function formatProbability(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return '—';
+  }
   return `${(value * 100).toFixed(1)}%`;
 }
 
@@ -114,9 +117,9 @@ export function handicapPickLabel(value: HandicapPick) {
 /** 体彩让球胜平负必须同时展示官方让球，避免被误读为普通胜平负。 */
 export function sportteryHandicapPredictionLabel(
   officialHandicap: number | null | undefined,
-  pick: HandicapPick,
+  pick: HandicapPick | null | undefined,
 ) {
-  return `竞彩让球胜平负（${formatHandicap(officialHandicap)}）：${handicapPickLabel(pick)}`;
+  return `竞彩让球胜平负（${formatHandicap(officialHandicap)}）：${pick ? handicapPickLabel(pick) : '暂缺'}`;
 }
 
 /** 亚盘方向必须同时展示该方向绑定的亚洲让球线。 */
@@ -136,8 +139,8 @@ export function totalGoalsPickLabel(value: TotalGoalsPick | null | undefined) {
   return value ? totalGoalsPickLabels[value] : '暂缺';
 }
 
-export function confidenceLabel(value: ConfidenceLevel) {
-  return confidenceLabels[value];
+export function confidenceLabel(value: ConfidenceLevel | null | undefined) {
+  return value ? confidenceLabels[value] : '暂缺';
 }
 
 export function publicSnapshotAvailabilityLabel(value: PublicSnapshotAvailability) {

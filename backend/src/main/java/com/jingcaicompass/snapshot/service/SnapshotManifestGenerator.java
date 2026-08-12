@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.service.PredictionContentHasher;
 import com.jingcaicompass.snapshot.dto.PredictionSnapshotManifestDto;
 import com.jingcaicompass.snapshot.dto.PredictionSnapshotManifestItemDto;
@@ -36,6 +37,7 @@ public class SnapshotManifestGenerator {
 
     public static final int LEGACY_MANIFEST_SCHEMA_VERSION = 1;
     public static final int MANIFEST_SCHEMA_VERSION = 2;
+    public static final int ASIAN_MANIFEST_SCHEMA_VERSION = 3;
     private static final int PROBABILITY_SCALE = 6;
     private static final int EXPECTED_GOALS_SCALE = 2;
     private static final String SHA256_PATTERN = "^[0-9a-f]{64}$";
@@ -107,6 +109,10 @@ public class SnapshotManifestGenerator {
     }
 
     private int manifestSchemaVersion(List<PredictionSnapshotManifestItemDto> items) {
+        if (items.stream().anyMatch(item ->
+                item.predictionHashSchemaVersion() == PredictionContentHasher.ASIAN_HASH_SCHEMA_VERSION)) {
+            return ASIAN_MANIFEST_SCHEMA_VERSION;
+        }
         return items.stream().anyMatch(item ->
                 item.predictionHashSchemaVersion() == PredictionContentHasher.HASH_SCHEMA_VERSION
         ) ? MANIFEST_SCHEMA_VERSION : LEGACY_MANIFEST_SCHEMA_VERSION;
@@ -142,25 +148,18 @@ public class SnapshotManifestGenerator {
                 requireText(source.getGenerationBatchId(), "generationBatchId"),
                 requireSha256(source.getGenerationBatchHash(), "generationBatchHash"),
                 requirePositive(source.getPredictionVersion(), "predictionVersion"),
-                normalizeDecimal(source.getHomeWinProb(), "homeWinProb", PROBABILITY_SCALE),
-                normalizeDecimal(source.getDrawProb(), "drawProb", PROBABILITY_SCALE),
-                normalizeDecimal(source.getAwayWinProb(), "awayWinProb", PROBABILITY_SCALE),
-                Objects.requireNonNull(
-                        source.getHandicapPick(),
-                        "handicapPick must not be null"
-                ).getCode(),
-                normalizeDecimal(
-                        source.getExpectedTotalGoals(),
-                        "expectedTotalGoals",
-                        EXPECTED_GOALS_SCALE
-                ),
+                source.getPredictionType() == PredictionTypeEnum.ASIAN ? PredictionTypeEnum.ASIAN.getCode() : null,
+                source.getHomeWinProb() == null ? null : normalizeDecimal(source.getHomeWinProb(), "homeWinProb", PROBABILITY_SCALE),
+                source.getDrawProb() == null ? null : normalizeDecimal(source.getDrawProb(), "drawProb", PROBABILITY_SCALE),
+                source.getAwayWinProb() == null ? null : normalizeDecimal(source.getAwayWinProb(), "awayWinProb", PROBABILITY_SCALE),
+                source.getHandicapPick() == null ? null : source.getHandicapPick().getCode(),
+                source.getExpectedTotalGoals() == null ? null : normalizeDecimal(source.getExpectedTotalGoals(), "expectedTotalGoals", EXPECTED_GOALS_SCALE),
                 source.getAsianOddsSnapshotId(),
                 source.getAsianHandicapPick() == null ? null : source.getAsianHandicapPick().getCode(),
                 source.getTotalGoalsPick() == null ? null : source.getTotalGoalsPick().getCode(),
-                Objects.requireNonNull(
-                        source.getConfidenceLevel(),
-                        "confidenceLevel must not be null"
-                ).getCode(),
+                source.getAsianHandicapConfidenceLevel() == null ? null : source.getAsianHandicapConfidenceLevel().getCode(),
+                source.getTotalGoalsConfidenceLevel() == null ? null : source.getTotalGoalsConfidenceLevel().getCode(),
+                source.getConfidenceLevel() == null ? null : source.getConfidenceLevel().getCode(),
                 requireText(source.getAnalysisSummary(), "analysisSummary"),
                 formatInstant(requireInstant(source.getGeneratedAt(), "generatedAt")),
                 formatInstant(publishTime),

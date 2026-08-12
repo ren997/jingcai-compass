@@ -9,6 +9,7 @@ import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
 import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -40,6 +41,9 @@ public class Prediction {
     /** 同比赛模型下的历史版本号 */
     private Integer predictionVersion;
 
+    /** 预测产品类型；历史记录为体彩预测，当前基线为亚盘预测。 */
+    private PredictionTypeEnum predictionType;
+
     /** 主胜概率，范围 0～1 */
     private BigDecimal homeWinProb;
 
@@ -67,6 +71,12 @@ public class Prediction {
 
     /** 亚盘大小球方向 */
     private TotalGoalsPickEnum totalGoalsPick;
+
+    /** 亚盘让球方向的独立置信等级；亚盘专用预测低置信方向不落库。 */
+    private ConfidenceLevelEnum asianHandicapConfidenceLevel;
+
+    /** 亚盘大小球方向的独立置信等级；亚盘专用预测低置信方向不落库。 */
+    private ConfidenceLevelEnum totalGoalsConfidenceLevel;
 
     /**
      * 模型置信等级

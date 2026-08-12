@@ -6,9 +6,7 @@ import {
   asianHandicapPredictionLabel,
   confidenceLabel,
   formatNumber,
-  formatProbability,
   formatTimestamp,
-  sportteryHandicapPredictionLabel,
   totalGoalsPickLabel,
 } from '../matches/matchPresentation';
 import {
@@ -89,8 +87,8 @@ export default function AdminDraftPredictionsPage() {
 
   return <main className="admin-page admin-workspace">
     <section className="admin-page-heading"><div><p className="eyebrow">Operations · Draft predictions</p><h1>草稿预测管理</h1>
-      <p>草稿不会进入公共页面。请先复核比赛、模型和概率，再逐条经过既有的时效、版本、哈希与审计规则发布。</p></div>
-      <div className="admin-page-actions"><Button onClick={() => setGenerateConfirmOpen(true)}>生成 V2 草稿</Button>
+      <p>草稿不会进入公共页面。请复核亚盘方向、对应分项置信度与生成快照，再逐条经过既有的时效、版本、哈希与审计规则发布。</p></div>
+      <div className="admin-page-actions"><Button onClick={() => setGenerateConfirmOpen(true)}>生成 V3 亚盘草稿</Button>
         <Button loading={query.isFetching} onClick={() => void query.refetch()}>刷新</Button></div></section>
     <section className="admin-filters" aria-label="草稿预测筛选">
       <label><span>比赛日期</span><input aria-label="草稿比赛日期" type="date" value={filters.lotteryDate}
@@ -102,7 +100,7 @@ export default function AdminDraftPredictionsPage() {
     </section>
     {query.isPending && <section className="admin-state-card">正在读取草稿预测……</section>}
     {query.isError && <Alert type="error" showIcon title={`草稿预测暂不可用：${query.error.message}`} />}
-    {generationResult && <Alert type="success" showIcon title="V2 草稿生成完成"
+    {generationResult && <Alert type="success" showIcon title="V3 亚盘草稿生成完成"
       description={`候选 ${generationResult.candidateCount} 场 · 已生成 ${generationResult.generatedCount} 条 · 新增 ${generationResult.insertedCount} 条 · 复用 ${generationResult.reusedCount} 条${generationResult.generationBatchId ? ` · 批次 ${generationResult.generationBatchId}` : ''}`} />}
     {feedback.length > 0 && <section className="admin-panel" aria-label="发布结果"><header className="admin-panel-heading"><div><h2>本次发布结果</h2>
       <span>成功 {feedback.filter((item) => item.success).length} 条 · 失败 {feedback.filter((item) => !item.success).length} 条</span></div>
@@ -126,10 +124,10 @@ export default function AdminDraftPredictionsPage() {
       <p>若某条在发布时校验失败，它会继续保留为草稿，并在本页显示失败原因。</p>
       <ul>{selectedRecords.map((item) => <li key={item.predictionId}>{matchLabel(item)}</li>)}</ul>
     </Modal>
-    <Modal title="确认生成 V2 草稿" open={generateConfirmOpen} onCancel={() => setGenerateConfirmOpen(false)}
+    <Modal title="确认生成 V3 亚盘草稿" open={generateConfirmOpen} onCancel={() => setGenerateConfirmOpen(false)}
       confirmLoading={generate.isPending} okText="确认生成草稿" onOk={() => void confirmGeneration()}>
-      <p>将为 {filters.lotteryDate} 仅使用已持久化、已确认且让球/大小球完整的亚盘主盘生成 V2 草稿。</p>
-      <p>不满足输入门槛的比赛会被跳过；生成结果不会自动发布到公共页面。</p>
+      <p>将为 {filters.lotteryDate} 仅使用已持久化、已确认且让球/大小球完整的亚盘主盘生成 V3 草稿。</p>
+      <p>让球与大小球分别判定置信度；低置信方向不会进入可发布草稿，生成结果不会自动发布。</p>
     </Modal>
   </main>;
 }
@@ -150,9 +148,7 @@ function DraftCard({
         <span>{item.match.leagueName} · {formatTimestamp(item.match.kickoffTime)}</span></div><span className="admin-status">草稿</span></header>
     <dl><div><dt>模型 / 特征</dt><dd>{item.modelVersion} / {item.featureVersion}</dd></div>
       <div><dt>生成时间</dt><dd>{formatTimestamp(item.generatedAt)}</dd></div><div><dt>生成批次</dt><dd title={item.generationBatchId}>{item.generationBatchId}</dd></div>
-      <div><dt>主胜 / 平 / 客胜</dt><dd>{formatProbability(item.homeWinProb)} / {formatProbability(item.drawProb)} / {formatProbability(item.awayWinProb)}</dd></div>
-      <div><dt>竞彩让球胜平负</dt><dd>{sportteryHandicapPredictionLabel(item.match.officialHandicap, item.handicapPick)}</dd></div><div><dt>预期总进球 / 置信度</dt><dd>{formatNumber(item.expectedTotalGoals)} / {confidenceLabel(item.confidenceLevel)}</dd></div>
-      {item.asianHandicapPick && <div><dt>亚盘让球</dt><dd>{asianHandicapPredictionLabel(item.asianMarket?.handicapLine, item.asianHandicapPick)}</dd></div>}{item.totalGoalsPick && <div><dt>亚盘大小球</dt><dd>{totalGoalsPickLabel(item.totalGoalsPick)}</dd></div>}
+      {item.asianHandicapPick && <div><dt>亚盘让球</dt><dd>{asianHandicapPredictionLabel(item.asianMarket?.handicapLine, item.asianHandicapPick)} · 置信：{confidenceLabel(item.asianHandicapConfidenceLevel)}</dd></div>}{item.totalGoalsPick && <div><dt>亚盘大小球</dt><dd>{formatNumber(item.asianMarket?.totalLine)}：{totalGoalsPickLabel(item.totalGoalsPick)} · 置信：{confidenceLabel(item.totalGoalsConfidenceLevel)}</dd></div>}
       {item.asianMarket && <div><dt>生成亚盘快照</dt><dd>#{item.asianMarket.asianOddsSnapshotId} · {item.asianMarket.bookmakerCode} · 亚洲{formatNumber(item.asianMarket.handicapLine)} 主 {formatNumber(item.asianMarket.homeOdds)} / 客 {formatNumber(item.asianMarket.awayOdds)}；大小球 {formatNumber(item.asianMarket.totalLine)} 大 {formatNumber(item.asianMarket.overOdds)} / 小 {formatNumber(item.asianMarket.underOdds)} · {formatTimestamp(item.asianMarket.capturedAt)}</dd></div>}
     </dl><p>{item.analysisSummary}</p>
   </article>;

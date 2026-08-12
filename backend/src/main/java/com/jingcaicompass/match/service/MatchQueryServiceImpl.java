@@ -375,6 +375,9 @@ public class MatchQueryServiceImpl implements MatchQueryService {
                 prediction.getAsianHandicapPick(),
                 prediction.getTotalGoalsPick(),
                 asianMarket == null ? null : toPredictionAsianMarketVo(asianMarket),
+                prediction.getPredictionType(),
+                prediction.getAsianHandicapConfidenceLevel(),
+                prediction.getTotalGoalsConfidenceLevel(),
                 prediction.getConfidenceLevel()
         );
     }

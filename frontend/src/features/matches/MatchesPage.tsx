@@ -13,10 +13,8 @@ import {
   dataSourceLabel,
   formatHandicap,
   formatNumber,
-  formatProbability,
   formatTimestamp,
   predictionStatusLabel,
-  sportteryHandicapPredictionLabel,
   statusLabels,
   totalGoalsPickLabel,
 } from './matchPresentation';
@@ -245,13 +243,13 @@ function AsianMainSummary({ match }: { match: MatchListItemVo }) {
 }
 
 function PredictionSummary({ match }: { match: MatchListItemVo }) {
+  const asianPredictions = match.publishedPredictions.filter((prediction) => prediction.predictionType === 'ASIAN');
   return <section className="match-market-summary" aria-label={`${match.lotteryMatchNo} 预测结果`}>
     <h2>预测结果</h2>
-    {match.publishedPredictions.length === 0 ? <p>暂无已发布预测</p> : match.publishedPredictions.map((prediction) => <article className="match-prediction-summary" key={prediction.modelVersion}>
+    {asianPredictions.length === 0 ? <p>暂无已发布亚盘预测</p> : asianPredictions.map((prediction) => <article className="match-prediction-summary" key={prediction.modelVersion}>
       <header><strong>{prediction.modelVersion}</strong><span>{predictionStatusLabel(prediction.predictionStatus)}</span></header>
-      <p>主 {formatProbability(prediction.homeWinProb)} · 平 {formatProbability(prediction.drawProb)} · 客 {formatProbability(prediction.awayWinProb)}</p>
-      <p>{sportteryHandicapPredictionLabel(match.sportteryMarket.officialHandicap, prediction.handicapPick)} · 预期总进球：{formatNumber(prediction.expectedTotalGoals)} · 置信：{confidenceLabel(prediction.confidenceLevel)}</p>
-      {(prediction.asianHandicapPick || prediction.totalGoalsPick) && <p>{asianHandicapPredictionLabel(prediction.asianMarket?.handicapLine, prediction.asianHandicapPick)} · 亚盘大小球：{totalGoalsPickLabel(prediction.totalGoalsPick)}</p>}
+      {prediction.asianHandicapPick && <p>{asianHandicapPredictionLabel(prediction.asianMarket?.handicapLine, prediction.asianHandicapPick)} · 置信：{confidenceLabel(prediction.asianHandicapConfidenceLevel)}</p>}
+      {prediction.totalGoalsPick && <p>亚盘大小球（{formatNumber(prediction.asianMarket?.totalLine)}）：{totalGoalsPickLabel(prediction.totalGoalsPick)} · 置信：{confidenceLabel(prediction.totalGoalsConfidenceLevel)}</p>}
       {prediction.asianMarket && <p className="market-provider">生成快照 #{prediction.asianMarket.asianOddsSnapshotId} · {prediction.asianMarket.bookmakerCode}：亚洲{formatHandicap(prediction.asianMarket.handicapLine)} 主 {formatNumber(prediction.asianMarket.homeOdds)} / 客 {formatNumber(prediction.asianMarket.awayOdds)}；大小球 {formatNumber(prediction.asianMarket.totalLine)} 大 {formatNumber(prediction.asianMarket.overOdds)} / 小 {formatNumber(prediction.asianMarket.underOdds)} · {formatTimestamp(prediction.asianMarket.capturedAt)}</p>}
     </article>)}
   </section>;

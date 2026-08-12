@@ -35,6 +35,7 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                 ON fact.match_id = prediction.match_id
                AND fact.is_current = TRUE
             WHERE prediction.prediction_status = 'LOCKED'
+              AND prediction.prediction_type = 'SPORTTERY'
               AND fact.fact_status IN ('FINAL', 'VOID')
               AND (
                     NOT EXISTS (
@@ -64,6 +65,7 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                AND fact.is_current = TRUE
             WHERE prediction.match_id = #{matchId}
               AND prediction.prediction_status = 'LOCKED'
+              AND prediction.prediction_type = 'SPORTTERY'
               AND fact.fact_status IN ('FINAL', 'VOID')
               AND (
                     NOT EXISTS (
@@ -95,6 +97,7 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                AND settlement.is_current = TRUE
                AND settlement.match_fact_id <> fact.id
             WHERE prediction.prediction_status = 'LOCKED'
+              AND prediction.prediction_type = 'SPORTTERY'
               AND fact.fact_status IN ('FINAL', 'VOID')
             ORDER BY prediction.id
             LIMIT #{batchSize}
@@ -114,6 +117,7 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                AND settlement.match_fact_id <> fact.id
             WHERE prediction.match_id = #{matchId}
               AND prediction.prediction_status = 'LOCKED'
+              AND prediction.prediction_type = 'SPORTTERY'
               AND fact.fact_status IN ('FINAL', 'VOID')
             ORDER BY prediction.id
             """)
@@ -135,6 +139,7 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                AND hhad.market_type = 'HHAD'
                AND hhad.is_current = TRUE
             WHERE prediction.prediction_status = 'LOCKED'
+              AND prediction.prediction_type = 'SPORTTERY'
               AND fact.fact_status IN ('FINAL', 'VOID')
               AND fact.created_at <= #{overdueBefore}
               AND (

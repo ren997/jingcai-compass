@@ -19,7 +19,10 @@ import com.jingcaicompass.prediction.dto.PredictionPublishDto;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.vo.PredictionPublishResultVo;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -182,6 +185,24 @@ class PredictionPublishServiceTest {
                 "publish conflict"
         );
         verifyNoInteractions(auditLogService);
+    }
+
+    @Test
+    void rejectsAsianDraftWithLowConfidenceBeforeHashing() {
+        Prediction draft = prediction(1L, PredictionStatusEnum.DRAFT);
+        draft.setPredictionType(PredictionTypeEnum.ASIAN);
+        draft.setAsianHandicapPick(AsianHandicapPickEnum.HOME_COVER);
+        draft.setAsianHandicapConfidenceLevel(ConfidenceLevelEnum.LOW);
+        draft.setTotalGoalsPick(TotalGoalsPickEnum.UNDER);
+        draft.setTotalGoalsConfidenceLevel(ConfidenceLevelEnum.HIGH);
+        stubLockedRows(draft, match(MatchStatusEnum.SCHEDULED, KICKOFF));
+
+        assertConflict(
+                () -> service.publish(new PredictionPublishDto(1L), "admin"),
+                "Asian handicap direction must have MEDIUM or HIGH confidence"
+        );
+        verify(predictionMapper, never()).selectLatestPublishedVersion(any(), any());
+        verifyNoInteractions(contentHasher, auditLogService);
     }
 
     @Test

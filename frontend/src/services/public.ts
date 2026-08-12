@@ -104,15 +104,18 @@ export type MatchListItemVo = {
 export type MatchPredictionSummaryVo = {
   modelVersion: string;
   predictionStatus: PredictionStatus;
-  homeWinProb: number;
-  drawProb: number;
-  awayWinProb: number;
-  handicapPick: HandicapPick;
-  expectedTotalGoals: number;
+  predictionType?: 'SPORTTERY' | 'ASIAN';
+  homeWinProb: number | null;
+  drawProb: number | null;
+  awayWinProb: number | null;
+  handicapPick: HandicapPick | null;
+  expectedTotalGoals: number | null;
   asianHandicapPick?: AsianHandicapPick | null;
   totalGoalsPick?: TotalGoalsPick | null;
   asianMarket?: PredictionAsianMarketVo | null;
-  confidenceLevel: ConfidenceLevel;
+  asianHandicapConfidenceLevel?: ConfidenceLevel | null;
+  totalGoalsConfidenceLevel?: ConfidenceLevel | null;
+  confidenceLevel: ConfidenceLevel | null;
 };
 
 export type SportteryMarketVo = {
@@ -215,15 +218,18 @@ export type PredictionVersionVo = {
   replacesPredictionId: number | null;
   predictionStatus: PredictionStatus;
   featureVersion: string;
-  homeWinProb: number;
-  drawProb: number;
-  awayWinProb: number;
-  handicapPick: HandicapPick;
-  expectedTotalGoals: number;
+  predictionType?: 'SPORTTERY' | 'ASIAN';
+  homeWinProb: number | null;
+  drawProb: number | null;
+  awayWinProb: number | null;
+  handicapPick: HandicapPick | null;
+  expectedTotalGoals: number | null;
   asianHandicapPick?: AsianHandicapPick | null;
   totalGoalsPick?: TotalGoalsPick | null;
   asianMarket?: PredictionAsianMarketVo | null;
-  confidenceLevel: ConfidenceLevel;
+  asianHandicapConfidenceLevel?: ConfidenceLevel | null;
+  totalGoalsConfidenceLevel?: ConfidenceLevel | null;
+  confidenceLevel: ConfidenceLevel | null;
   analysisSummary: string;
   generatedAt: string;
   publishTime: string;

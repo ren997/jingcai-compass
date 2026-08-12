@@ -8,7 +8,9 @@ import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.prediction.dto.PredictionPublishDto;
 import com.jingcaicompass.prediction.entity.Prediction;
+import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.vo.PredictionPublishResultVo;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -84,6 +86,9 @@ public class PredictionPublishServiceImpl implements PredictionPublishService {
         if (prediction.getPredictionStatus() != PredictionStatusEnum.DRAFT) {
             throw conflict("prediction status does not allow publish: "
                     + prediction.getPredictionStatus());
+        }
+        if (prediction.getPredictionType() == PredictionTypeEnum.ASIAN) {
+            validateAsianPublishableDirections(prediction, predictionId);
         }
 
         // 4) 仅允许尚未开赛的可发布比赛，锁定时间固定为开赛时间
@@ -171,6 +176,30 @@ public class PredictionPublishServiceImpl implements PredictionPublishService {
             );
         }
         return request.predictionId();
+    }
+
+    private void validateAsianPublishableDirections(Prediction prediction, Long predictionId) {
+        boolean hasHandicapPick = prediction.getAsianHandicapPick() != null;
+        boolean hasTotalsPick = prediction.getTotalGoalsPick() != null;
+        if (!hasHandicapPick && !hasTotalsPick) {
+            throw conflict("Asian prediction has no publishable market direction: " + predictionId);
+        }
+        if (hasHandicapPick && !isPublishableConfidence(prediction.getAsianHandicapConfidenceLevel())) {
+            throw conflict("Asian handicap direction must have MEDIUM or HIGH confidence: " + predictionId);
+        }
+        if (!hasHandicapPick && prediction.getAsianHandicapConfidenceLevel() != null) {
+            throw conflict("Asian handicap confidence must be absent without direction: " + predictionId);
+        }
+        if (hasTotalsPick && !isPublishableConfidence(prediction.getTotalGoalsConfidenceLevel())) {
+            throw conflict("Asian totals direction must have MEDIUM or HIGH confidence: " + predictionId);
+        }
+        if (!hasTotalsPick && prediction.getTotalGoalsConfidenceLevel() != null) {
+            throw conflict("Asian totals confidence must be absent without direction: " + predictionId);
+        }
+    }
+
+    private boolean isPublishableConfidence(ConfidenceLevelEnum confidence) {
+        return confidence == ConfidenceLevelEnum.MEDIUM || confidence == ConfidenceLevelEnum.HIGH;
     }
 
     private String requireOperator(String operatorUsername) {

@@ -4,6 +4,7 @@ import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
 import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.odds.enums.OddsSnapshotTypeEnum;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -28,6 +29,9 @@ public class AdminDraftPredictionRow {
     private Long asianOddsSnapshotId;
     private AsianHandicapPickEnum asianHandicapPick;
     private TotalGoalsPickEnum totalGoalsPick;
+    private PredictionTypeEnum predictionType;
+    private ConfidenceLevelEnum asianHandicapConfidenceLevel;
+    private ConfidenceLevelEnum totalGoalsConfidenceLevel;
     private String asianProviderCode;
     private String asianBookmakerCode;
     private BigDecimal asianHandicapLine;

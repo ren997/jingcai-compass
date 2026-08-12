@@ -4,6 +4,7 @@ import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
 import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.vo.PredictionAsianMarketVo;
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -24,6 +25,9 @@ public record AdminDraftPredictionListItemVo(
         AsianHandicapPickEnum asianHandicapPick,
         TotalGoalsPickEnum totalGoalsPick,
         PredictionAsianMarketVo asianMarket,
+        PredictionTypeEnum predictionType,
+        ConfidenceLevelEnum asianHandicapConfidenceLevel,
+        ConfidenceLevelEnum totalGoalsConfidenceLevel,
         ConfidenceLevelEnum confidenceLevel,
         String analysisSummary,
         Instant generatedAt,
@@ -61,6 +65,9 @@ public record AdminDraftPredictionListItemVo(
                 handicapPick,
                 expectedTotalGoals,
                 null,
+                null,
+                null,
+                PredictionTypeEnum.SPORTTERY,
                 null,
                 null,
                 confidenceLevel,

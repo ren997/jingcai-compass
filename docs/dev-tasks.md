@@ -5,8 +5,8 @@
 - 文档版本：v0.6
 - 最后更新：2026-08-12
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T209 V19 名称键遗留清理修复`
-- 下一任务：`完成 T209 修复验证后恢复 T610 亚盘方向预测的完整 CI / PR 交付`
+- 当前活动任务：`无（T610 等待完整 CI / PR 交付）`
+- 下一任务：`T610 亚盘方向预测与标签澄清（完成本轮本地验证后补齐完整 CI / PR 交付）`
 - 最近完成增量：`T609 公共比赛卡片市场与预测摘要`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
@@ -1098,7 +1098,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T209 外部待复核身份与赛事组合复核
 
-- 状态：`IN_PROGRESS`
+- 状态：`DONE`
 - 优先级：P0
 - 依赖：T208
 - 交付物：
@@ -1147,7 +1147,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-31：`mvn -B -ntp -f backend/pom.xml test` 通过（438 项）；`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（42 项，PostgreSQL 16/Testcontainers，V1～V17）；`git diff --check` 通过。T209 仍保持 `PARTIAL`，待真实库引用图审计与受控清理证据补齐。
   - 2026-08-10：对项目负责人确认的 local 测试 PostgreSQL 仅做只读审计；按 `installed_rank` 确认 Flyway 当前 V18。`THE_ODDS_API + PENDING + (NAME_CANDIDATE/LEGACY_NAME_CANDIDATE_REVIEW_REQUIRED)` 联赛候选 1、球队候选 30，候选关联内部实体、比赛、别名及其他 Provider 映射均为 0，证明 V17 已解绑且无残留保护性引用。PostgreSQL 16/Testcontainers 的新增 `ProviderNormalizationMigrationApplicationIT` 2 项验证 V17/V19 受控孤立清理、比赛/别名/其他 Provider 引用保护、待确认可空/已确认不可空约束和并发条件更新仅一方成功。`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（457 个普通测试、50 个 IT、Flyway V1～V19）；`npm --prefix frontend run test` 通过（65 项）；`npm --prefix frontend run build` 与 `git diff --check` 通过。Java 21.0.6、Maven 3.9.14、Docker Desktop Engine 29.6.2、Testcontainers PostgreSQL 16.14；等待 Draft PR CI。
   - 2026-08-10：实现提交 `c3c04940282cdbf829a640cddac4f44321f0c9c1` 的 [PR #23](https://github.com/ren997/jingcai-compass/pull/23) 首次 [GitHub Actions #31377565822](https://github.com/ren997/jingcai-compass/actions/runs/31377565822) 成功。Ubuntu Runner 以 Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers `postgres:16-alpine`（PostgreSQL 16.14）完成 V1～V19 空库迁移、457 个普通测试和 50 个 PostgreSQL IT；已验证 V19 仅处理可证明孤立身份、引用保护、可空/已确认约束和并发条件更新。最终看板提交将触发第二轮 CI，成功后再转正式并合并。
-  - 2026-08-13：本机 Java 21.0.6、Maven 3.9.14、Docker Desktop 4.84.0 / Engine 29.6.2、Testcontainers PostgreSQL 16.14 验证通过：`mvn -B -ntp -f backend/pom.xml test`（470 项）、定向 `LegacyNameKeyIdentityCleanupMigrationIT`（1 项，Flyway V18→V22）及完整 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`（53 项，Flyway V1～V22）均为 0 失败/0 错误；前端 Vitest 15 文件 71 项和生产构建、`git diff --check` 通过。待推送并创建 Draft PR，GitHub Actions 成功后才可将 T209 收口为 `DONE`。
+  - 2026-08-13：本机 Java 21.0.6、Maven 3.9.14、Docker Desktop 4.84.0 / Engine 29.6.2、Testcontainers PostgreSQL 16.14 验证通过：`mvn -B -ntp -f backend/pom.xml test`（470 项）、定向 `LegacyNameKeyIdentityCleanupMigrationIT`（1 项，Flyway V18→V22）及完整 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`（53 项，Flyway V1～V22）均为 0 失败/0 错误；前端 Vitest 15 文件 71 项和生产构建、`git diff --check` 通过。[PR #25](https://github.com/ren997/jingcai-compass/pull/25) 的 [GitHub Actions #31673553197](https://github.com/ren997/jingcai-compass/actions/runs/31673553197) 在 PostgreSQL 集成 job 成功；提交最终看板后需等待第二轮 CI 再合并。
 
 ## 8. M3 预测生成、发布、锁定和快照
 
@@ -2294,6 +2294,7 @@ T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PAR
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-08-13 | T209 / `2822fb2` | `IN_PROGRESS -> DONE` | V22 补齐 V19 对无展示名/无同时间戳 `NAME:`、`SCOPED_NAME:` 遗留记录的清理盲区；仅双向唯一且无引用时删除，歧义和比赛/别名/Provider 映射引用均保留。PR #25 的 Actions #31673553197 PostgreSQL 集成 job 已成功；最终看板提交将触发第二轮 CI，成功后合并。 |
 | 2026-08-12 | T610 | `PARTIAL -> PARTIAL` | 经项目负责人授权实测 V3 生成：候选 3、新增 2、复用 0，批次 `t306-asian-2026-08-12-2424415beb7a8a0f`，1 场因缺已确认完整亚盘跳过。两条均为 DRAFT，未发布。 |
 | 2026-08-12 | T610 | `IN_PROGRESS -> PARTIAL` | 恢复生成批次的原始 SHA-256 幂等校验，并在发布服务显式拒绝亚盘低置信或方向/置信度不配对的草稿。定向单元 29 项及 PostgreSQL 16.14/Flyway V1～V21 集成 12 项通过；未生成或发布真实 V3 数据，完整 CI / PR 仍待补。 |
 | 2026-08-12 | T610 | `IN_PROGRESS -> PARTIAL` | 新 V3 改为亚盘专用：竞彩概率、竞彩让球、预期总进球和整场置信度不再进入新输出或公开页；让球、大小球各自仅保存并展示 `MEDIUM/HIGH`，低置信方向不生成、双低整场跳过。V21 与 PostgreSQL 16 定向集成 12 项通过；普通后端 468 项、前端 71 项、生产构建及差异检查通过。未生成或发布真实 V3 数据；`gh auth status` 未登录，Draft PR / Actions 仍待补。 |

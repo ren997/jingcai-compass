@@ -5,8 +5,8 @@
 - 文档版本：v0.6
 - 最后更新：2026-08-12
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无（T610 等待完整 CI / PR 交付）`
-- 下一任务：`T610 亚盘方向预测与标签澄清（完成本轮本地验证后补齐完整 CI / PR 交付）`
+- 当前活动任务：`T209 V19 名称键遗留清理修复`
+- 下一任务：`完成 T209 修复验证后恢复 T610 亚盘方向预测的完整 CI / PR 交付`
 - 最近完成增量：`T609 公共比赛卡片市场与预测摘要`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
@@ -1098,7 +1098,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T209 外部待复核身份与赛事组合复核
 
-- 状态：`DONE`
+- 状态：`IN_PROGRESS`
 - 优先级：P0
 - 依赖：T208
 - 交付物：
@@ -1114,6 +1114,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 不让单场赛事确认直接写入联赛/球队别名或 Provider 映射；赛事复核弹窗提供联赛、主队、客队三项显式复选，未勾选时只确认赛事；勾选项与赛事确认在同一事务内逐项审计。
   - [x] 当同一 Provider 事件的联赛、主队、客队均已有已确认映射，且作用域、主客方向、开赛时间阈值和事件唯一性全部满足时，自动确认赛事映射并允许同步亚盘；任一条件不满足时继续 `PENDING` 并保留可读原因。
   - [x] 覆盖联赛/球队待复核不建内部实体、既有孤立临时实体安全清理、不可删除引用保护、跨 `sport_key` 同名隔离、三项确认后自动映射、主客反转/联赛冲突/时间超限不自动确认、单场确认不传播别名、JWT/traceId 与 PostgreSQL 约束。
+  - [x] 补齐 V19 无法以展示名和创建时间证明、但可由 `NAME:` / `SCOPED_NAME:` 来源键唯一复算的 V17 遗留孤立实体清理；保持歧义和所有引用保护记录待人工复核。
 - 验证命令：
 
   ```bash
@@ -1137,6 +1138,8 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-31：完成集成失败修复；V17 基线更新为 17 个迁移，预测锁定服务对短暂 `SKIP LOCKED` 空候选增加最多 5 次、每次 2ms 的有界重试，且不改变失败记录和审计语义。
   - 2026-08-10：恢复执行。范围固定为对项目负责人已确认的本地测试 PostgreSQL 做只读 `THE_ODDS_API + PENDING/NAME_CANDIDATE` 引用图审计，补齐缺失的 PostgreSQL 约束/并发验证与结果记录；不调用 Provider、不修改共享或生产数据库、不以手工删除代替 V17 受控清理。完成后将在独立 `codex/t209-reference-audit` 分支通过 Draft PR 与 GitHub Actions 复验。
   - 2026-08-10：发现 V17 的数据修改 CTE 在同一 PostgreSQL 语句快照中无法看到解绑后的映射，导致已证明孤立的临时实体不能删除。保持已执行 V17 不变，新增 V19：仅在保留的外部展示名、内部标准名与同事务创建时间可共同证明旧临时身份时，且不存在比赛、别名或任一 Provider 映射引用时，才补偿删除；无法证明的记录继续保留待人工复核。
+  - 2026-08-13：项目负责人要求继续修复 V19 遗漏的名称键历史记录。范围为基于最新主线新增版本化迁移，只处理 `THE_ODDS_API + PENDING + LEGACY_NAME_CANDIDATE_REVIEW_REQUIRED` 且空内部关联的 `NAME:` / `SCOPED_NAME:` 记录；名称键与当前规范化规则唯一匹配、并通过比赛/别名/其它映射二次保护时才删除。计划执行后端普通测试、定向 PostgreSQL 16 集成测试、完整集成验证、前端回归构建与差异检查。
+  - 2026-08-13：新增 Java Flyway `V22__RepairLegacyNameKeyIdentityCleanup`。V22 仅使用现行名称规范化规则重新计算旧名称键，并要求“一个待复核映射与一个无引用候选”双向唯一；删除语句在落库前再次检查比赛、别名和任一 Provider 映射引用。专用 PostgreSQL 用例从 V18 构造无展示名/无同时间戳的历史记录，先执行 V19～V21 证明其仍被保留，再执行 V22；覆盖 `NAME:`、`SCOPED_NAME:`、比赛/别名/映射保护及同名歧义保留。测试时间改为 JDBC 显式 `Timestamp` 绑定，避免旧 V20 分支的 `Instant` 参数类型失败。
 - 验证记录：
   - 2026-07-30：`mvn -f backend/pom.xml clean test` 通过，437 项普通测试；`cd frontend && npm run test` 通过，64 项 Vitest；`cd frontend && npm run build` 通过；`git diff --check` 通过。未运行 `mvn -Pintegration verify`、未触发 CI、未推送，也未启动 local 应用或对开发库执行 V17。
   - 2026-07-30：经项目负责人确认测试数据范围后，`mvn -f backend/pom.xml spring-boot:run` 的 `local` profile 启动成功；Flyway V17 成功，`http://127.0.0.1:8081/actuator/health` 返回 `UP`。浏览器登录并访问首页、`/admin/mappings`、`/admin/normalizations/leagues`、`/admin/normalizations/teams` 及球队详情成功，控制台无 error/warn。
@@ -1144,6 +1147,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-07-31：`mvn -B -ntp -f backend/pom.xml test` 通过（438 项）；`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（42 项，PostgreSQL 16/Testcontainers，V1～V17）；`git diff --check` 通过。T209 仍保持 `PARTIAL`，待真实库引用图审计与受控清理证据补齐。
   - 2026-08-10：对项目负责人确认的 local 测试 PostgreSQL 仅做只读审计；按 `installed_rank` 确认 Flyway 当前 V18。`THE_ODDS_API + PENDING + (NAME_CANDIDATE/LEGACY_NAME_CANDIDATE_REVIEW_REQUIRED)` 联赛候选 1、球队候选 30，候选关联内部实体、比赛、别名及其他 Provider 映射均为 0，证明 V17 已解绑且无残留保护性引用。PostgreSQL 16/Testcontainers 的新增 `ProviderNormalizationMigrationApplicationIT` 2 项验证 V17/V19 受控孤立清理、比赛/别名/其他 Provider 引用保护、待确认可空/已确认不可空约束和并发条件更新仅一方成功。`mvn -B -ntp -f backend/pom.xml -Pintegration verify` 通过（457 个普通测试、50 个 IT、Flyway V1～V19）；`npm --prefix frontend run test` 通过（65 项）；`npm --prefix frontend run build` 与 `git diff --check` 通过。Java 21.0.6、Maven 3.9.14、Docker Desktop Engine 29.6.2、Testcontainers PostgreSQL 16.14；等待 Draft PR CI。
   - 2026-08-10：实现提交 `c3c04940282cdbf829a640cddac4f44321f0c9c1` 的 [PR #23](https://github.com/ren997/jingcai-compass/pull/23) 首次 [GitHub Actions #31377565822](https://github.com/ren997/jingcai-compass/actions/runs/31377565822) 成功。Ubuntu Runner 以 Eclipse Temurin 21.0.11+10、Maven 3.9.16、Docker Engine 28.0.4、Testcontainers `postgres:16-alpine`（PostgreSQL 16.14）完成 V1～V19 空库迁移、457 个普通测试和 50 个 PostgreSQL IT；已验证 V19 仅处理可证明孤立身份、引用保护、可空/已确认约束和并发条件更新。最终看板提交将触发第二轮 CI，成功后再转正式并合并。
+  - 2026-08-13：本机 Java 21.0.6、Maven 3.9.14、Docker Desktop 4.84.0 / Engine 29.6.2、Testcontainers PostgreSQL 16.14 验证通过：`mvn -B -ntp -f backend/pom.xml test`（470 项）、定向 `LegacyNameKeyIdentityCleanupMigrationIT`（1 项，Flyway V18→V22）及完整 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`（53 项，Flyway V1～V22）均为 0 失败/0 错误；前端 Vitest 15 文件 71 项和生产构建、`git diff --check` 通过。待推送并创建 Draft PR，GitHub Actions 成功后才可将 T209 收口为 `DONE`。
 
 ## 8. M3 预测生成、发布、锁定和快照
 

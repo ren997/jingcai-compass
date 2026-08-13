@@ -155,6 +155,7 @@ public class MatchQueryServiceImpl implements MatchQueryService {
                 query == null || query.lotteryDate() == null ? currentLotteryDate() : query.lotteryDate(),
                 query == null ? null : query.leagueId(),
                 query == null || query.matchStatuses() == null ? Set.of() : Set.copyOf(query.matchStatuses()),
+                query != null && Boolean.TRUE.equals(query.hasPublishedPrediction()),
                 query == null || query.sort() == null ? MatchListSortEnum.KICKOFF_ASC : query.sort(),
                 pageSize,
                 (long) (pageNo - 1) * pageSize

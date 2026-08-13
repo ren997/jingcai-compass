@@ -122,6 +122,17 @@ export default function MatchesPage() {
             ))}
           </div>
         </fieldset>
+        <label>
+          <input
+            type="checkbox"
+            checked={filters.hasPublishedPrediction}
+            onChange={(event) => updateFilters({
+              hasPublishedPrediction: event.target.checked,
+              pageNo: 1,
+            })}
+          />
+          已发布预测
+        </label>
       </section>
 
       {matchesQuery.isPending && <section className="state-card">正在加载比赛池……</section>}

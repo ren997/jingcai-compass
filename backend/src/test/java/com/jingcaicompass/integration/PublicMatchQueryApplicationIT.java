@@ -114,6 +114,34 @@ class PublicMatchQueryApplicationIT {
     }
 
     @Test
+    void filtersPagedMatchesByCurrentPublishedOrLockedPredictionsOnly() {
+        long leagueId = insertLeague("T611 已发布预测筛选联赛");
+        long publishedMatch = insertMatch(leagueId, "T611-PUBLISHED", "SCHEDULED", "2026-07-22T10:00:00Z");
+        long lockedMatch = insertMatch(leagueId, "T611-LOCKED", "SCHEDULED", "2026-07-22T11:00:00Z");
+        long draftOnlyMatch = insertMatch(leagueId, "T611-DRAFT", "SCHEDULED", "2026-07-22T12:00:00Z");
+        long sportteryOnlyMatch = insertMatch(leagueId, "T611-SPORTTERY", "SCHEDULED", "2026-07-22T13:00:00Z");
+        insertAsianPrediction(publishedMatch, insertCompleteAsianSnapshot(publishedMatch, "published"), "PUBLISHED", "published");
+        insertAsianPrediction(lockedMatch, insertCompleteAsianSnapshot(lockedMatch, "locked"), "LOCKED", "locked");
+        insertAsianPrediction(draftOnlyMatch, insertCompleteAsianSnapshot(draftOnlyMatch, "draft"), "DRAFT", "draft");
+        insertSportteryPrediction(sportteryOnlyMatch, "sporttery");
+
+        var filtered = matchQueryService.list(new MatchListQueryDto(
+                LocalDate.of(2026, 7, 22), leagueId, null, true,
+                MatchListSortEnum.KICKOFF_ASC, 1, 20
+        ));
+        var unfiltered = matchQueryService.list(new MatchListQueryDto(
+                LocalDate.of(2026, 7, 22), leagueId, null,
+                MatchListSortEnum.KICKOFF_ASC, 1, 20
+        ));
+
+        assertThat(filtered.total()).isEqualTo(2);
+        assertThat(filtered.records()).extracting(item -> item.matchId())
+                .containsExactly(publishedMatch, lockedMatch);
+        assertThat(unfiltered.total()).isEqualTo(4);
+        verifyNoInteractions(sportteryProvider);
+    }
+
+    @Test
     void returnsEveryCurrentAsianLineWithMappingAndExplicitAbsenceStatus() {
         long leagueId = insertLeague("T501 详情联赛");
         long matchId = insertMatch(leagueId, "T501-DETAIL", "SCHEDULED", "2026-07-22T10:00:00Z");
@@ -214,6 +242,51 @@ class PublicMatchQueryApplicationIT {
                     mapping_method, mapping_explanation
                 ) VALUES (?, ?, ?, ?, 1.0000, 'MANUAL', 'T501 integration mapping')
                 """, matchId, providerCode, externalMatchId, status);
+    }
+
+    private void insertAsianPrediction(long matchId, long asianSnapshotId, String status, String seed) {
+        String hash = hash("prediction-" + seed);
+        jdbcTemplate.update("""
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, prediction_type, asian_odds_snapshot_id, total_goals_pick,
+                    total_goals_confidence_level, analysis_summary, generated_at, prediction_status,
+                    publish_time, lock_time, prediction_hash
+                ) VALUES (?, ?, 'feature-v1', ?, ?, 1, 'ASIAN', ?, 'UNDER', 'MEDIUM',
+                          'T611 Asian prediction filter', TIMESTAMPTZ '2026-07-22 08:00:00+00',
+                          ?,
+                          CASE WHEN ? = 'DRAFT' THEN NULL ELSE TIMESTAMPTZ '2026-07-22 08:05:00+00' END,
+                          CASE WHEN ? = 'DRAFT' THEN NULL ELSE TIMESTAMPTZ '2026-07-22 09:05:00+00' END,
+                          CASE WHEN ? = 'DRAFT' THEN NULL ELSE ? END)
+                """,
+                matchId, "t611-" + seed, "t611-batch-" + seed, hash, asianSnapshotId,
+                status, status, status, status, hash);
+    }
+
+    private long insertCompleteAsianSnapshot(long matchId, String seed) {
+        return jdbcTemplate.queryForObject("""
+                INSERT INTO asian_odds_snapshots (
+                    match_id, provider_code, bookmaker_code, handicap_line, home_odds, away_odds,
+                    total_line, over_odds, under_odds, snapshot_type, captured_at, raw_payload_hash
+                ) VALUES (?, 'T611_ASIAN', ?, 0, 1.90, 1.90, 2.5, 1.90, 1.90,
+                          'PRE_KICKOFF', TIMESTAMPTZ '2026-07-22 08:00:00+00', ?)
+                RETURNING id
+                """, Long.class, matchId, "T611-" + seed, hash("asian-" + seed));
+    }
+
+    private void insertSportteryPrediction(long matchId, String seed) {
+        String hash = hash("prediction-" + seed);
+        jdbcTemplate.update("""
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, home_win_prob, draw_prob, away_win_prob, handicap_pick,
+                    expected_total_goals, confidence_level, analysis_summary, generated_at,
+                    prediction_status, publish_time, lock_time, prediction_hash
+                ) VALUES (?, ?, 'feature-v1', ?, ?, 1, 0.4, 0.3, 0.3, 'HOME_WIN',
+                          2.5, 'MEDIUM', 'T611 Sporttery prediction filter', TIMESTAMPTZ '2026-07-22 08:00:00+00',
+                          'PUBLISHED', TIMESTAMPTZ '2026-07-22 08:05:00+00',
+                          TIMESTAMPTZ '2026-07-22 09:05:00+00', ?)
+                """, matchId, "t611-" + seed, "t611-batch-" + seed, hash, hash);
     }
 
     private static long nextKey() {

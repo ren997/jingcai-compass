@@ -31,27 +31,35 @@ public interface MatchMapper extends BaseMapper<MatchEntity> {
     /** 按固定白名单排序分页查询公开比赛。 */
     @Select("""
             <script>
-            SELECT * FROM matches
+            SELECT m.* FROM matches m
             <where>
               <if test="criteria.lotteryDate != null">
-                lottery_date = #{criteria.lotteryDate}
+                m.lottery_date = #{criteria.lotteryDate}
               </if>
               <if test="criteria.leagueId != null">
-                AND league_id = #{criteria.leagueId}
+                AND m.league_id = #{criteria.leagueId}
               </if>
               <if test="criteria.matchStatuses != null and !criteria.matchStatuses.isEmpty()">
-                AND match_status IN
+                AND m.match_status IN
                 <foreach collection="criteria.matchStatuses" item="status" open="(" separator="," close=")">
                   #{status}
                 </foreach>
               </if>
+              <if test="criteria.hasPublishedPrediction">
+                AND EXISTS (
+                  SELECT 1 FROM predictions p
+                  WHERE p.match_id = m.id
+                    AND p.prediction_status IN ('PUBLISHED', 'LOCKED')
+                    AND p.prediction_type = 'ASIAN'
+                )
+              </if>
             </where>
             ORDER BY
             <choose>
-              <when test="criteria.sort.name() == 'KICKOFF_DESC'">kickoff_time DESC, id DESC</when>
-              <when test="criteria.sort.name() == 'LOTTERY_MATCH_NO_ASC'">lottery_match_no ASC, id ASC</when>
-              <when test="criteria.sort.name() == 'LOTTERY_MATCH_NO_DESC'">lottery_match_no DESC, id DESC</when>
-              <otherwise>kickoff_time ASC, id ASC</otherwise>
+              <when test="criteria.sort.name() == 'KICKOFF_DESC'">m.kickoff_time DESC, m.id DESC</when>
+              <when test="criteria.sort.name() == 'LOTTERY_MATCH_NO_ASC'">m.lottery_match_no ASC, m.id ASC</when>
+              <when test="criteria.sort.name() == 'LOTTERY_MATCH_NO_DESC'">m.lottery_match_no DESC, m.id DESC</when>
+              <otherwise>m.kickoff_time ASC, m.id ASC</otherwise>
             </choose>
             LIMIT #{criteria.pageSize} OFFSET #{criteria.offset}
             </script>
@@ -61,19 +69,27 @@ public interface MatchMapper extends BaseMapper<MatchEntity> {
     /** 统计公开比赛分页筛选结果。 */
     @Select("""
             <script>
-            SELECT COUNT(*) FROM matches
+            SELECT COUNT(*) FROM matches m
             <where>
               <if test="criteria.lotteryDate != null">
-                lottery_date = #{criteria.lotteryDate}
+                m.lottery_date = #{criteria.lotteryDate}
               </if>
               <if test="criteria.leagueId != null">
-                AND league_id = #{criteria.leagueId}
+                AND m.league_id = #{criteria.leagueId}
               </if>
               <if test="criteria.matchStatuses != null and !criteria.matchStatuses.isEmpty()">
-                AND match_status IN
+                AND m.match_status IN
                 <foreach collection="criteria.matchStatuses" item="status" open="(" separator="," close=")">
                   #{status}
                 </foreach>
+              </if>
+              <if test="criteria.hasPublishedPrediction">
+                AND EXISTS (
+                  SELECT 1 FROM predictions p
+                  WHERE p.match_id = m.id
+                    AND p.prediction_status IN ('PUBLISHED', 'LOCKED')
+                    AND p.prediction_type = 'ASIAN'
+                )
               </if>
             </where>
             </script>

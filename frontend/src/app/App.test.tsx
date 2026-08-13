@@ -431,8 +431,8 @@ describe('App routes', () => {
     expect(screen.getByText('BOOK_A · ODDS_API')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '预测结果' })).toBeInTheDocument();
     expect(screen.getByText('model-v1')).toBeInTheDocument();
-    expect(screen.getByText(/亚盘让球（主队 -0.5）：主队赢盘/)).toBeInTheDocument();
-    expect(screen.getByText(/亚盘大小球（2.5）：大球/)).toBeInTheDocument();
+    expect(screen.getByText(/亚盘让球：主 -0.5（赔率 1.92）/)).toBeInTheDocument();
+    expect(screen.getByText(/亚盘大小球：大 2.5（赔率 1.88）/)).toBeInTheDocument();
   });
 
   it('renders public detail in separate Sporttery and Asian Odds sections and preserves the list URL', async () => {

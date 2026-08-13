@@ -5,8 +5,8 @@
 - 文档版本：v0.6
 - 最后更新：2026-08-13
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无（T611 等待完整 CI / PR 交付）`
-- 下一任务：`T611 公开比赛已发布预测筛选（完成本轮本地验证后补齐完整 CI / PR 交付）`
+- 当前活动任务：`无（T612 等待完整 CI / PR 交付）`
+- 下一任务：`T612 公开预测盘口与赔率文案（完成 GitHub CI / PR 交付）`
 - 最近完成增量：`T611 公开比赛已发布预测筛选`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
@@ -2174,6 +2174,34 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-08-13：完成本地增量。公开分页在数据库端以 `EXISTS` 过滤当前 `ASIAN` 类型的 `PUBLISHED`/`LOCKED` 预测，`DRAFT` 与历史 `SPORTTERY` 预测均不命中；列表和计数共享同一条件。`/matches` 新增“已发布预测”复选框，使用 `published=true` 进行 URL 恢复，切换时重置到第 1 页；联赛选项继续使用当日无筛选列表。浏览器实测 2026-08-13 勾选后筛出 4 场，每张卡片均展示已发布 `t306-asian-baseline-v3` 预测。
 - 验证记录：
   - 2026-08-13：`mvn -B -ntp -f backend/pom.xml test` 通过（472 项）；`npm --prefix frontend run test -- --run` 通过（15 文件、72 项）；`npm --prefix frontend run build` 通过；`mvn -B -ntp -f backend/pom.xml -Pintegration "-Dit.test=PublicMatchQueryApplicationIT" verify` 在 PostgreSQL 16.14、Flyway V1～V22 上通过（4 项，覆盖 `PUBLISHED`/`LOCKED` 保留、单独 `DRAFT` 与 `SPORTTERY` 排除及计数一致）；`git diff --check` 通过。`gh auth status` 仍未登录，无法建立 Draft PR 或等待 GitHub Actions，故保持 `PARTIAL`；恢复时先登录具备仓库权限的 GitHub CLI，按本看板建立 Draft PR 并完成 CI/合并交付。
+
+### T612 公开预测盘口与赔率文案
+
+- 状态：`PARTIAL`
+- 优先级：P1
+- 依赖：T609、T610
+- 交付物：
+  - 公开比赛卡片中按预测方向展示的亚盘盘口与对应赔率
+- 执行步骤：
+  - [x] 将让球预测改为“主/客 + 具体让球线 + 对应方向水位”的紧凑文案；客队方向须从主队让球线正确换算。
+  - [x] 将大小球预测改为“大/小 + 具体盘口 + 对应方向水位”的紧凑文案，保留分项置信等级。
+  - [x] 补齐前端展示测试并完成页面、生产构建与差异检查验证。
+- 验证命令：
+
+  ```bash
+  npm --prefix frontend run test -- --run
+  npm --prefix frontend run build
+  git diff --check
+  ```
+
+- 完成标准：
+  - 公开比赛卡片的预测结果能够直接读出预测所选盘口及该选项赔率，例如“主 -0.5（赔率 1.73）”“小 2（赔率 2.21）”。
+  - 主/客让球和大小球均使用预测生成时绑定的亚盘快照，不借用当前主盘。
+- 执行记录：
+  - 2026-08-13：开始执行。项目负责人要求公开比赛卡片的预测结果直接展示具体亚盘盘口和所选方向赔率；范围限于预测摘要文案与测试，不改预测方向、置信度、盘口快照、发布生命周期或模型数据。
+  - 2026-08-13：完成本地增量。公开比赛卡片基于预测生成时保存的 `asianMarket` 快照展示所选项：让球显示“主/客 + 对应盘口 + 所选水位”，其中客队方向按主队盘口反向换算（主 `-0.5` 预测客队赢盘显示为“客 +0.5”）；大小球显示“大/小 + 总进球盘口 + 所选水位”。分项置信等级与生成快照说明保持不变。
+- 验证记录：
+  - 2026-08-13：浏览器实测 `http://localhost:5173/matches?date=2026-08-13&published=true`：米拉索尔 vs 基多体大显示“亚盘让球：主 -0.5（赔率 1.73）”“亚盘大小球：大 2（赔率 1.71）”；罗萨里奥 vs 科林蒂安显示“亚盘让球：客 +0.5（赔率 1.61）”“亚盘大小球：小 2（赔率 1.76）”。`npm --prefix frontend run test -- --run` 通过（16 文件、75 项）；`npm --prefix frontend run build` 通过；`git diff --check` 通过。`gh auth status` 仍未登录，无法建立 Draft PR 或等待 GitHub Actions，故状态为 `PARTIAL`；恢复时先登录具备仓库权限的 GitHub CLI，按本看板完成 CI / PR 交付。
 
 ### T604 Docker 与 Nginx 部署
 

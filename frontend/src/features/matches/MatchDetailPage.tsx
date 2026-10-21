@@ -9,6 +9,10 @@ import NotFoundPage from '../../pages/NotFoundPage';
 import {
   availabilityLabel,
   asianHandicapPredictionLabel,
+  modelMarketProbabilityText,
+  edgeText,
+  lambdaText,
+  dispersionText,
   confidenceLabel,
   dataSourceLabel,
   formatProbability,
@@ -53,6 +57,38 @@ function predictionHashLabel(prediction: PredictionVersionVo) {
 }
 
 /** T501 市场和来源透明信息的公共详情页。 */
+/** 亚盘模型概率四行：方向概率、edge、λ、σ。十列为空时整块不渲染。 */
+function AsianModelProbabilityRows({ prediction }: { prediction: PredictionVersionVo }) {
+  const model = prediction.asianModel;
+  if (!model) {
+    return null;
+  }
+  const handicapEdge = prediction.asianHandicapPick
+    ? edgeText(model, prediction.asianHandicapPick, 'HANDICAP')
+    : null;
+  const totalsEdge = prediction.totalGoalsPick
+    ? edgeText(model, prediction.totalGoalsPick, 'TOTALS')
+    : null;
+  const handicapProbability = prediction.asianHandicapPick
+    ? modelMarketProbabilityText(model, prediction.asianHandicapPick, 'HANDICAP')
+    : null;
+  const totalsProbability = prediction.totalGoalsPick
+    ? modelMarketProbabilityText(model, prediction.totalGoalsPick, 'TOTALS')
+    : null;
+  return (
+    <>
+      {handicapProbability && (
+        <div><dt>让球概率</dt><dd>{handicapProbability}{handicapEdge ? ` · ${handicapEdge}` : ''}</dd></div>
+      )}
+      {totalsProbability && (
+        <div><dt>大小球概率</dt><dd>{totalsProbability}{totalsEdge ? ` · ${totalsEdge}` : ''}</dd></div>
+      )}
+      {lambdaText(model) && <div><dt>期望进球（λ）</dt><dd>{lambdaText(model)}</dd></div>}
+      {dispersionText(model) && <div><dt>跨庄离散度（σ）</dt><dd>{dispersionText(model)}</dd></div>}
+    </>
+  );
+}
+
 export default function MatchDetailPage() {
   const { matchId: rawMatchId } = useParams();
   const location = useLocation();
@@ -165,6 +201,7 @@ export default function MatchDetailPage() {
                       <dl className="metadata-list prediction-metadata">
                         {prediction.asianHandicapPick && <div><dt>亚盘让球</dt><dd>{asianHandicapPredictionLabel(prediction.asianMarket?.handicapLine, prediction.asianHandicapPick)} · 置信：{confidenceLabel(prediction.asianHandicapConfidenceLevel)}</dd></div>}
                         {prediction.totalGoalsPick && <div><dt>亚盘大小球</dt><dd>{formatNumber(prediction.asianMarket?.totalLine)}：{totalGoalsPickLabel(prediction.totalGoalsPick)} · 置信：{confidenceLabel(prediction.totalGoalsConfidenceLevel)}</dd></div>}
+                        <AsianModelProbabilityRows prediction={prediction} />
                         {prediction.asianMarket && <div><dt>生成亚盘快照</dt><dd>#{prediction.asianMarket.asianOddsSnapshotId} · {prediction.asianMarket.bookmakerCode} · 亚洲{formatHandicap(prediction.asianMarket.handicapLine)} 主 {formatNumber(prediction.asianMarket.homeOdds)} / 客 {formatNumber(prediction.asianMarket.awayOdds)}；大小球 {formatNumber(prediction.asianMarket.totalLine)} 大 {formatNumber(prediction.asianMarket.overOdds)} / 小 {formatNumber(prediction.asianMarket.underOdds)} · {formatTimestamp(prediction.asianMarket.capturedAt)}</dd></div>}
                         <div><dt>生成 / 发布时间</dt><dd>{formatTimestamp(prediction.generatedAt)} / {formatTimestamp(prediction.publishTime)}</dd></div>
                         <div><dt>锁定时间</dt><dd>{formatTimestamp(prediction.lockTime)}</dd></div>

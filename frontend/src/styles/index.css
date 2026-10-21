@@ -2089,3 +2089,45 @@ h1 {
     padding-bottom: 12px;
   }
 }
+
+/* 产品线切换：两条口径不可混算，同一时刻只展示一条，因此按 tab 语义而不是复选框。 */
+.prediction-type-switch {
+  display: inline-flex;
+  grid-column: 1 / -1;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: #eef3ef;
+}
+
+.prediction-type-switch button {
+  padding: 6px 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #526259;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.prediction-type-switch button[aria-selected='true'] {
+  border-color: #dbe4dc;
+  background: #fff;
+  color: #1f2d26;
+  box-shadow: 0 1px 2px rgb(31 45 38 / 8%);
+}
+
+/* 卡片上的概率行：与盘口、方向区分开，避免被当成赔率。 */
+.match-prediction-probability {
+  margin: 2px 0;
+  color: #526259;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.statistics-metrics .metric-secondary {
+  margin-top: 2px;
+  color: #6b7a71;
+  font-size: 12px;
+}

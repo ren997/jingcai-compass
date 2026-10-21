@@ -35,11 +35,39 @@ export type AdminDraftPredictionListQuery = {
 export const LOCK_DIAGNOSTICS = ['OVERDUE', 'SCHEDULED', 'LOCKED'] as const;
 export type LockDiagnostic = (typeof LOCK_DIAGNOSTICS)[number];
 
+/**
+ * 结算诊断码与市场解耦：市场信息放在 AdminStatusDiagnostic.marketType 上。
+ *
+ * <p>按市场硬编码诊断码（SETTLEMENT_MISSING_HAD 之类）会让"每加一个市场就加一个码"，
+ * 而诊断语义本身与市场无关，只是恰好发生在某个市场上。
+ */
 export const SETTLEMENT_DIAGNOSTICS = [
-  'AWAITING_RESULT', 'SETTLEMENT_MISSING_HAD', 'SETTLEMENT_MISSING_HHAD',
-  'SETTLEMENT_STALE_HAD', 'SETTLEMENT_STALE_HHAD',
+  'AWAITING_RESULT',
+  'SETTLEMENT_MISSING',
+  'SETTLEMENT_STALE',
 ] as const;
 export type SettlementDiagnostic = (typeof SETTLEMENT_DIAGNOSTICS)[number];
+
+/** 与后端 MarketTypeEnum 一致；亚盘市场由亚盘预测使用。 */
+export const ADMIN_SETTLEMENT_MARKETS = [
+  'HAD',
+  'HHAD',
+  'ASIAN_HANDICAP',
+  'ASIAN_TOTAL_GOALS',
+] as const;
+export type AdminSettlementMarketType = (typeof ADMIN_SETTLEMENT_MARKETS)[number];
+
+/** 亚盘存在走盘与半赢半输，竞彩只有胜/负/走。 */
+export const ADMIN_SETTLEMENT_STATUSES = [
+  'PENDING',
+  'HIT',
+  'MISS',
+  'PUSH',
+  'HALF_WIN',
+  'HALF_LOSS',
+  'VOID',
+] as const;
+export type AdminSettlementStatus = (typeof ADMIN_SETTLEMENT_STATUSES)[number];
 
 export type AdminSyncRunListQuery = {
   providerCode?: string;
@@ -130,6 +158,8 @@ export type AdminSettlementStatusListQuery = {
 export type AdminStatusDiagnostic = {
   code: LockDiagnostic | SettlementDiagnostic;
   description: string;
+  /** 诊断发生在哪个市场上；锁定类诊断与市场无关，为空。 */
+  marketType?: AdminSettlementMarketType | null;
 };
 
 export type AdminPredictionMatch = {
@@ -221,32 +251,36 @@ export type AdminResultFact = {
 };
 
 export type AdminSettlementMarket = {
-  marketType: 'HAD' | 'HHAD';
-  currentStatus: 'PENDING' | 'HIT' | 'MISS' | 'VOID';
+  marketType: AdminSettlementMarketType;
+  currentStatus: AdminSettlementStatus;
   currentSettlementPersisted: boolean;
   settlementId: number | null;
   settlementVersion: number | null;
   matchFactId: number | null;
   ruleVersion: string | null;
   stale: boolean;
+  /** 按 1 单位本金计算的收益；未落库时为 null。 */
+  profit: number | null;
 };
 
 export type AdminSettlementVersion = {
   settlementId: number;
   settlementVersion: number;
   supersedesSettlementVersion: number | null;
-  settlementStatus: 'HIT' | 'MISS' | 'VOID';
+  settlementStatus: AdminSettlementStatus;
   matchFactId: number;
   ruleVersion: string;
   current: boolean;
   createdAt: string;
+  profit: number | null;
 };
 
 export type AdminSettlementMarketHistory = {
-  marketType: 'HAD' | 'HHAD';
+  marketType: AdminSettlementMarketType;
   currentStatus: AdminSettlementMarket['currentStatus'];
   currentSettlementPersisted: boolean;
   currentSettlementStale: boolean;
+  currentProfit: number | null;
   versions: AdminSettlementVersion[];
 };
 
@@ -255,6 +289,7 @@ export type AdminPredictionStatusItem = {
   modelVersion: string;
   featureVersion: string;
   predictionVersion: number;
+  predictionType: 'SPORTTERY' | 'ASIAN';
   predictionStatus: PredictionStatus;
   publishTime: string;
   lockTime: string;
@@ -262,8 +297,8 @@ export type AdminPredictionStatusItem = {
   match: AdminPredictionMatch;
   lockDiagnostics: AdminStatusDiagnostic[];
   currentResultFact: AdminResultFact | null;
-  hadSettlement: AdminSettlementMarket;
-  hhadSettlement: AdminSettlementMarket;
+  /** 该产品线实际结算的市场，顺序固定；不再有 had/hhad 具名字段。 */
+  settlementMarkets: AdminSettlementMarket[];
   settlementDiagnostics: AdminStatusDiagnostic[];
 };
 

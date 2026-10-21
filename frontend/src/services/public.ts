@@ -44,24 +44,84 @@ export type ConfidenceLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export type PublicSnapshotAvailability = 'AVAILABLE' | 'UNAVAILABLE';
 
-export const SETTLEMENT_MARKETS = ['HAD', 'HHAD'] as const;
+/** 预测产品线。两类预测的结算市场、命中口径与 Brier 定义都不同，不能混算。 */
+export const PREDICTION_TYPES = ['SPORTTERY', 'ASIAN'] as const;
+
+export type PredictionType = (typeof PREDICTION_TYPES)[number];
+
+/** 每类预测各自结算的市场；顺序与后端 MarketTypeEnum.marketsFor 一致。 */
+export const SETTLEMENT_MARKETS = [
+  'HAD',
+  'HHAD',
+  'ASIAN_HANDICAP',
+  'ASIAN_TOTAL_GOALS',
+] as const;
 
 export type SettlementMarket = (typeof SETTLEMENT_MARKETS)[number];
 
-export const SETTLEMENT_STATUSES = ['PENDING', 'HIT', 'MISS', 'VOID'] as const;
+export const ASIAN_SETTLEMENT_MARKETS = ['ASIAN_HANDICAP', 'ASIAN_TOTAL_GOALS'] as const;
+
+export function settlementMarketsFor(predictionType: PredictionType): readonly SettlementMarket[] {
+  return predictionType === 'ASIAN' ? ASIAN_SETTLEMENT_MARKETS : (['HAD', 'HHAD'] as const);
+}
+
+/** 亚盘市场存在走盘与半赢半输，竞彩只有胜/负/走。 */
+export const SETTLEMENT_STATUSES = [
+  'PENDING',
+  'HIT',
+  'MISS',
+  'PUSH',
+  'HALF_WIN',
+  'HALF_LOSS',
+  'VOID',
+] as const;
 
 export type SettlementStatus = (typeof SETTLEMENT_STATUSES)[number];
+
+/**
+ * 竞彩只有胜/负/走三种结局，不存在走盘与半赢半输。
+ *
+ * <p>状态筛选也按产品线裁剪：在竞彩下勾"走盘"必然查出空页，而空页无法与"这段时间没有预测"
+ * 区分——这正是需要提前消掉的歧义。
+ */
+export const SPORTTERY_SETTLEMENT_STATUSES = ['PENDING', 'HIT', 'MISS', 'VOID'] as const;
+
+export function settlementStatusesFor(predictionType: PredictionType): readonly SettlementStatus[] {
+  return predictionType === 'ASIAN' ? SETTLEMENT_STATUSES : SPORTTERY_SETTLEMENT_STATUSES;
+}
+
+/** 亚盘模型概率十列；概率一律为首边口径（主队赢盘 / 大球），看另一边需取 1 − p。 */
+export type PredictionAsianModelVo = {
+  lambdaHome: number | null;
+  lambdaAway: number | null;
+  modelCoverProb: number | null;
+  marketCoverProb: number | null;
+  edgeCover: number | null;
+  modelOverProb: number | null;
+  marketOverProb: number | null;
+  edgeOver: number | null;
+  handicapDispersion: number | null;
+  totalsDispersion: number | null;
+};
 
 export type MatchResultFactStatus = 'PENDING' | 'FINAL' | 'VOID';
 
 export type MatchResultFactSource = 'OFFICIAL' | 'MANUAL';
 
-export type ProbabilityMetricUnavailableReason = 'NO_FINAL_SAMPLE';
+export type ProbabilityMetricUnavailableReason =
+  | 'NO_FINAL_SAMPLE'
+  | 'NO_SETTLED_ASIAN_SAMPLE'
+  | 'MISSING_ASIAN_MODEL_PROBABILITY';
+
+/** 三分类用 LogLoss/Brier 的原始定义，二分类用方向口径，两者数值不可比。 */
+export type ProbabilityScoringMode = 'THREE_WAY' | 'ASIAN_DIRECTION';
 
 export type RoiUnavailableReason =
   | 'MISSING_FIXED_BETTING_RULE'
   | 'MISSING_LOCKED_BETTING_MARKET'
-  | 'MISSING_LOCKED_ODDS_INPUT';
+  | 'MISSING_LOCKED_ODDS_INPUT'
+  | 'NO_SETTLED_SETTLEMENT'
+  | 'MISSING_SETTLEMENT_PROFIT';
 
 export type PageResult<T> = {
   records: T[];
@@ -117,6 +177,8 @@ export type MatchPredictionSummaryVo = {
   asianHandicapConfidenceLevel?: ConfidenceLevel | null;
   totalGoalsConfidenceLevel?: ConfidenceLevel | null;
   confidenceLevel: ConfidenceLevel | null;
+  /** 亚盘模型概率；为 null 表示这一版没有模型概率，不要按 0 渲染。 */
+  asianModel?: PredictionAsianModelVo | null;
 };
 
 export type SportteryMarketVo = {
@@ -238,6 +300,7 @@ export type PredictionVersionVo = {
   predictionHash: string;
   snapshotAvailability: PublicSnapshotAvailability;
   snapshot: PredictionSnapshotVo | null;
+  asianModel?: PredictionAsianModelVo | null;
 };
 
 export type PredictionModelDetailVo = {
@@ -259,6 +322,8 @@ export type HistoryListQuery = {
   leagueId?: number;
   modelVersion?: string;
   lockedOnly: boolean;
+  /** 产品线决定可选市场集合；与 settlementMarket 不自洽时后端直接拒绝。 */
+  predictionType: PredictionType;
   settlementMarket: SettlementMarket;
   settlementStatuses?: SettlementStatus[];
   pageNo: number;
@@ -297,6 +362,8 @@ export type SettlementVersionVo = {
   settlementStatus: SettlementStatus;
   matchFactId: number | null;
   ruleVersion: string;
+  /** 该版本按 1 单位本金计算的收益；结算侧尚未回填时为 null。 */
+  profit: number | null;
   current: boolean;
   createdAt: string;
 };
@@ -316,17 +383,22 @@ export type HistoryListItemVo = {
   modelVersion: string;
   featureVersion: string;
   predictionStatus: PredictionStatus;
-  homeWinProb: number;
-  drawProb: number;
-  awayWinProb: number;
-  handicapPick: HandicapPick;
-  expectedTotalGoals: number;
-  confidenceLevel: ConfidenceLevel;
+  predictionType: PredictionType;
+  homeWinProb: number | null;
+  drawProb: number | null;
+  awayWinProb: number | null;
+  handicapPick: HandicapPick | null;
+  expectedTotalGoals: number | null;
+  asianHandicapPick: AsianHandicapPick | null;
+  totalGoalsPick: TotalGoalsPick | null;
+  confidenceLevel: ConfidenceLevel | null;
   analysisSummary: string;
   predictionHash: string;
   generatedAt: string;
   publishTime: string | null;
   lockTime: string | null;
+  /** 亚盘模型概率；体彩记录与 V24 之前的存量记录为 null。 */
+  asianModel: PredictionAsianModelVo | null;
   match: HistoryMatchVo;
   resultFacts: MatchResultFactHistoryVo[];
   settlementMarkets: MarketSettlementHistoryVo[];
@@ -339,23 +411,36 @@ export type StatisticsSummaryQuery = {
   endDate?: string;
   leagueId?: number;
   modelVersion?: string;
+  predictionType: PredictionType;
 };
 
 export type ProbabilityMetricsVo = {
   sampleSize: number;
+  scoringMode: ProbabilityScoringMode;
   brierScore: number | null;
   logLoss: number | null;
+  marketBrierScore: number | null;
+  brierAdvantage: number | null;
+  /** 模型 Brier 低于市场同批样本时为 true；无样本时为 null 而不是 false。 */
+  modelOutperformsMarket: boolean | null;
   unavailableReasons: ProbabilityMetricUnavailableReason[];
 };
 
 export type MarketHitRateVo = {
   marketType: SettlementMarket;
+  /** 已结算样本，含走盘（走盘计 0.5，见 weightedHitRate）。 */
   settledSampleSize: number;
   hitCount: number;
   missCount: number;
+  pushCount: number;
+  halfWinCount: number;
+  halfLossCount: number;
   pendingCount: number;
   voidCount: number;
+  /** 命中率，分母不含走盘；半赢半输按命中计。 */
   hitRate: number | null;
+  /** 按 1 / 0.75 / 0.5 / 0.25 / 0 连续化后的命中率。 */
+  weightedHitRate: number | null;
 };
 
 export type RoiMetricsVo = {
@@ -371,9 +456,9 @@ export type StatisticsMetricsVo = {
   finalFactCount: number;
   pendingFactCount: number;
   voidFactCount: number;
+  /** 该类预测实际结算的市场，顺序固定；不再用具名的 had/hhad 字段。 */
+  markets: MarketHitRateVo[];
   probabilityMetrics: ProbabilityMetricsVo;
-  had: MarketHitRateVo;
-  hhad: MarketHitRateVo;
   roi: RoiMetricsVo;
 };
 

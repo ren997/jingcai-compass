@@ -4,8 +4,10 @@ import { formatTimestamp } from '../matches/matchPresentation';
 import {
   formatDecimal,
   formatPercent,
+  formatSigned,
   probabilityUnavailableReasonLabel,
   roiUnavailableReasonLabel,
+  settlementMarketLabel,
 } from '../history/historyPresentation';
 import { useHomeSummaryQuery } from './useHomeSummaryQuery';
 
@@ -44,11 +46,21 @@ function PerformanceCard({ title, window, probability }: {
   );
 }
 
+/** 首页固定展示亚盘：竞彩与亚盘的命中口径不可混算，混算会让两组指标都失真。 */
 function HitRateMetrics({ metrics }: { metrics: StatisticsMetricsVo }) {
   return (
     <dl className="home-performance-metrics">
-      <div><dt>HAD 命中率</dt><dd>{metricValue(formatPercent(metrics.had.hitRate))}</dd><small>已结算样本 {metrics.had.settledSampleSize}</small></div>
-      <div><dt>HHAD 命中率</dt><dd>{metricValue(formatPercent(metrics.hhad.hitRate))}</dd><small>已结算样本 {metrics.hhad.settledSampleSize}</small></div>
+      {metrics.markets.map((market) => (
+        <div key={market.marketType}>
+          <dt>{settlementMarketLabel(market.marketType)} 命中率</dt>
+          <dd>{metricValue(formatPercent(market.hitRate))}</dd>
+          <small>
+            已结算样本 {market.settledSampleSize}
+            {(market.pushCount > 0 || market.halfWinCount > 0 || market.halfLossCount > 0)
+              && ` · 走盘 ${market.pushCount} · 半赢 ${market.halfWinCount} · 半输 ${market.halfLossCount}`}
+          </small>
+        </div>
+      ))}
       <div><dt>当前最终赛果</dt><dd>{metrics.finalFactCount}</dd><small>待定 {metrics.pendingFactCount} · 作废 {metrics.voidFactCount}</small></div>
     </dl>
   );
@@ -59,8 +71,9 @@ function ProbabilityMetrics({ metrics }: { metrics: StatisticsMetricsVo }) {
   return (
     <>
       <dl className="home-performance-metrics">
-        <div><dt>Brier Score</dt><dd>{metricValue(formatDecimal(probability.brierScore))}</dd><small>最终样本 {probability.sampleSize}</small></div>
-        <div><dt>Log Loss</dt><dd>{metricValue(formatDecimal(probability.logLoss))}</dd><small>仅基于当前最终赛果</small></div>
+        <div><dt>模型 Brier</dt><dd>{metricValue(formatDecimal(probability.brierScore))}</dd><small>样本 {probability.sampleSize}</small></div>
+        <div><dt>市场 Brier</dt><dd>{metricValue(formatDecimal(probability.marketBrierScore))}</dd><small>与模型同批样本</small></div>
+        <div><dt>Brier 优势</dt><dd>{metricValue(formatSigned(probability.brierAdvantage))}</dd><small>{probability.modelOutperformsMarket === null ? '无配对样本' : probability.modelOutperformsMarket ? '模型优于市场' : '模型未跑赢市场'}</small></div>
       </dl>
       {probability.unavailableReasons.length > 0 && <p className="metric-unavailable">概率指标暂不可用：{probability.unavailableReasons.map(probabilityUnavailableReasonLabel).join('；')}</p>}
       {metrics.roi.available ? (
@@ -108,7 +121,7 @@ export default function HomePage() {
           <section className="home-metric-grid" aria-label="首页核心指标">
             <article><span>今日竞彩比赛</span><strong>{summary.today.matchCount}</strong><small>{summary.asOfDate} 上海竞彩日</small></article>
             <article><span>今日已发布预测</span><strong>{summary.today.publishedPredictionMatchCount}</strong><small>按比赛去重</small></article>
-            <article><span>待结算比赛</span><strong>{summary.pendingSettlementMatchCount}</strong><small>锁定预测的 HAD 尚未终态</small></article>
+            <article><span>待结算比赛</span><strong>{summary.pendingSettlementMatchCount}</strong><small>锁定预测的亚盘市场尚未终态</small></article>
             <article><span>累计公开预测比赛</span><strong>{summary.historicalPublishedMatchCount}</strong><small>历史版本与多模型不重复计数</small></article>
           </section>
 

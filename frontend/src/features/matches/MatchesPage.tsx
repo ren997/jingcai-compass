@@ -4,6 +4,7 @@ import {
   MATCH_STATUSES,
   type MatchListItemVo,
   type MatchListSort,
+  type MatchPredictionSummaryVo,
   type MatchStatus,
 } from '../../services/public';
 import {
@@ -17,6 +18,10 @@ import {
   predictionStatusLabel,
   statusLabels,
   totalGoalsPredictionMarketLabel,
+  modelMarketProbabilityText,
+  edgeText,
+  lambdaText,
+  dispersionText,
 } from './matchPresentation';
 import { parseMatchListSearch, todayInShanghai, toMatchListQuery, toMatchListSearchParams, type MatchListSearch } from './matchSearch';
 import { useLeagueOptionsQuery, useMatchListQuery } from './useMatchQueries';
@@ -253,6 +258,38 @@ function AsianMainSummary({ match }: { match: MatchListItemVo }) {
   </section>;
 }
 
+/**
+ * 亚盘模型概率的展示行。
+ *
+ * <p>十列为空时整块不渲染：V24 之前的亚盘预测没有这些值，渲染成「模型 — · 市场 —」
+ * 会被读成"模型算出 0%"，而这是两件完全不同的事。
+ */
+function PredictionProbabilityRows({ prediction }: { prediction: MatchPredictionSummaryVo }) {
+  const model = prediction.asianModel;
+  if (!model) {
+    return null;
+  }
+  const handicapLine = modelMarketProbabilityText(model, prediction.asianHandicapPick, 'HANDICAP');
+  const totalsLine = modelMarketProbabilityText(model, prediction.totalGoalsPick, 'TOTALS');
+  const edges = [
+    prediction.asianHandicapPick
+      ? `让球 ${edgeText(model, prediction.asianHandicapPick, 'HANDICAP') ?? '—'}`
+      : null,
+    prediction.totalGoalsPick
+      ? `大小球 ${edgeText(model, prediction.totalGoalsPick, 'TOTALS') ?? '—'}`
+      : null,
+  ].filter(Boolean);
+  const fundamentals = [lambdaText(model), dispersionText(model)].filter(Boolean);
+  return (
+    <>
+      {handicapLine && <p className="match-prediction-probability">让球概率 {handicapLine}</p>}
+      {totalsLine && <p className="match-prediction-probability">大小球概率 {totalsLine}</p>}
+      {edges.length > 0 && <p className="match-prediction-probability">{edges.join(' · ')}</p>}
+      {fundamentals.length > 0 && <p className="match-prediction-probability">{fundamentals.join(' · ')}</p>}
+    </>
+  );
+}
+
 function PredictionSummary({ match }: { match: MatchListItemVo }) {
   const asianPredictions = match.publishedPredictions.filter((prediction) => prediction.predictionType === 'ASIAN');
   return <section className="match-market-summary" aria-label={`${match.lotteryMatchNo} 预测结果`}>
@@ -271,6 +308,7 @@ function PredictionSummary({ match }: { match: MatchListItemVo }) {
         prediction.asianMarket?.overOdds,
         prediction.asianMarket?.underOdds,
       )} · 置信：{confidenceLabel(prediction.totalGoalsConfidenceLevel)}</p>}
+      <PredictionProbabilityRows prediction={prediction} />
       {prediction.asianMarket && <p className="market-provider">生成快照 #{prediction.asianMarket.asianOddsSnapshotId} · {prediction.asianMarket.bookmakerCode}：亚洲{formatHandicap(prediction.asianMarket.handicapLine)} 主 {formatNumber(prediction.asianMarket.homeOdds)} / 客 {formatNumber(prediction.asianMarket.awayOdds)}；大小球 {formatNumber(prediction.asianMarket.totalLine)} 大 {formatNumber(prediction.asianMarket.overOdds)} / 小 {formatNumber(prediction.asianMarket.underOdds)} · {formatTimestamp(prediction.asianMarket.capturedAt)}</p>}
     </article>)}
   </section>;

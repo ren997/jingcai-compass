@@ -18,9 +18,11 @@ const summary: HomeSummaryVo = {
       finalFactCount: 5,
       pendingFactCount: 2,
       voidFactCount: 1,
-      probabilityMetrics: { sampleSize: 5, brierScore: null, logLoss: null, unavailableReasons: ['NO_FINAL_SAMPLE'] },
-      had: { marketType: 'HAD', settledSampleSize: 5, hitCount: 3, missCount: 2, pendingCount: 2, voidCount: 1, hitRate: 0.6 },
-      hhad: { marketType: 'HHAD', settledSampleSize: 5, hitCount: 2, missCount: 3, pendingCount: 2, voidCount: 1, hitRate: 0.4 },
+      probabilityMetrics: { sampleSize: 5, scoringMode: 'ASIAN_DIRECTION', brierScore: 0.1234, logLoss: 0.4, marketBrierScore: 0.13, brierAdvantage: 0.0066, modelOutperformsMarket: true, unavailableReasons: [] },
+      markets: [
+      { marketType: 'ASIAN_HANDICAP', settledSampleSize: 5, hitCount: 3, missCount: 2, pushCount: 1, halfWinCount: 0, halfLossCount: 0, pendingCount: 2, voidCount: 1, hitRate: 0.6, weightedHitRate: 0.5 },
+      { marketType: 'ASIAN_TOTAL_GOALS', settledSampleSize: 5, hitCount: 2, missCount: 2, pushCount: 0, halfWinCount: 1, halfLossCount: 1, pendingCount: 2, voidCount: 1, hitRate: 0.5, weightedHitRate: 0.5 },
+      ],
       roi: { available: false, roi: null, yield: null, sampleSize: 0, unavailableReasons: ['MISSING_FIXED_BETTING_RULE'] },
     },
   },
@@ -32,9 +34,11 @@ const summary: HomeSummaryVo = {
       finalFactCount: 30,
       pendingFactCount: 8,
       voidFactCount: 4,
-      probabilityMetrics: { sampleSize: 30, brierScore: null, logLoss: null, unavailableReasons: ['NO_FINAL_SAMPLE'] },
-      had: { marketType: 'HAD', settledSampleSize: 30, hitCount: 17, missCount: 13, pendingCount: 8, voidCount: 4, hitRate: 0.57 },
-      hhad: { marketType: 'HHAD', settledSampleSize: 30, hitCount: 15, missCount: 15, pendingCount: 8, voidCount: 4, hitRate: 0.5 },
+      probabilityMetrics: { sampleSize: 0, scoringMode: 'ASIAN_DIRECTION', brierScore: null, logLoss: null, marketBrierScore: null, brierAdvantage: null, modelOutperformsMarket: null, unavailableReasons: ['NO_SETTLED_ASIAN_SAMPLE'] },
+      markets: [
+      { marketType: 'ASIAN_HANDICAP', settledSampleSize: 30, hitCount: 17, missCount: 13, pushCount: 0, halfWinCount: 0, halfLossCount: 0, pendingCount: 8, voidCount: 4, hitRate: 0.57, weightedHitRate: 0.57 },
+      { marketType: 'ASIAN_TOTAL_GOALS', settledSampleSize: 30, hitCount: 15, missCount: 15, pushCount: 0, halfWinCount: 0, halfLossCount: 0, pendingCount: 8, voidCount: 4, hitRate: 0.5, weightedHitRate: 0.5 },
+      ],
       roi: { available: false, roi: null, yield: null, sampleSize: 0, unavailableReasons: ['MISSING_FIXED_BETTING_RULE'] },
     },
   },
@@ -80,7 +84,8 @@ describe('HomePage', () => {
     expect(screen.getByText('累计公开预测比赛')).toBeInTheDocument();
     expect(screen.getByText(/暂无当天体彩采集/)).toBeInTheDocument();
     expect(screen.getByText('当前没有已发布快照')).toBeInTheDocument();
-    expect(screen.getAllByText('概率指标暂不可用：没有当前最终赛果样本')).toHaveLength(1);
+    // 首页固定亚盘，缺样本时的原因文案必须是亚盘口径的那一个。
+    expect(screen.getAllByText('概率指标暂不可用：没有已结算的亚盘方向样本')).toHaveLength(1);
     expect(screen.getByText('ROI / Yield 暂不可用：缺少冻结的固定下注规则')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '查看每日比赛' })).toHaveAttribute('href', '/matches');
     expect(screen.getByText('分析工具，不构成投注建议')).toBeInTheDocument();

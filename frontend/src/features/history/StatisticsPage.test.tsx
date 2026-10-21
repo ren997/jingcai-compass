@@ -13,28 +13,42 @@ const metrics: StatisticsMetricsVo = {
   voidFactCount: 1,
   probabilityMetrics: {
     sampleSize: 6,
+    scoringMode: 'ASIAN_DIRECTION',
     brierScore: 0.1234,
     logLoss: 0.5678,
+    marketBrierScore: 0.1567,
+    brierAdvantage: 0.0333,
+    modelOutperformsMarket: true,
     unavailableReasons: [],
   },
-  had: {
-    marketType: 'HAD',
-    settledSampleSize: 6,
-    hitCount: 4,
-    missCount: 2,
-    pendingCount: 1,
-    voidCount: 1,
-    hitRate: 2 / 3,
-  },
-  hhad: {
-    marketType: 'HHAD',
-    settledSampleSize: 6,
-    hitCount: 3,
-    missCount: 3,
-    pendingCount: 1,
-    voidCount: 1,
-    hitRate: 0.5,
-  },
+  markets: [
+    {
+      marketType: 'ASIAN_HANDICAP',
+      settledSampleSize: 6,
+      hitCount: 3,
+      missCount: 2,
+      pushCount: 1,
+      halfWinCount: 0,
+      halfLossCount: 0,
+      pendingCount: 1,
+      voidCount: 1,
+      hitRate: 0.6,
+      weightedHitRate: 0.5833,
+    },
+    {
+      marketType: 'ASIAN_TOTAL_GOALS',
+      settledSampleSize: 6,
+      hitCount: 2,
+      missCount: 2,
+      pushCount: 0,
+      halfWinCount: 1,
+      halfLossCount: 1,
+      pendingCount: 1,
+      voidCount: 1,
+      hitRate: 0.5,
+      weightedHitRate: 0.5,
+    },
+  ],
   roi: {
     available: false,
     roi: null,
@@ -112,6 +126,39 @@ describe('StatisticsPage', () => {
     expect(screen.getAllByText(/ROI \/ Yield 暂不可用：缺少冻结的固定下注规则；缺少锁定时点赔率输入/).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: '按联赛分布' })).toBeInTheDocument();
     expect(screen.getByText('英超')).toBeInTheDocument();
+  });
+
+  it('renders every settled market of the selected product line', async () => {
+    vi.mocked(fetch).mockResolvedValue(apiResponse(summary));
+    renderStatistics();
+
+    await screen.findByText('请求范围');
+    expect(screen.getAllByText('亚盘让球 命中率').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('亚盘大小球 命中率').length).toBeGreaterThan(0);
+    // 走盘与半赢半输必须单独出现，否则命中率的分母口径无从核对。
+    expect(screen.getAllByText(/1 走盘/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/1 半赢 · 1 半输/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/加权命中率/).length).toBeGreaterThan(0);
+    // 双 Brier：模型与市场必须并列，单看模型分数无法判断有没有跑赢盘口。
+    expect(screen.getAllByText('0.1567').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('模型优于市场').length).toBeGreaterThan(0);
+  });
+
+  it('requests one product line at a time and records the switch in the URL', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetch).mockResolvedValue(apiResponse(summary));
+    renderStatistics();
+
+    await screen.findByText('请求范围');
+    expect(statisticBodies()[0]).toEqual(expect.objectContaining({ predictionType: 'ASIAN' }));
+
+    await user.click(screen.getByRole('tab', { name: '竞彩' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('type=SPORTTERY'));
+    await waitFor(() => {
+      const bodies = statisticBodies();
+      expect(bodies[bodies.length - 1]).toEqual(expect.objectContaining({ predictionType: 'SPORTTERY' }));
+    });
   });
 
   it('writes time, league and model filters to the URL and request body', async () => {

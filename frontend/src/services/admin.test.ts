@@ -115,14 +115,14 @@ describe('admin API services', () => {
     const controller = new AbortController();
 
     await fetchAdminPredictionLocks({ lotteryDate: '2026-07-29', predictionStatuses: ['PUBLISHED'], pageNo: 1, pageSize: 20 }, controller.signal);
-    await fetchAdminSettlementStatuses({ diagnostics: ['SETTLEMENT_MISSING_HAD'], pageNo: 2, pageSize: 20 });
+    await fetchAdminSettlementStatuses({ diagnostics: ['SETTLEMENT_MISSING'], pageNo: 2, pageSize: 20 });
     await expect(fetchAdminPredictionStatusDetail(77)).rejects.toMatchObject({ code: 'PREDICTION_NOT_FOUND', traceId: 'prediction-404' });
 
     expect(fetch).toHaveBeenCalledWith('/api/admin/prediction-status/locks/list', expect.objectContaining({
       method: 'POST', body: JSON.stringify({ lotteryDate: '2026-07-29', predictionStatuses: ['PUBLISHED'], pageNo: 1, pageSize: 20 }), signal: expect.any(AbortSignal),
     }));
     expect(fetch).toHaveBeenCalledWith('/api/admin/prediction-status/settlements/list', expect.objectContaining({
-      body: JSON.stringify({ diagnostics: ['SETTLEMENT_MISSING_HAD'], pageNo: 2, pageSize: 20 }),
+      body: JSON.stringify({ diagnostics: ['SETTLEMENT_MISSING'], pageNo: 2, pageSize: 20 }),
     }));
     expect(fetch).toHaveBeenCalledWith('/api/admin/prediction-status/detail', expect.objectContaining({ body: JSON.stringify({ predictionId: 77 }) }));
   });

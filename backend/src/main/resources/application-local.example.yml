@@ -54,6 +54,22 @@ app:
       max-attempts: 2
       delay: 500ms
     quota-warning-threshold: 0
+    # 跨庄聚合：白名单按线判定（该线白名单家数 >= min-whitelist-bookmakers 才用白名单样本），
+    # 否则该线回退全量中位数；单线报价家数 < min-bookmakers 的线不参与主盘选择。
+    aggregation:
+      bookmaker-whitelist: pinnacle,matchbook,betfair
+      min-bookmakers: 2
+      min-whitelist-bookmakers: 2
+  # λ 反解：邻线容差由 3 场真实抓包的最大偏差 3.508% 标定；
+  # max-goals 由 λ 总和最大 8.0 时的截断尾部质量标定（16 → 3.7e-3，24 → 1.2e-6）。
+  asian-model:
+    neighbor-tolerance: 0.0400
+    residual-tolerance: 0.0010
+    max-goals: 24
+    # 跨庄分歧上限：实测让球主盘 σ 为 0.002~0.012，全部档位最大 0.0325。
+    dispersion-tolerance: 0.0200
+    # 影子门槛的安全边际：本阶段只记录不拦截，故不影响发布量。
+    safety-margin: 0.0100
   tasks:
     enabled: false
     sporttery-pool:

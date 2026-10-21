@@ -24,6 +24,16 @@ import java.math.BigDecimal;
  * @param asianHandicapPick 亚盘让球赢盘方向；历史 V1 预测为空
  * @param totalGoalsPick 亚盘大小球方向；历史 V1 预测为空
  * @param confidenceLevel 置信等级
+ * @param lambdaHome 模型反解的主队期望进球；V24 之前的预测为空
+ * @param lambdaAway 模型反解的客队期望进球；V24 之前的预测为空
+ * @param modelCoverProb 首边（主队赢盘）模型概率；V24 之前的预测为空
+ * @param marketCoverProb 首边市场去水概率；V24 之前的预测为空
+ * @param edgeCover 让球方向模型概率减市场概率（首边）；V24 之前的预测为空
+ * @param modelOverProb 首边（大球）模型概率；V24 之前的预测为空
+ * @param marketOverProb 首边市场去水概率；V24 之前的预测为空
+ * @param edgeOver 大小球方向模型概率减市场概率（首边）；V24 之前的预测为空
+ * @param handicapDispersion 跨庄让球去水概率总体标准差；V24 之前的预测为空
+ * @param totalsDispersion 跨庄大小球去水概率总体标准差；V24 之前的预测为空
  * @param analysisSummary 合规公开分析摘要
  * @param generatedAt 模型生成时间，UTC 微秒格式
  * @param publishTime 首次发布时间，UTC 微秒格式
@@ -50,6 +60,16 @@ import java.math.BigDecimal;
         "totalGoalsPick",
         "asianHandicapConfidenceLevel",
         "totalGoalsConfidenceLevel",
+        "lambdaHome",
+        "lambdaAway",
+        "modelCoverProb",
+        "marketCoverProb",
+        "edgeCover",
+        "modelOverProb",
+        "marketOverProb",
+        "edgeOver",
+        "handicapDispersion",
+        "totalsDispersion",
         "confidenceLevel",
         "analysisSummary",
         "generatedAt",
@@ -78,6 +98,16 @@ public record PredictionSnapshotManifestItemDto(
         String totalGoalsPick,
         String asianHandicapConfidenceLevel,
         String totalGoalsConfidenceLevel,
+        BigDecimal lambdaHome,
+        BigDecimal lambdaAway,
+        BigDecimal modelCoverProb,
+        BigDecimal marketCoverProb,
+        BigDecimal edgeCover,
+        BigDecimal modelOverProb,
+        BigDecimal marketOverProb,
+        BigDecimal edgeOver,
+        BigDecimal handicapDispersion,
+        BigDecimal totalsDispersion,
         String confidenceLevel,
         String analysisSummary,
         String generatedAt,

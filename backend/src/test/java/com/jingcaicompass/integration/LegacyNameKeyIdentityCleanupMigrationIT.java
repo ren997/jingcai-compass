@@ -88,8 +88,16 @@ class LegacyNameKeyIdentityCleanupMigrationIT {
         assertThat(flyway(null).info().current().getVersion().getVersion()).isEqualTo("22");
     }
 
+    /**
+     * 把迁移显式限定到 V22，而不是「从 V21 一路跑到最新」。
+     *
+     * <p>本用例只验证 V22 自身对 V19 清理盲区的补偿，与 V23 之后的迁移无关。原先用无 target 的
+     * 全量迁移并断言「只执行了 1 个」，等于把「V22 之后不再有迁移」写死；一旦后续版本号增长
+     * （V23 亚盘结算市场、V24 亚盘模型概率输出）该断言必然失败，且失败原因与本用例意图无关。
+     * 用 {@code flyway("22")} 与同文件 {@link #migrateV19ThroughV21()} 的用法保持一致。
+     */
     private void migrateV22() {
-        assertThat(flyway(null).migrate().migrationsExecuted).isEqualTo(1);
+        assertThat(flyway("22").migrate().migrationsExecuted).isEqualTo(1);
     }
 
     private void migrateV19ThroughV21() {

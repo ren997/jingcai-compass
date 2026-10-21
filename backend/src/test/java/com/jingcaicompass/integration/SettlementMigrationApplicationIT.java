@@ -37,7 +37,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
-/** PostgreSQL 16 验证 V10/V11 的版本链、不可变保护和查询索引。 */
+/** PostgreSQL 16 验证 V10~V23 的版本链、不可变保护、亚盘市场约束与查询索引。 */
 @Testcontainers
 @ActiveProfiles("integration")
 @SpringBootTest
@@ -230,6 +230,117 @@ class SettlementMigrationApplicationIT {
                 SettlementStatusEnum.HIT,
                 true
         )).isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
+    void persistsAsianMarketsWithPushHalfResultsAndNetProfit() {
+        long matchId = insertMatch();
+        long rawPayloadId = insertResultPayload();
+        MatchResultFact fact = insertFact(matchId, rawPayloadId, 1, null, true);
+        long predictionId = insertAsianPrediction(matchId);
+
+        Settlement halfWin = insertSettlement(
+                predictionId,
+                fact.getId(),
+                MarketTypeEnum.ASIAN_HANDICAP,
+                1,
+                null,
+                SettlementStatusEnum.HALF_WIN,
+                "t613-v1",
+                new BigDecimal("0.4750"),
+                true
+        );
+        Settlement push = insertSettlement(
+                predictionId,
+                fact.getId(),
+                MarketTypeEnum.ASIAN_TOTAL_GOALS,
+                1,
+                null,
+                SettlementStatusEnum.PUSH,
+                "t613-v1",
+                new BigDecimal("0.0000"),
+                true
+        );
+
+        Settlement savedHalfWin = settlementMapper.selectById(halfWin.getId());
+        assertThat(savedHalfWin.getMarketType()).isEqualTo(MarketTypeEnum.ASIAN_HANDICAP);
+        assertThat(savedHalfWin.getSettlementStatus()).isEqualTo(SettlementStatusEnum.HALF_WIN);
+        assertThat(savedHalfWin.getProfit()).isEqualByComparingTo("0.4750");
+        assertThat(savedHalfWin.getRuleVersion()).isEqualTo("t613-v1");
+        Settlement savedPush = settlementMapper.selectById(push.getId());
+        assertThat(savedPush.getSettlementStatus()).isEqualTo(SettlementStatusEnum.PUSH);
+        assertThat(savedPush.getProfit()).isEqualByComparingTo("0.0000");
+
+        // 版本链与 current 唯一性对亚盘市场同样生效。
+        assertThat(jdbcTemplate.update(
+                "UPDATE settlements SET is_current = FALSE WHERE id = ?",
+                halfWin.getId()
+        )).isEqualTo(1);
+        Settlement halfLoss = insertSettlement(
+                predictionId,
+                fact.getId(),
+                MarketTypeEnum.ASIAN_HANDICAP,
+                2,
+                1,
+                SettlementStatusEnum.HALF_LOSS,
+                "t613-v1",
+                new BigDecimal("-0.5000"),
+                true
+        );
+        assertThat(settlementMapper.selectById(halfLoss.getId()).getSettlementStatus())
+                .isEqualTo(SettlementStatusEnum.HALF_LOSS);
+    }
+
+    @Test
+    void rejectsUnknownMarketsAndInconsistentProfit() {
+        long matchId = insertMatch();
+        long rawPayloadId = insertResultPayload();
+        MatchResultFact fact = insertFact(matchId, rawPayloadId, 1, null, true);
+        long predictionId = insertAsianPrediction(matchId);
+
+        // 1) 未登记的市场与未登记的状态仍被约束拒绝。
+        assertThatThrownBy(() -> insertRawSettlement(
+                predictionId, "ASIAN_CORNERS", "HIT", fact.getId(), "t613-v1", "0.9000"
+        )).isInstanceOf(DataAccessException.class);
+        assertThatThrownBy(() -> insertRawSettlement(
+                predictionId, "ASIAN_HANDICAP", "WIN", fact.getId(), "t613-v1", "0.9000"
+        )).isInstanceOf(DataAccessException.class);
+
+        // 2) 竞彩市场没有冻结水位，不允许携带收益。
+        assertThatThrownBy(() -> insertRawSettlement(
+                predictionId, "HAD", "HIT", fact.getId(), "t403-v1", "0.9000"
+        )).isInstanceOf(DataAccessException.class);
+
+        // 3) 亚盘市场必须落库收益，缺失即视为半个市场。
+        assertThatThrownBy(() -> insertRawSettlement(
+                predictionId, "ASIAN_HANDICAP", "HIT", fact.getId(), "t613-v1", null
+        )).isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
+    void keepsNetProfitImmutableLikeOtherSettlementContent() {
+        long matchId = insertMatch();
+        long rawPayloadId = insertResultPayload();
+        MatchResultFact fact = insertFact(matchId, rawPayloadId, 1, null, true);
+        long predictionId = insertAsianPrediction(matchId);
+        Settlement settlement = insertSettlement(
+                predictionId,
+                fact.getId(),
+                MarketTypeEnum.ASIAN_TOTAL_GOALS,
+                1,
+                null,
+                SettlementStatusEnum.HIT,
+                "t613-v1",
+                new BigDecimal("0.9000"),
+                true
+        );
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "UPDATE settlements SET profit = 9 WHERE id = ?",
+                settlement.getId()
+        )).isInstanceOf(DataAccessException.class);
+        assertThat(settlementMapper.selectById(settlement.getId()).getProfit())
+                .isEqualByComparingTo("0.9000");
     }
 
     @Test
@@ -490,6 +601,30 @@ class SettlementMigrationApplicationIT {
             SettlementStatusEnum status,
             boolean isCurrent
     ) {
+        return insertSettlement(
+                predictionId,
+                matchFactId,
+                marketType,
+                settlementVersion,
+                supersedesSettlementVersion,
+                status,
+                "sporttery-v1",
+                null,
+                isCurrent
+        );
+    }
+
+    private Settlement insertSettlement(
+            long predictionId,
+            long matchFactId,
+            MarketTypeEnum marketType,
+            int settlementVersion,
+            Integer supersedesSettlementVersion,
+            SettlementStatusEnum status,
+            String ruleVersion,
+            BigDecimal profit,
+            boolean isCurrent
+    ) {
         Settlement settlement = new Settlement();
         settlement.setPredictionId(predictionId);
         settlement.setMarketType(marketType);
@@ -497,10 +632,77 @@ class SettlementMigrationApplicationIT {
         settlement.setSupersedesSettlementVersion(supersedesSettlementVersion);
         settlement.setSettlementStatus(status);
         settlement.setMatchFactId(matchFactId);
-        settlement.setRuleVersion("sporttery-v1");
+        settlement.setRuleVersion(ruleVersion);
+        settlement.setProfit(profit);
         settlement.setIsCurrent(isCurrent);
         assertThat(settlementMapper.insert(settlement)).isEqualTo(1);
         return settlement;
+    }
+
+    /** 绕过 MyBatis 直接写入，用于验证 CHECK 约束本身。 */
+    private void insertRawSettlement(
+            long predictionId,
+            String marketType,
+            String status,
+            long matchFactId,
+            String ruleVersion,
+            String profit
+    ) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO settlements (
+                    prediction_id, market_type, settlement_version, settlement_status,
+                    match_fact_id, rule_version, profit, is_current
+                )
+                VALUES (?, ?, 1, ?, ?, ?, CAST(? AS NUMERIC(10,4)), TRUE)
+                """,
+                predictionId,
+                marketType,
+                status,
+                matchFactId,
+                ruleVersion,
+                profit
+        );
+    }
+
+    /** 插入一条只带亚盘方向、不含竞彩三概率的预测，用于验证 V21 与 V22 的共存。 */
+    private long insertAsianPrediction(long matchId) {
+        long snapshotKey = nextKey();
+        long snapshotId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO asian_odds_snapshots (
+                    match_id, provider_code, bookmaker_code, handicap_line,
+                    home_odds, away_odds, total_line, over_odds, under_odds,
+                    snapshot_type, captured_at, raw_payload_hash
+                )
+                VALUES (?, 'NOVAAPI', 'pinnacle', -0.5000, 1.9500, 1.9500, 2.5000, 1.9000, 1.9000,
+                        'PRE_KICKOFF', CURRENT_TIMESTAMP, ?)
+                RETURNING id
+                """,
+                Long.class,
+                matchId,
+                String.format("%064x", snapshotKey)
+        );
+        long predictionKey = nextKey();
+        return jdbcTemplate.queryForObject(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id,
+                    generation_batch_hash, prediction_version, prediction_type,
+                    asian_odds_snapshot_id, asian_handicap_pick, total_goals_pick,
+                    asian_handicap_confidence_level, total_goals_confidence_level,
+                    analysis_summary, generated_at, prediction_status
+                )
+                VALUES (?, 'model-t613-migration', 'feature-t613', ?, repeat('c', 64), 1, 'ASIAN',
+                        ?, 'HOME_COVER', 'OVER', 'MEDIUM', 'MEDIUM',
+                        'T613 亚盘迁移测试预测', CURRENT_TIMESTAMP, 'DRAFT')
+                RETURNING id
+                """,
+                Long.class,
+                matchId,
+                "T613-batch-" + predictionKey,
+                snapshotId
+        );
     }
 
     private Prediction insertPrediction(long matchId, String suffix) {

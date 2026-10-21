@@ -69,6 +69,7 @@ describe('public match API service', () => {
       lotteryDate: '2026-07-22',
       leagueId: 7,
       matchStatuses: ['SCHEDULED'],
+      hasPublishedPrediction: true,
       sort: 'KICKOFF_ASC',
       pageNo: 1,
       pageSize: 20,
@@ -154,6 +155,7 @@ describe('public match API service', () => {
       leagueId: 7,
       modelVersion: 'model-v1',
       lockedOnly: true,
+      predictionType: 'SPORTTERY',
       settlementMarket: 'HHAD',
       settlementStatuses: ['HIT', 'MISS'],
       pageNo: 2,
@@ -164,6 +166,7 @@ describe('public match API service', () => {
       endDate: '2026-07-28',
       leagueId: 7,
       modelVersion: 'model-v1',
+      predictionType: 'SPORTTERY',
     };
     vi.mocked(fetch)
       .mockResolvedValueOnce(apiResponse({ records: [], pageNo: 2, pageSize: 20, total: 0 }))
@@ -194,6 +197,7 @@ describe('public match API service', () => {
 
     await expect(fetchHistoryList({
       lockedOnly: false,
+      predictionType: 'SPORTTERY',
       settlementMarket: 'HAD',
       pageNo: 1,
       pageSize: 20,
@@ -213,6 +217,7 @@ describe('public match API service', () => {
     const controller = new AbortController();
     const request = fetchHistoryList({
       lockedOnly: false,
+      predictionType: 'SPORTTERY',
       settlementMarket: 'HAD',
       pageNo: 1,
       pageSize: 20,

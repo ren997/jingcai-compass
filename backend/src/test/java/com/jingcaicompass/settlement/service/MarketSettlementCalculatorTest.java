@@ -23,8 +23,12 @@ class MarketSettlementCalculatorTest {
 
     private final WinDrawLossSettlementCalculator hadCalculator = new WinDrawLossSettlementCalculator();
     private final SportteryHandicapSettlementCalculator hhadCalculator = new SportteryHandicapSettlementCalculator();
+    private final AsianHandicapSettlementCalculator asianHandicapCalculator =
+            new AsianHandicapSettlementCalculator();
+    private final AsianTotalGoalsSettlementCalculator asianTotalGoalsCalculator =
+            new AsianTotalGoalsSettlementCalculator();
     private final MarketSettlementCalculatorRouter router = new MarketSettlementCalculatorRouter(
-            List.of(hadCalculator, hhadCalculator)
+            List.of(hadCalculator, hhadCalculator, asianHandicapCalculator, asianTotalGoalsCalculator)
     );
 
     @ParameterizedTest(name = "{0}")

@@ -230,8 +230,10 @@ class PredictionImportApplicationIT {
                 .eq(Prediction::getGenerationBatchId, first.generationBatchId()));
         assertThat(saved.getMatchId()).isEqualTo(FIRST_MATCH_ID);
         assertThat(saved.getPredictionStatus()).isEqualTo(PredictionStatusEnum.DRAFT);
-        assertThat(saved.getModelVersion()).isEqualTo("t306-asian-baseline-v3");
-        assertThat(saved.getFeatureVersion()).isEqualTo("t306-asian-mainline-v3");
+        assertThat(saved.getModelVersion()).isEqualTo("t306-asian-baseline-v6");
+        assertThat(saved.getFeatureVersion()).isEqualTo("t306-asian-mainline-v6");
+        // 摘要里有 λ 与模型概率，必须落在 varchar(1000) 之内，否则整批导入回滚。
+        assertThat(saved.getAnalysisSummary()).contains("亚盘 λ 反解 v6", "反解 λ 主", "模型概率", "影子门槛");
         assertThat(saved.getPredictionType()).isEqualTo(PredictionTypeEnum.ASIAN);
         assertThat(saved.getAsianOddsSnapshotId()).isNotNull();
         assertThat(saved.getAsianHandicapPick()).isNull();
@@ -467,24 +469,32 @@ class PredictionImportApplicationIT {
                 "T306-" + matchId,
                 sportteryHash.repeat(64)
         );
-        jdbcTemplate.update(
-                """
-                INSERT INTO asian_odds_snapshots (
-                    match_id, provider_code, bookmaker_code,
-                    handicap_line, home_odds, away_odds,
-                    total_line, over_odds, under_odds,
-                    snapshot_type, captured_at, raw_payload_hash
-                ) VALUES (?, 'STUB', 't306-bookmaker',
-                          -0.50, 1.90, 1.90,
-                          2.50, 1.80, 2.00,
-                          'FIRST_SEEN', TIMESTAMPTZ '2026-07-26 10:00:00+08', ?)
-                """,
-                matchId,
-                asianHash.repeat(64)
-        );
+        // 主盘需要至少两家报价才能形成去水共识，故每场写两家同线不同价的庄家。
+        insertAsianSnapshotRow(matchId, "t306-bookmaker-a", "-0.50", "1.90", "1.90",
+                "2.50", "1.80", "2.00", asianHash.repeat(64));
+        insertAsianSnapshotRow(matchId, "t306-bookmaker-b", "-0.50", "1.90", "1.90",
+                "2.50", "1.85", "1.95", asianHash.repeat(64));
     }
 
     private void insertLowConfidenceAsianMarket(long matchId) {
+        // 两家完全均衡的报价：共识存在但两侧 signal 为 0，两个市场都应是低置信度。
+        insertAsianSnapshotRow(matchId, "t610-low-bookmaker-a", "-0.50", "1.90", "1.90",
+                "2.50", "1.90", "1.90", "a".repeat(64));
+        insertAsianSnapshotRow(matchId, "t610-low-bookmaker-b", "-0.50", "1.90", "1.90",
+                "2.50", "1.90", "1.90", "a".repeat(64));
+    }
+
+    private void insertAsianSnapshotRow(
+            long matchId,
+            String bookmakerCode,
+            String handicapLine,
+            String homeOdds,
+            String awayOdds,
+            String totalLine,
+            String overOdds,
+            String underOdds,
+            String rawPayloadHash
+    ) {
         jdbcTemplate.update(
                 """
                 INSERT INTO asian_odds_snapshots (
@@ -492,13 +502,20 @@ class PredictionImportApplicationIT {
                     handicap_line, home_odds, away_odds,
                     total_line, over_odds, under_odds,
                     snapshot_type, captured_at, raw_payload_hash
-                ) VALUES (?, 'STUB', 't610-low-bookmaker',
-                          -0.50, 1.90, 1.90,
-                          2.50, 1.90, 1.90,
+                ) VALUES (?, 'STUB', ?,
+                          CAST(? AS NUMERIC), CAST(? AS NUMERIC), CAST(? AS NUMERIC),
+                          CAST(? AS NUMERIC), CAST(? AS NUMERIC), CAST(? AS NUMERIC),
                           'FIRST_SEEN', TIMESTAMPTZ '2026-07-26 10:00:00+08', ?)
                 """,
                 matchId,
-                "a".repeat(64)
+                bookmakerCode,
+                handicapLine,
+                homeOdds,
+                awayOdds,
+                totalLine,
+                overOdds,
+                underOdds,
+                rawPayloadHash
         );
     }
 

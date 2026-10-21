@@ -2,7 +2,14 @@ import { Alert, Button, Input, Select } from 'antd';
 import { Link, useSearchParams } from 'react-router-dom';
 import { SETTLEMENT_DIAGNOSTICS, type SettlementDiagnostic } from '../../services/admin';
 import { formatTimestamp } from '../matches/matchPresentation';
-import { diagnosticsText, factText, marketText, settlementLabels } from './adminPredictionPresentation';
+import {
+  diagnosticsText,
+  factText,
+  marketText,
+  predictionTypeLabel,
+  settlementLabels,
+  settlementMarketLabel,
+} from './adminPredictionPresentation';
 import { parseSettlementStatusSearch, toSettlementStatusQuery, toSettlementStatusSearch } from './adminSearch';
 import { useAdminSettlementStatusesQuery } from './useAdminQueries';
 
@@ -38,9 +45,13 @@ export default function AdminSettlementStatusesPage() {
       {page.records.length === 0 ? <p className="admin-empty">当前筛选没有待赛果、待结算或需重算记录。</p> : <div className="admin-operation-list">{page.records.map((item) => <Link className="admin-operation-card" key={item.predictionId}
         to={`/admin/settlements/${item.predictionId}${returnSearch ? `?${returnSearch}` : ''}`}><header><strong>{item.match.homeTeamName} vs {item.match.awayTeamName}</strong>
           <span className="admin-status settlement-attention">{diagnosticsText(item.settlementDiagnostics, settlementLabels)}</span></header>
-        <p>{item.match.lotteryDate} · {item.modelVersion} V{item.predictionVersion} · {formatTimestamp(item.match.kickoffTime)}</p>
-        <dl><div><dt>当前赛果</dt><dd>{factText(item.currentResultFact)}</dd></div><div><dt>HAD</dt><dd>{marketText(item.hadSettlement)}</dd></div>
-          <div><dt>HHAD</dt><dd>{marketText(item.hhadSettlement)}</dd></div></dl></Link>)}</div>}
+        <p>{item.match.lotteryDate} · {predictionTypeLabel(item)} · {item.modelVersion} V{item.predictionVersion} · {formatTimestamp(item.match.kickoffTime)}</p>
+        <dl><div><dt>当前赛果</dt><dd>{factText(item.currentResultFact)}</dd></div>
+          {/* 市场集合来自该条预测自己的产品线：亚盘预测没有 HAD/HHAD，硬编码两个槽位会让它看起来永远"待结算"。 */}
+          {item.settlementMarkets.map((market) => <div key={market.marketType}>
+            <dt>{settlementMarketLabel(market.marketType)}</dt><dd>{marketText(market)}</dd>
+          </div>)}
+        </dl></Link>)}</div>}
       <div className="pagination"><Button disabled={filters.pageNo <= 1} onClick={() => update({ pageNo: filters.pageNo - 1 })}>上一页</Button>
         <span>第 {filters.pageNo} / {pageCount} 页</span><Button disabled={filters.pageNo >= pageCount} onClick={() => update({ pageNo: filters.pageNo + 1 })}>下一页</Button></div>
     </section>}

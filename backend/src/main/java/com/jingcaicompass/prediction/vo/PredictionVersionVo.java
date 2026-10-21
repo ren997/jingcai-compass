@@ -36,7 +36,13 @@ public record PredictionVersionVo(
         Instant lockTime,
         String predictionHash,
         PublicSnapshotAvailabilityEnum snapshotAvailability,
-        PredictionSnapshotVo snapshot
+        PredictionSnapshotVo snapshot,
+        /**
+         * 亚盘模型概率十列（λ / 去水概率 / edge / 离散度）。
+         * <p>为空的语义是"这一版没有模型概率"，与"概率算出来是 0"不同：体彩预测与 V24 之前的
+         * 存量行都为 null，渲染侧据此决定是否展示概率而不是展示 0。
+         */
+        PredictionAsianModelVo asianModel
 ) {
 
     /** 兼容缺少亚盘方向字段的历史公开预测视图。 */
@@ -84,7 +90,8 @@ public record PredictionVersionVo(
                 lockTime,
                 predictionHash,
                 snapshotAvailability,
-                snapshot
+                snapshot,
+                null
         );
     }
 }

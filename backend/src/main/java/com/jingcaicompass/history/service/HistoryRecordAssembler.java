@@ -11,7 +11,9 @@ import com.jingcaicompass.match.entity.MatchResultFact;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.prediction.entity.Prediction;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
+import com.jingcaicompass.prediction.vo.PredictionAsianModelVo;
 import com.jingcaicompass.settlement.entity.Settlement;
 import com.jingcaicompass.settlement.enums.MarketTypeEnum;
 import com.jingcaicompass.settlement.enums.SettlementStatusEnum;
@@ -90,7 +92,8 @@ public class HistoryRecordAssembler {
             }
             List<MarketSettlementHistoryVo> markets = marketHistories(
                     settlementsByPrediction.getOrDefault(predictionId, List.of()),
-                    supersededSettlementIds
+                    supersededSettlementIds,
+                    prediction.getPredictionType()
             );
             result.add(new HistoryListItemVo(
                     prediction.getId(),
@@ -112,7 +115,11 @@ public class HistoryRecordAssembler {
                     toMatch(match),
                     factsByMatch.getOrDefault(match.getId(), List.of()).stream().map(this::toFact).toList(),
                     markets,
-                    markets.stream().anyMatch(MarketSettlementHistoryVo::recalculatedAfterFactCorrection)
+                    markets.stream().anyMatch(MarketSettlementHistoryVo::recalculatedAfterFactCorrection),
+                    prediction.getPredictionType(),
+                    prediction.getAsianHandicapPick(),
+                    prediction.getTotalGoalsPick(),
+                    toAsianModel(prediction)
             ));
         }
         return List.copyOf(result);
@@ -139,10 +146,13 @@ public class HistoryRecordAssembler {
 
     private List<MarketSettlementHistoryVo> marketHistories(
             List<Settlement> settlements,
-            Set<Long> supersededSettlementIds
+            Set<Long> supersededSettlementIds,
+            PredictionTypeEnum predictionType
     ) {
-        List<MarketSettlementHistoryVo> result = new ArrayList<>(MarketTypeEnum.values().length);
-        for (MarketTypeEnum marketType : MarketTypeEnum.values()) {
+        // 只暴露该类预测实际使用的市场，避免体彩记录凭空多出两个亚盘待结算项。
+        List<MarketTypeEnum> markets = MarketTypeEnum.marketsFor(predictionType);
+        List<MarketSettlementHistoryVo> result = new ArrayList<>(markets.size());
+        for (MarketTypeEnum marketType : markets) {
             List<Settlement> marketSettlements = settlements.stream()
                     .filter(settlement -> settlement.getMarketType() == marketType)
                     .sorted(Comparator.comparing(Settlement::getSettlementVersion))
@@ -205,8 +215,19 @@ public class HistoryRecordAssembler {
                 settlement.getMatchFactId(),
                 settlement.getRuleVersion(),
                 Boolean.TRUE.equals(settlement.getIsCurrent()),
-                settlement.getCreatedAt()
+                settlement.getCreatedAt(),
+                settlement.getProfit()
         );
+    }
+
+    /**
+     * 搬运 V24 的十列模型输出。
+     *
+     * <p>十列全为空时返回 {@code null}，避免给体彩记录和 V24 之前的亚盘草稿凭空造一个空对象——
+     * 消费方据此区分「没有模型概率」与「模型概率全为 0」。
+     */
+    private PredictionAsianModelVo toAsianModel(Prediction prediction) {
+        return PredictionAsianModelVo.from(prediction);
     }
 
     private static Map<Long, Prediction> indexPredictionsById(Collection<Prediction> predictions) {

@@ -17,6 +17,7 @@ public interface HistoryQueryMapper {
             FROM predictions p
             INNER JOIN matches m ON m.id = p.match_id
             WHERE p.prediction_status IN ('PUBLISHED', 'LOCKED')
+            AND p.prediction_type = #{criteria.predictionType}
             <if test="criteria.lockedOnly">
               AND p.prediction_status = 'LOCKED'
             </if>
@@ -71,6 +72,7 @@ public interface HistoryQueryMapper {
             FROM predictions p
             INNER JOIN matches m ON m.id = p.match_id
             WHERE p.prediction_status IN ('PUBLISHED', 'LOCKED')
+            AND p.prediction_type = #{criteria.predictionType}
             <if test="criteria.lockedOnly">
               AND p.prediction_status = 'LOCKED'
             </if>
@@ -123,6 +125,9 @@ public interface HistoryQueryMapper {
             FROM predictions p
             INNER JOIN matches m ON m.id = p.match_id
             WHERE p.prediction_status = 'LOCKED'
+            <if test="criteria.predictionType != null">
+              AND p.prediction_type = #{criteria.predictionType}
+            </if>
             <if test="criteria.startDate != null">
               AND m.lottery_date &gt;= #{criteria.startDate}
             </if>

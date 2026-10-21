@@ -40,11 +40,17 @@ describe('admin URL search state', () => {
     expect(locks).toMatchObject({ lotteryDate: undefined, modelVersion: 'model-v1', predictionStatuses: ['LOCKED'], lockDiagnostics: ['OVERDUE'], pageNo: 1 });
     expect(toPredictionLockQuery(locks)).toMatchObject({ pageSize: 20, pageNo: 1 });
 
-    const settlements = parseSettlementStatusSearch(new URLSearchParams('date=2026-07-29&diagnostics=SETTLEMENT_MISSING_HAD,BAD&page=3'));
-    expect(settlements).toMatchObject({ lotteryDate: '2026-07-29', diagnostics: ['SETTLEMENT_MISSING_HAD'], pageNo: 3 });
+    // 诊断码已与市场解耦（SETTLEMENT_MISSING 而不是 SETTLEMENT_MISSING_HAD），
+    // 旧码属于非法值，必须被丢成空列表而不是原样透传给后端。
+    const settlements = parseSettlementStatusSearch(new URLSearchParams(
+      'date=2026-07-29&diagnostics=SETTLEMENT_MISSING,SETTLEMENT_MISSING_HAD&page=3',
+    ));
+    expect(settlements).toMatchObject({ lotteryDate: '2026-07-29', diagnostics: ['SETTLEMENT_MISSING'], pageNo: 3 });
     expect(toSettlementStatusQuery(settlements)).toEqual({
-      lotteryDate: '2026-07-29', modelVersion: undefined, diagnostics: ['SETTLEMENT_MISSING_HAD'], pageNo: 3, pageSize: 20,
+      lotteryDate: '2026-07-29', modelVersion: undefined, diagnostics: ['SETTLEMENT_MISSING'], pageNo: 3, pageSize: 20,
     });
+    const stale = parseSettlementStatusSearch(new URLSearchParams('diagnostics=SETTLEMENT_STALE,AWAITING_RESULT'));
+    expect(stale.diagnostics).toEqual(['SETTLEMENT_STALE', 'AWAITING_RESULT']);
   });
 
   it('uses the Shanghai business date for draft publication review and drops malformed dates', () => {

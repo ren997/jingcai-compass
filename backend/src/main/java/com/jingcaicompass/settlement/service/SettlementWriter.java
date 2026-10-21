@@ -23,6 +23,8 @@ import com.jingcaicompass.settlement.mapper.SettlementMapper;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Component;
@@ -37,6 +39,12 @@ public class SettlementWriter {
     /** T403 已冻结的纯函数规则标识；规则变更由 T405 以新结算版本处理。 */
     static final String RULE_VERSION = "t403-v1";
 
+    /** 亚盘让球与大小球规则的标识；与竞彩规则分开，便于独立演进和重算校验。 */
+    static final String ASIAN_RULE_VERSION = "t613-v1";
+
+    /** 允许参与重算的规则版本集合。 */
+    static final Set<String> SUPPORTED_RULE_VERSIONS = Set.of(RULE_VERSION, ASIAN_RULE_VERSION);
+
     static final String SYSTEM_OPERATOR = "system:settlement-job";
 
     private final PredictionMapper predictionMapper;
@@ -45,6 +53,7 @@ public class SettlementWriter {
     private final SportteryPoolSnapshotMapper poolSnapshotMapper;
     private final SettlementMapper settlementMapper;
     private final MarketSettlementCalculatorRouter calculatorRouter;
+    private final AsianMarketTermsResolver asianMarketTermsResolver;
     private final AuditLogService auditLogService;
 
     public SettlementWriter(
@@ -54,6 +63,7 @@ public class SettlementWriter {
             SportteryPoolSnapshotMapper poolSnapshotMapper,
             SettlementMapper settlementMapper,
             MarketSettlementCalculatorRouter calculatorRouter,
+            AsianMarketTermsResolver asianMarketTermsResolver,
             AuditLogService auditLogService
     ) {
         this.predictionMapper = predictionMapper;
@@ -62,6 +72,7 @@ public class SettlementWriter {
         this.poolSnapshotMapper = poolSnapshotMapper;
         this.settlementMapper = settlementMapper;
         this.calculatorRouter = calculatorRouter;
+        this.asianMarketTermsResolver = asianMarketTermsResolver;
         this.auditLogService = auditLogService;
     }
 
@@ -79,10 +90,12 @@ public class SettlementWriter {
 
         // 1) 依次锁定预测与比赛，串行化重复 Job 和赛果事实变更。
         Prediction prediction = predictionMapper.selectByIdForUpdate(predictionId);
-        if (prediction == null || prediction.getPredictionStatus() != PredictionStatusEnum.LOCKED
-                || (prediction.getPredictionType() != null && prediction.getPredictionType() != PredictionTypeEnum.SPORTTERY)) {
+        if (prediction == null || prediction.getPredictionStatus() != PredictionStatusEnum.LOCKED) {
             return SettlementWriteResult.skipped();
         }
+        PredictionTypeEnum predictionType = prediction.getPredictionType() == null
+                ? PredictionTypeEnum.SPORTTERY
+                : prediction.getPredictionType();
         MatchEntity match = matchMapper.selectByIdForUpdate(prediction.getMatchId());
         if (match == null) {
             throw new IllegalStateException("locked prediction references missing match: " + predictionId);
@@ -92,26 +105,56 @@ public class SettlementWriter {
             return SettlementWriteResult.skipped();
         }
 
-        // 2) 重新检查两个市场，避免并发重试创建第二条当前结算。
-        List<MarketTypeEnum> pendingMarkets = pendingMarkets(predictionId);
+        // 2) 只重新检查该类预测负责的市场，避免并发重试创建第二条当前结算。
+        List<MarketTypeEnum> pendingMarkets = pendingMarkets(predictionId, predictionType);
         if (pendingMarkets.isEmpty()) {
             return SettlementWriteResult.skipped();
         }
-        if (prediction.getHandicapPick() == null) {
+        if (predictionType == PredictionTypeEnum.SPORTTERY && prediction.getHandicapPick() == null) {
             throw new SettlementManualReviewException("prediction has no explicit three-way selection: " + predictionId);
         }
 
-        // 3) HHAD 只消费锁定之前已保存的官方让球，FINAL 缺失该输入时整条预测回滚待补数。
+        // 3) 竞彩市场只消费锁定之前已保存的官方让球；亚盘市场只消费预测绑定快照。
+        //    FINAL 缺失对应输入时整条预测回滚待补数，绝不用另一类市场的输入顶替。
         BigDecimal officialHandicap = officialHandicapFor(prediction, fact, pendingMarkets);
+        Map<MarketTypeEnum, AsianMarketTermsResolver.Terms> asianTerms =
+                predictionType == PredictionTypeEnum.ASIAN
+                        ? asianMarketTermsResolver.resolve(prediction)
+                        : Map.of();
 
-        // 4) 调用冻结纯函数、追加不可变结算和审计；任何写入失败都会回滚该预测的两个市场。
+        // 4) 调用冻结纯函数、追加不可变结算和审计；任何写入失败都会回滚该预测的全部市场。
+        int settledMarketCount = 0;
         for (MarketTypeEnum marketType : pendingMarkets) {
-            SettlementStatusEnum status = calculatorRouter.calculate(new MarketSettlementInputDto(
-                    marketType,
-                    prediction.getHandicapPick(),
-                    fact,
-                    marketType == MarketTypeEnum.HHAD ? officialHandicap : null
-            ));
+            BigDecimal marketLine = null;
+            BigDecimal price = null;
+            MarketSettlementInputDto input;
+            if (predictionType == PredictionTypeEnum.ASIAN) {
+                AsianMarketTermsResolver.Terms terms = asianTerms.get(marketType);
+                if (terms == null) {
+                    // 亚盘预测允许只给出一侧方向，缺失方向的市场不结算且不阻断另一侧。
+                    continue;
+                }
+                marketLine = terms.line();
+                price = terms.price();
+                input = new MarketSettlementInputDto(
+                        marketType,
+                        null,
+                        fact,
+                        null,
+                        terms.asianHandicapPick(),
+                        terms.totalGoalsPick(),
+                        marketLine
+                );
+            } else {
+                input = new MarketSettlementInputDto(
+                        marketType,
+                        prediction.getHandicapPick(),
+                        fact,
+                        marketType == MarketTypeEnum.HHAD ? officialHandicap : null
+                );
+            }
+
+            SettlementStatusEnum status = calculatorRouter.calculate(input);
             if (status == SettlementStatusEnum.PENDING) {
                 throw new IllegalStateException("confirmed fact produced pending settlement: " + fact.getId());
             }
@@ -123,7 +166,10 @@ public class SettlementWriter {
             settlement.setSupersedesSettlementVersion(null);
             settlement.setSettlementStatus(status);
             settlement.setMatchFactId(fact.getId());
-            settlement.setRuleVersion(RULE_VERSION);
+            settlement.setRuleVersion(predictionType == PredictionTypeEnum.ASIAN ? ASIAN_RULE_VERSION : RULE_VERSION);
+            settlement.setProfit(predictionType == PredictionTypeEnum.ASIAN
+                    ? SettlementMarginSupport.netProfit(status, price)
+                    : null);
             settlement.setIsCurrent(true);
             settlementMapper.insert(settlement);
             auditLogService.append(
@@ -133,10 +179,13 @@ public class SettlementWriter {
                     AuditActionTypeEnum.SETTLE,
                     "settlement",
                     null,
-                    snapshot(settlement, fact)
+                    snapshot(settlement, fact, marketLine)
             );
+            settledMarketCount++;
         }
-        return SettlementWriteResult.settled(pendingMarkets.size());
+        return settledMarketCount == 0
+                ? SettlementWriteResult.skipped()
+                : SettlementWriteResult.settled(settledMarketCount);
     }
 
     private boolean isConfirmed(MatchResultFact fact) {
@@ -144,9 +193,9 @@ public class SettlementWriter {
                 || fact.getFactStatus() == MatchResultFactStatusEnum.VOID);
     }
 
-    private List<MarketTypeEnum> pendingMarkets(Long predictionId) {
+    private List<MarketTypeEnum> pendingMarkets(Long predictionId, PredictionTypeEnum predictionType) {
         List<MarketTypeEnum> result = new ArrayList<>();
-        for (MarketTypeEnum marketType : MarketTypeEnum.values()) {
+        for (MarketTypeEnum marketType : MarketTypeEnum.marketsFor(predictionType)) {
             if (settlementMapper.selectCurrentByPredictionIdAndMarket(predictionId, marketType) == null) {
                 result.add(marketType);
             }
@@ -177,11 +226,13 @@ public class SettlementWriter {
         return snapshot.getOfficialHandicap();
     }
 
-    private String snapshot(Settlement settlement, MatchResultFact fact) {
+    private String snapshot(Settlement settlement, MatchResultFact fact, BigDecimal marketLine) {
         return "predictionId=" + settlement.getPredictionId()
                 + ";marketType=" + settlement.getMarketType()
                 + ";settlementVersion=" + settlement.getSettlementVersion()
                 + ";status=" + settlement.getSettlementStatus()
+                + ";profit=" + settlement.getProfit()
+                + ";marketLine=" + marketLine
                 + ";matchFactId=" + fact.getId()
                 + ";factVersion=" + fact.getFactVersion()
                 + ";ruleVersion=" + settlement.getRuleVersion();

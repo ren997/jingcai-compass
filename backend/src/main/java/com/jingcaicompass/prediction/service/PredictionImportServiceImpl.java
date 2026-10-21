@@ -6,6 +6,7 @@ import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.prediction.dto.AsianModelOutputDto;
 import com.jingcaicompass.prediction.dto.PredictionImportBatchDto;
 import com.jingcaicompass.prediction.dto.PredictionImportDto;
 import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
@@ -44,7 +45,11 @@ import org.springframework.util.StringUtils;
 public class PredictionImportServiceImpl implements PredictionImportService {
 
     private static final int PROBABILITY_SCALE = 6;
+    private static final int MODEL_OUTPUT_SCALE = 6;
     private static final int EXPECTED_GOALS_SCALE = 2;
+    private static final BigDecimal NEGATIVE_ONE = new BigDecimal("-1");
+    private static final AsianModelOutputDto EMPTY_ASIAN_MODEL_OUTPUT = new AsianModelOutputDto(
+            null, null, null, null, null, null, null, null, null, null);
     private static final BigDecimal MIN_PROBABILITY_SUM = new BigDecimal("0.999999");
     private static final BigDecimal MAX_PROBABILITY_SUM = new BigDecimal("1.000001");
     private static final BigDecimal MAX_EXPECTED_GOALS = new BigDecimal("999.99");
@@ -171,6 +176,12 @@ public class PredictionImportServiceImpl implements PredictionImportService {
                 modelVersion,
                 featureVersion
         );
+        AsianModelOutputDto asianModelOutput = normalizeAsianModelOutput(
+                item,
+                fieldPrefix,
+                predictionType,
+                modelVersion
+        );
 
         return new PredictionImportDto(
                 item.matchId(),
@@ -189,7 +200,8 @@ public class PredictionImportServiceImpl implements PredictionImportService {
                 asianMarketPrediction.totalGoalsPick(),
                 asianMarketPrediction.asianHandicapConfidenceLevel(),
                 asianMarketPrediction.totalGoalsConfidenceLevel(),
-                predictionType
+                predictionType,
+                asianModelOutput
         );
     }
 
@@ -285,6 +297,149 @@ public class PredictionImportServiceImpl implements PredictionImportService {
         return new AsianMarketPrediction(item.asianOddsSnapshotId(), item.asianHandicapPick(), item.totalGoalsPick(), null, null);
     }
 
+    /**
+     * 校验亚盘模型概率输出。这些值是 Brier 与 ROI 的计账依据，因此与方向、置信度同等级别严格：
+     * 成组出现、范围受限、禁止静默四舍五入，且 edge 必须等于两侧概率之差。
+     */
+    private AsianModelOutputDto normalizeAsianModelOutput(
+            PredictionImportDto item,
+            String fieldPrefix,
+            PredictionTypeEnum predictionType,
+            String modelVersion
+    ) {
+        if (predictionType != PredictionTypeEnum.ASIAN) {
+            if (item.asianModel() != null) {
+                throw invalid(fieldPrefix + ".asianModel must be absent for Sporttery prediction");
+            }
+            return null;
+        }
+        if (item.asianModel() == null) {
+            if (BaselinePredictionGenerationServiceImpl.MODEL_VERSION.equals(modelVersion)) {
+                throw invalid(fieldPrefix + ".asianModel is required for " + modelVersion);
+            }
+            return null;
+        }
+        AsianModelOutputDto asian = item.asianModel();
+        String prefix = fieldPrefix + ".asianModel";
+        requireTogether(
+                asian.lambdaHome() != null,
+                asian.lambdaAway() != null,
+                prefix + ".lambdaHome and lambdaAway must be present together"
+        );
+        requireTogether(
+                asian.modelCoverProb() != null,
+                asian.marketCoverProb() != null,
+                asian.edgeCover() != null,
+                prefix + " handicap probability trio must be present together"
+        );
+        requireTogether(
+                asian.modelOverProb() != null,
+                asian.marketOverProb() != null,
+                asian.edgeOver() != null,
+                asian.totalsDispersion() != null,
+                prefix + " totals probabilities and totalsDispersion must be present together"
+        );
+        boolean baseline = BaselinePredictionGenerationServiceImpl.MODEL_VERSION.equals(modelVersion);
+        if (baseline && (asian.lambdaHome() == null
+                || asian.modelCoverProb() == null
+                || asian.handicapDispersion() == null)) {
+            throw invalid(prefix + " lambda, handicap probabilities and handicapDispersion"
+                    + " are required for " + modelVersion);
+        }
+
+        BigDecimal lambdaHome = asian.lambdaHome() == null
+                ? null
+                : normalizeLambda(asian.lambdaHome(), prefix + ".lambdaHome");
+        BigDecimal lambdaAway = asian.lambdaAway() == null
+                ? null
+                : normalizeLambda(asian.lambdaAway(), prefix + ".lambdaAway");
+        BigDecimal modelCover = asian.modelCoverProb() == null
+                ? null
+                : normalizeProbability(asian.modelCoverProb(), prefix + ".modelCoverProb");
+        BigDecimal marketCover = asian.marketCoverProb() == null
+                ? null
+                : normalizeProbability(asian.marketCoverProb(), prefix + ".marketCoverProb");
+        BigDecimal edgeCover = asian.edgeCover() == null
+                ? null
+                : normalizeEdge(asian.edgeCover(), prefix + ".edgeCover");
+        if (modelCover != null && edgeCover.compareTo(modelCover.subtract(marketCover)) != 0) {
+            throw invalid(prefix + ".edgeCover must equal modelCoverProb minus marketCoverProb");
+        }
+        BigDecimal modelOver = asian.modelOverProb() == null
+                ? null
+                : normalizeProbability(asian.modelOverProb(), prefix + ".modelOverProb");
+        BigDecimal marketOver = asian.marketOverProb() == null
+                ? null
+                : normalizeProbability(asian.marketOverProb(), prefix + ".marketOverProb");
+        BigDecimal edgeOver = asian.edgeOver() == null
+                ? null
+                : normalizeEdge(asian.edgeOver(), prefix + ".edgeOver");
+        if (modelOver != null && edgeOver.compareTo(modelOver.subtract(marketOver)) != 0) {
+            throw invalid(prefix + ".edgeOver must equal modelOverProb minus marketOverProb");
+        }
+        return new AsianModelOutputDto(
+                lambdaHome,
+                lambdaAway,
+                modelCover,
+                marketCover,
+                edgeCover,
+                modelOver,
+                marketOver,
+                edgeOver,
+                asian.handicapDispersion() == null
+                        ? null
+                        : normalizeProbability(asian.handicapDispersion(), prefix + ".handicapDispersion"),
+                asian.totalsDispersion() == null
+                        ? null
+                        : normalizeProbability(asian.totalsDispersion(), prefix + ".totalsDispersion")
+        );
+    }
+
+    /** 成组字段要么全有要么全无；只写一半会让统计拿没有分歧证据的方向计账。 */
+    private void requireTogether(boolean first, boolean second, String message) {
+        if (first != second) {
+            throw invalid(message);
+        }
+    }
+
+    private void requireTogether(boolean first, boolean second, boolean third, String message) {
+        if (first != second || first != third) {
+            throw invalid(message);
+        }
+    }
+
+    private void requireTogether(boolean first, boolean second, boolean third, boolean fourth, String message) {
+        if (first != second || first != third || first != fourth) {
+            throw invalid(message);
+        }
+    }
+
+    private BigDecimal normalizeLambda(BigDecimal value, String field) {
+        if (value == null) {
+            throw invalid(field + " must not be null");
+        }
+        if (value.scale() > MODEL_OUTPUT_SCALE) {
+            throw invalid(field + " must have at most 6 decimal places");
+        }
+        if (value.compareTo(BigDecimal.ZERO) < 0) {
+            throw invalid(field + " must not be negative");
+        }
+        return value.setScale(MODEL_OUTPUT_SCALE, RoundingMode.UNNECESSARY);
+    }
+
+    private BigDecimal normalizeEdge(BigDecimal value, String field) {
+        if (value == null) {
+            throw invalid(field + " must not be null");
+        }
+        if (value.scale() > MODEL_OUTPUT_SCALE) {
+            throw invalid(field + " must have at most 6 decimal places");
+        }
+        if (value.compareTo(NEGATIVE_ONE) < 0 || value.compareTo(BigDecimal.ONE) > 0) {
+            throw invalid(field + " must be between -1 and 1");
+        }
+        return value.setScale(MODEL_OUTPUT_SCALE, RoundingMode.UNNECESSARY);
+    }
+
     private void validateAsianDirectionConfidence(
             boolean hasDirection,
             com.jingcaicompass.prediction.enums.ConfidenceLevelEnum confidence,
@@ -377,7 +532,27 @@ public class PredictionImportServiceImpl implements PredictionImportService {
                 && effectivePredictionType(prediction.getPredictionType()) == item.predictionType()
                 && prediction.getConfidenceLevel() == item.confidenceLevel()
                 && Objects.equals(prediction.getAnalysisSummary(), item.analysisSummary())
-                && Objects.equals(prediction.getGeneratedAt(), item.generatedAt());
+                && Objects.equals(prediction.getGeneratedAt(), item.generatedAt())
+                && sameAsianModelOutput(prediction, item.asianModel());
+    }
+
+    /**
+     * 概率是 Brier 与 ROI 的计账依据，必须逐列比较。这里一律用 {@code decimalEquals}：
+     * {@link BigDecimal#equals} 对不同标度会判否，{@code Objects.equals} 会把
+     * {@code 0.5} 与 {@code 0.500000} 当成两行，同批次重放就会白白冲突。
+     */
+    private boolean sameAsianModelOutput(Prediction prediction, AsianModelOutputDto asian) {
+        AsianModelOutputDto effective = asian == null ? EMPTY_ASIAN_MODEL_OUTPUT : asian;
+        return decimalEquals(prediction.getLambdaHome(), effective.lambdaHome())
+                && decimalEquals(prediction.getLambdaAway(), effective.lambdaAway())
+                && decimalEquals(prediction.getModelCoverProb(), effective.modelCoverProb())
+                && decimalEquals(prediction.getMarketCoverProb(), effective.marketCoverProb())
+                && decimalEquals(prediction.getEdgeCover(), effective.edgeCover())
+                && decimalEquals(prediction.getModelOverProb(), effective.modelOverProb())
+                && decimalEquals(prediction.getMarketOverProb(), effective.marketOverProb())
+                && decimalEquals(prediction.getEdgeOver(), effective.edgeOver())
+                && decimalEquals(prediction.getHandicapDispersion(), effective.handicapDispersion())
+                && decimalEquals(prediction.getTotalsDispersion(), effective.totalsDispersion());
     }
 
     private void validateMatches(List<PredictionImportDto> predictions) {
@@ -435,9 +610,27 @@ public class PredictionImportServiceImpl implements PredictionImportService {
             prediction.setAnalysisSummary(item.analysisSummary());
             prediction.setGeneratedAt(item.generatedAt());
             prediction.setPredictionStatus(PredictionStatusEnum.DRAFT);
+            applyAsianModelOutput(prediction, item.asianModel());
             predictions.add(prediction);
         }
         return predictions;
+    }
+
+    /** 概率按首边口径落库，看另一边时消费方自行取 {@code 1 − p}。为空时整组留空。 */
+    private void applyAsianModelOutput(Prediction prediction, AsianModelOutputDto asian) {
+        if (asian == null) {
+            return;
+        }
+        prediction.setLambdaHome(asian.lambdaHome());
+        prediction.setLambdaAway(asian.lambdaAway());
+        prediction.setModelCoverProb(asian.modelCoverProb());
+        prediction.setMarketCoverProb(asian.marketCoverProb());
+        prediction.setEdgeCover(asian.edgeCover());
+        prediction.setModelOverProb(asian.modelOverProb());
+        prediction.setMarketOverProb(asian.marketOverProb());
+        prediction.setEdgeOver(asian.edgeOver());
+        prediction.setHandicapDispersion(asian.handicapDispersion());
+        prediction.setTotalsDispersion(asian.totalsDispersion());
     }
 
     private int nextVersion(Prediction latest, PredictionImportDto item) {

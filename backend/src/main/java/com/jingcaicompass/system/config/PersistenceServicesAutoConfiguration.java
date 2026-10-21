@@ -12,6 +12,7 @@ import com.jingcaicompass.admin.service.AdminAuthService;
 import com.jingcaicompass.admin.service.AdminAuthServiceImpl;
 import com.jingcaicompass.admin.service.AdminJwtService;
 import com.jingcaicompass.admin.service.AdminLoginAttemptWriter;
+import com.jingcaicompass.admin.service.AdminOddsLadderQueryService;
 import com.jingcaicompass.admin.service.AdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.AdminPredictionStatusQueryServiceImpl;
 import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
@@ -84,6 +85,8 @@ import com.jingcaicompass.match.service.SportteryMatchResultPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.match.service.TeamNormalizationService;
 import com.jingcaicompass.match.service.TeamNormalizationServiceImpl;
+import com.jingcaicompass.odds.client.AsianModelProperties;
+import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.job.AsianOddsSyncJob;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
@@ -96,6 +99,7 @@ import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.job.PredictionLockJob;
 import com.jingcaicompass.prediction.service.BaselinePredictionGenerationService;
 import com.jingcaicompass.prediction.service.BaselinePredictionGenerationServiceImpl;
+import com.jingcaicompass.prediction.service.PredictionBatchPublishService;
 import com.jingcaicompass.prediction.service.PredictionContentHasher;
 import com.jingcaicompass.prediction.service.PredictionImportFileParser;
 import com.jingcaicompass.prediction.service.PredictionImportFileParserImpl;
@@ -112,6 +116,7 @@ import com.jingcaicompass.prediction.service.PublicPredictionQueryService;
 import com.jingcaicompass.prediction.service.PublicPredictionQueryServiceImpl;
 import com.jingcaicompass.settlement.job.SettlementJob;
 import com.jingcaicompass.settlement.mapper.SettlementMapper;
+import com.jingcaicompass.settlement.service.AsianMarketTermsResolver;
 import com.jingcaicompass.settlement.service.MarketSettlementCalculatorRouter;
 import com.jingcaicompass.settlement.service.SettlementService;
 import com.jingcaicompass.settlement.service.SettlementServiceImpl;
@@ -411,6 +416,8 @@ public class PersistenceServicesAutoConfiguration {
             PredictionImportService predictionImportService,
             ObjectMapper objectMapper,
             Clock predictionImportClock,
+            AsianOddsAggregationProperties asianOddsAggregationProperties,
+            AsianModelProperties asianModelProperties,
             MeterRegistry meterRegistry
     ) {
         return new BaselinePredictionGenerationServiceImpl(
@@ -421,6 +428,8 @@ public class PersistenceServicesAutoConfiguration {
                 predictionImportService,
                 objectMapper,
                 predictionImportClock,
+                asianOddsAggregationProperties,
+                asianModelProperties,
                 meterRegistry
         );
     }
@@ -447,6 +456,29 @@ public class PersistenceServicesAutoConfiguration {
                 auditLogService,
                 predictionImportClock
         );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    AdminOddsLadderQueryService adminOddsLadderQueryService(
+            PredictionMapper predictionMapper,
+            AsianOddsSnapshotMapper asianOddsSnapshotMapper,
+            AsianOddsAggregationProperties asianOddsAggregationProperties
+    ) {
+        return new AdminOddsLadderQueryService(
+                predictionMapper,
+                asianOddsSnapshotMapper,
+                asianOddsAggregationProperties
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    PredictionBatchPublishService predictionBatchPublishService(
+            PredictionMapper predictionMapper,
+            PredictionPublishService predictionPublishService
+    ) {
+        return new PredictionBatchPublishService(predictionMapper, predictionPublishService);
     }
 
     @Bean
@@ -671,6 +703,12 @@ public class PersistenceServicesAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    AsianMarketTermsResolver asianMarketTermsResolver(AsianOddsSnapshotMapper asianOddsSnapshotMapper) {
+        return new AsianMarketTermsResolver(asianOddsSnapshotMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     SettlementWriter settlementWriter(
             PredictionMapper predictionMapper,
             MatchMapper matchMapper,
@@ -678,6 +716,7 @@ public class PersistenceServicesAutoConfiguration {
             SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
             SettlementMapper settlementMapper,
             MarketSettlementCalculatorRouter calculatorRouter,
+            AsianMarketTermsResolver asianMarketTermsResolver,
             AuditLogService auditLogService
     ) {
         return new SettlementWriter(
@@ -687,6 +726,7 @@ public class PersistenceServicesAutoConfiguration {
                 sportteryPoolSnapshotMapper,
                 settlementMapper,
                 calculatorRouter,
+                asianMarketTermsResolver,
                 auditLogService
         );
     }
@@ -710,6 +750,7 @@ public class PersistenceServicesAutoConfiguration {
             SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
             SettlementMapper settlementMapper,
             MarketSettlementCalculatorRouter calculatorRouter,
+            AsianMarketTermsResolver asianMarketTermsResolver,
             AuditLogService auditLogService
     ) {
         return new SettlementRecalculationWriter(
@@ -719,6 +760,7 @@ public class PersistenceServicesAutoConfiguration {
                 sportteryPoolSnapshotMapper,
                 settlementMapper,
                 calculatorRouter,
+                asianMarketTermsResolver,
                 auditLogService
         );
     }

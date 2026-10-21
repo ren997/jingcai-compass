@@ -14,6 +14,7 @@ import com.jingcaicompass.prediction.vo.PredictionSnapshotVerificationVo;
 import com.jingcaicompass.prediction.vo.PredictionSnapshotVo;
 import com.jingcaicompass.prediction.vo.PredictionVersionVo;
 import com.jingcaicompass.prediction.vo.PredictionAsianMarketVo;
+import com.jingcaicompass.prediction.vo.PredictionAsianModelVo;
 import com.jingcaicompass.snapshot.dto.PredictionSnapshotManifestDto;
 import com.jingcaicompass.snapshot.dto.PredictionSnapshotManifestItemDto;
 import com.jingcaicompass.snapshot.dto.PublicPredictionSnapshotDownloadDto;
@@ -290,7 +291,8 @@ public class PublicPredictionQueryServiceImpl implements PublicPredictionQuerySe
                 prediction.getLockTime(),
                 prediction.getPredictionHash(),
                 snapshotAvailability,
-                snapshot
+                snapshot,
+                PredictionAsianModelVo.from(prediction)
         );
     }
 

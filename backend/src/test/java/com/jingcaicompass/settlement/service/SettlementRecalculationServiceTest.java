@@ -27,6 +27,7 @@ import com.jingcaicompass.prediction.enums.HandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.settlement.dto.SettlementRecalculationBatchResultDto;
+import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.settlement.entity.Settlement;
 import com.jingcaicompass.settlement.enums.MarketTypeEnum;
 import com.jingcaicompass.settlement.enums.SettlementStatusEnum;
@@ -68,6 +69,9 @@ class SettlementRecalculationServiceTest {
     private SportteryPoolSnapshotMapper poolSnapshotMapper;
 
     @Mock
+    private AsianOddsSnapshotMapper asianOddsSnapshotMapper;
+
+    @Mock
     private AuditLogService auditLogService;
 
     private SettlementRecalculationService service;
@@ -88,8 +92,11 @@ class SettlementRecalculationServiceTest {
                 settlementMapper,
                 new MarketSettlementCalculatorRouter(List.of(
                         new WinDrawLossSettlementCalculator(),
-                        new SportteryHandicapSettlementCalculator()
+                        new SportteryHandicapSettlementCalculator(),
+                        new AsianHandicapSettlementCalculator(),
+                        new AsianTotalGoalsSettlementCalculator()
                 )),
+                new AsianMarketTermsResolver(asianOddsSnapshotMapper),
                 auditLogService
         );
         service = new SettlementRecalculationServiceImpl(settlementMapper, writer, lifecycleMetrics);

@@ -154,6 +154,34 @@ class SettlementApplicationIT {
                 .isEqualTo(voidFactId);
     }
 
+    @Test
+    void settlesAsianMarketsFromFrozenSnapshotWithNetProfit() {
+        long matchId = insertMatch("asian");
+        Instant lockTime = Instant.parse("2026-07-27T13:00:00Z");
+        long snapshotId = insertAsianSnapshot(matchId, lockTime.minusSeconds(60));
+        long predictionId = insertLockedAsianPrediction(matchId, lockTime, snapshotId, "asian");
+        insertFact(matchId, "FINAL", 2, 1);
+
+        var first = settlementService.settlePendingPredictions(10);
+        var second = settlementService.settlePendingPredictions(10);
+
+        assertThat(first.candidatePredictionCount()).isEqualTo(1);
+        assertThat(first.settledPredictionCount()).isEqualTo(1);
+        assertThat(first.settledMarketCount()).isEqualTo(2);
+        assertThat(first.manualReviewPredictionCount()).isZero();
+        assertThat(currentSettlements(predictionId))
+                .containsExactly("ASIAN_HANDICAP:HIT", "ASIAN_TOTAL_GOALS:HIT");
+        assertThat(netProfitOf(predictionId, "ASIAN_HANDICAP")).isEqualByComparingTo("0.9500");
+        assertThat(netProfitOf(predictionId, "ASIAN_TOTAL_GOALS")).isEqualByComparingTo("0.9000");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT DISTINCT rule_version FROM settlements WHERE prediction_id = ?",
+                String.class,
+                predictionId
+        )).isEqualTo("t613-v1");
+        assertThat(second.candidatePredictionCount()).isZero();
+        assertThat(second.settledMarketCount()).isZero();
+    }
+
     private long insertMatch(String suffix) {
         long key = nextKey();
         return jdbcTemplate.queryForObject(
@@ -260,6 +288,62 @@ class SettlementApplicationIT {
                 new BigDecimal(officialHandicap),
                 Timestamp.from(capturedAt),
                 String.format("%064x", nextKey())
+        );
+    }
+
+    private long insertAsianSnapshot(long matchId, Instant capturedAt) {
+        return jdbcTemplate.queryForObject(
+                """
+                INSERT INTO asian_odds_snapshots (
+                    match_id, provider_code, bookmaker_code, handicap_line,
+                    home_odds, away_odds, total_line, over_odds, under_odds,
+                    snapshot_type, captured_at, raw_payload_hash
+                )
+                VALUES (?, 'NOVAAPI', 'pinnacle', -0.5000, 1.9500, 1.9500, 2.5000, 1.9000, 1.9000,
+                        'PRE_KICKOFF', ?, ?)
+                RETURNING id
+                """,
+                Long.class,
+                matchId,
+                Timestamp.from(capturedAt),
+                String.format("%064x", nextKey())
+        );
+    }
+
+    private long insertLockedAsianPrediction(long matchId, Instant lockTime, long snapshotId, String suffix) {
+        long key = nextKey();
+        return jdbcTemplate.queryForObject(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id,
+                    generation_batch_hash, prediction_version, prediction_type,
+                    asian_odds_snapshot_id, asian_handicap_pick, total_goals_pick,
+                    asian_handicap_confidence_level, total_goals_confidence_level,
+                    analysis_summary, generated_at, prediction_status, publish_time,
+                    lock_time, prediction_hash
+                )
+                VALUES (?, 't613-model', 't613-feature', ?, repeat('c', 64), 1, 'ASIAN',
+                        ?, 'HOME_COVER', 'OVER', 'MEDIUM', 'MEDIUM',
+                        'T613 亚盘自动结算测试预测', ?, 'LOCKED', ?, ?, ?)
+                RETURNING id
+                """,
+                Long.class,
+                matchId,
+                "T613-batch-" + suffix + "-" + key,
+                snapshotId,
+                Timestamp.from(lockTime.minusSeconds(120)),
+                Timestamp.from(lockTime.minusSeconds(60)),
+                Timestamp.from(lockTime),
+                "d".repeat(64)
+        );
+    }
+
+    private BigDecimal netProfitOf(long predictionId, String marketType) {
+        return jdbcTemplate.queryForObject(
+                "SELECT profit FROM settlements WHERE prediction_id = ? AND market_type = ?",
+                BigDecimal.class,
+                predictionId,
+                marketType
         );
     }
 

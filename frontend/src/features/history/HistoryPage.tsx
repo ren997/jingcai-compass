@@ -1,7 +1,8 @@
 import { useSearchParams } from 'react-router-dom';
 import {
-  SETTLEMENT_MARKETS,
-  SETTLEMENT_STATUSES,
+  settlementMarketsFor,
+  settlementStatusesFor,
+  type PredictionType,
   type SettlementStatus,
 } from '../../services/public';
 import {
@@ -9,13 +10,19 @@ import {
   predictionStatusLabel,
   formatProbability,
   formatTimestamp,
+  pickedProbability,
   statusLabels,
 } from '../matches/matchPresentation';
 import {
+  asianMarketReference,
+  asianPickSummary,
   currentFact,
+  defaultMarketFor,
   factScore,
   factSourceLabel,
   factStatusLabel,
+  formatSigned,
+  predictionTypeLabels,
   settlementMarketLabel,
   settlementStatusLabel,
 } from './historyPresentation';
@@ -45,9 +52,25 @@ export default function HistoryPage() {
 
   function changeSettlementStatus(status: SettlementStatus, checked: boolean) {
     const settlementStatuses = checked
-      ? SETTLEMENT_STATUSES.filter((candidate) => candidate === status || filters.settlementStatuses.includes(candidate))
+      ? settlementStatusesFor(filters.predictionType).filter(
+          (candidate) => candidate === status || filters.settlementStatuses.includes(candidate),
+        )
       : filters.settlementStatuses.filter((candidate) => candidate !== status);
     updateFilterAndResetPage({ settlementStatuses });
+  }
+
+  /**
+   * 切换产品线时必须同时把市场与状态重置。
+   *
+   * <p>只改 type 会让 URL 停留在「亚盘 + HAD」这种组合上，后端会以参数错误拒绝整个请求。
+   * 状态同理：竞彩下勾着的"走盘"在新类型里没有意义，留着只会得到空结果。
+   */
+  function changePredictionType(predictionType: PredictionType) {
+    updateFilterAndResetPage({
+      predictionType,
+      settlementMarket: defaultMarketFor(predictionType),
+      settlementStatuses: [],
+    });
   }
 
   return (
@@ -61,6 +84,19 @@ export default function HistoryPage() {
       </section>
 
       <section className="history-filters" aria-label="历史筛选">
+        <div className="prediction-type-switch" role="tablist" aria-label="产品线">
+          {(['ASIAN', 'SPORTTERY'] as PredictionType[]).map((type) => (
+            <button
+              key={type}
+              type="button"
+              role="tab"
+              aria-selected={filters.predictionType === type}
+              onClick={() => changePredictionType(type)}
+            >
+              {predictionTypeLabels[type]}
+            </button>
+          ))}
+        </div>
         <label>
           <span>开始日期</span>
           <input
@@ -109,7 +145,9 @@ export default function HistoryPage() {
             value={filters.settlementMarket}
             onChange={(event) => updateFilterAndResetPage({ settlementMarket: event.target.value as HistorySearch['settlementMarket'] })}
           >
-            {SETTLEMENT_MARKETS.map((market) => <option key={market} value={market}>{settlementMarketLabel(market)}</option>)}
+            {settlementMarketsFor(filters.predictionType).map((market) => (
+              <option key={market} value={market}>{settlementMarketLabel(market)}</option>
+            ))}
           </select>
         </label>
         <label className="check-filter">
@@ -123,7 +161,7 @@ export default function HistoryPage() {
         <fieldset className="status-filter">
           <legend>结算状态</legend>
           <div>
-            {SETTLEMENT_STATUSES.map((status) => (
+            {settlementStatusesFor(filters.predictionType).map((status) => (
               <label key={status}>
                 <input
                   type="checkbox"
@@ -172,6 +210,7 @@ export default function HistoryPage() {
                     <div className="history-card-main">
                       <div className="history-teams"><strong>{record.match.homeTeamName}</strong><span>VS</span><strong>{record.match.awayTeamName}</strong></div>
                       <div className="history-badges">
+                        <span>{predictionTypeLabels[record.predictionType]}</span>
                         <span>{record.modelVersion} · 第 {record.predictionVersion} 版</span>
                         <span>{predictionStatusLabel(record.predictionStatus)}</span>
                         {record.recalculatedAfterFactCorrection && <span className="correction-badge">赛果修正后重算</span>}
@@ -179,8 +218,25 @@ export default function HistoryPage() {
                       <dl className="metadata-list history-metadata">
                         <div><dt>发布时间</dt><dd>{formatTimestamp(record.publishTime)}</dd></div>
                         <div><dt>锁定时间</dt><dd>{formatTimestamp(record.lockTime)}</dd></div>
-                        <div><dt>主胜 / 平局 / 客胜</dt><dd>{formatProbability(record.homeWinProb)} / {formatProbability(record.drawProb)} / {formatProbability(record.awayWinProb)}</dd></div>
-                        <div><dt>竞彩让球胜平负</dt><dd>{handicapPickLabel(record.handicapPick)}</dd></div>
+                        {record.predictionType === 'SPORTTERY' ? (
+                          <>
+                            <div><dt>主胜 / 平局 / 客胜</dt><dd>{formatProbability(record.homeWinProb)} / {formatProbability(record.drawProb)} / {formatProbability(record.awayWinProb)}</dd></div>
+                            <div><dt>竞彩让球胜平负</dt><dd>{record.handicapPick ? handicapPickLabel(record.handicapPick) : '暂缺'}</dd></div>
+                          </>
+                        ) : (
+                          <>
+                            <div><dt>亚盘方向</dt><dd>{asianPickSummary(record)}</dd></div>
+                            <div>
+                              <dt>所选方向模型概率</dt>
+                              <dd>
+                                让球 {formatProbability(pickedProbability(record.asianModel, record.asianHandicapPick, 'HANDICAP'))}
+                                {' / '}
+                                大小球 {formatProbability(pickedProbability(record.asianModel, record.totalGoalsPick, 'TOTALS'))}
+                              </dd>
+                            </div>
+                            <div><dt>市场共识（首边）</dt><dd>{asianMarketReference(record)}</dd></div>
+                          </>
+                        )}
                         <div><dt>当前赛果</dt><dd>{factScore(fact)}{fact ? ` · ${factStatusLabel(fact.factStatus)} · ${factSourceLabel(fact.resultSource)}` : ''}</dd></div>
                         <div><dt>比赛状态</dt><dd>{fact ? statusLabels[fact.matchStatus] : '待赛果'}</dd></div>
                       </dl>
@@ -207,7 +263,13 @@ export default function HistoryPage() {
                               <h3>{settlementMarketLabel(market.marketType)}</h3>
                               {market.versions.length === 0 ? <p>当前待结算。</p> : (
                                 <ul>
-                                  {market.versions.map((item) => <li key={item.settlementId}>第 {item.settlementVersion} 版 · {settlementStatusLabel(item.settlementStatus)}{item.current ? ' · 当前' : ''}</li>)}
+                                  {market.versions.map((item) => (
+                                    <li key={item.settlementId}>
+                                      第 {item.settlementVersion} 版 · {settlementStatusLabel(item.settlementStatus)}
+                                      {item.profit !== null && ` · 收益 ${formatSigned(item.profit)}`}
+                                      {item.current ? ' · 当前' : ''}
+                                    </li>
+                                  ))}
                                 </ul>
                               )}
                             </section>

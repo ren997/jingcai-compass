@@ -3,6 +3,7 @@ package com.jingcaicompass.statistics.service;
 import com.jingcaicompass.history.mapper.HistoryQueryMapper;
 import com.jingcaicompass.history.service.HistoryRecordAssembler;
 import com.jingcaicompass.history.vo.HistoryListItemVo;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.statistics.dto.StatisticsQueryCriteriaDto;
 import com.jingcaicompass.statistics.dto.StatisticsSummaryQueryDto;
 import com.jingcaicompass.statistics.vo.LeagueStatisticsVo;
@@ -65,30 +66,38 @@ public class StatisticsQueryServiceImpl implements StatisticsQueryService {
         String modelVersion = query == null || !StringUtils.hasText(query.modelVersion())
                 ? null
                 : query.modelVersion().trim();
+        // 5) 产品线隔离：竞彩与亚盘的命中口径、Brier 定义与 ROI 分母都不同，一次只算一条。
+        PredictionTypeEnum predictionType = query == null || query.predictionType() == null
+                ? PredictionTypeEnum.SPORTTERY
+                : query.predictionType();
 
         // 2) 分别读取请求、近 7 天和近 30 天当前口径记录。
-        List<HistoryListItemVo> requestedRecords = recordsFor(requestedStart, asOfDate, leagueId, modelVersion);
-        StatisticsWindowVo requestedWindow = window(requestedStart, asOfDate, requestedRecords);
+        List<HistoryListItemVo> requestedRecords =
+                recordsFor(requestedStart, asOfDate, leagueId, modelVersion, predictionType);
+        StatisticsWindowVo requestedWindow =
+                window(requestedStart, asOfDate, requestedRecords, predictionType);
         StatisticsWindowVo trailingSevenDays = window(
                 asOfDate.minusDays(6),
                 asOfDate,
-                recordsFor(asOfDate.minusDays(6), asOfDate, leagueId, modelVersion)
+                recordsFor(asOfDate.minusDays(6), asOfDate, leagueId, modelVersion, predictionType),
+                predictionType
         );
         StatisticsWindowVo trailingThirtyDays = window(
                 asOfDate.minusDays(29),
                 asOfDate,
-                recordsFor(asOfDate.minusDays(29), asOfDate, leagueId, modelVersion)
+                recordsFor(asOfDate.minusDays(29), asOfDate, leagueId, modelVersion, predictionType),
+                predictionType
         );
 
         // 3) 仅对请求范围分组，避免固定对照窗口重复放大响应内容。
         return new StatisticsSummaryVo(
                 asOfDate,
-                new StatisticsAppliedFilterVo(leagueId, modelVersion),
+                new StatisticsAppliedFilterVo(leagueId, modelVersion, predictionType),
                 requestedWindow,
                 trailingSevenDays,
                 trailingThirtyDays,
-                byLeague(requestedRecords),
-                byModelVersion(requestedRecords)
+                byLeague(requestedRecords, predictionType),
+                byModelVersion(requestedRecords, predictionType)
         );
     }
 
@@ -96,19 +105,25 @@ public class StatisticsQueryServiceImpl implements StatisticsQueryService {
             LocalDate startDate,
             LocalDate endDate,
             Long leagueId,
-            String modelVersion
+            String modelVersion,
+            PredictionTypeEnum predictionType
     ) {
         List<Long> predictionIds = historyQueryMapper.selectLockedPredictionIds(
-                new StatisticsQueryCriteriaDto(startDate, endDate, leagueId, modelVersion)
+                new StatisticsQueryCriteriaDto(startDate, endDate, leagueId, modelVersion, predictionType)
         );
         return historyRecordAssembler.assemble(predictionIds);
     }
 
-    private StatisticsWindowVo window(LocalDate startDate, LocalDate endDate, List<HistoryListItemVo> records) {
-        return new StatisticsWindowVo(startDate, endDate, statisticsCalculator.calculate(records));
+    private StatisticsWindowVo window(
+            LocalDate startDate,
+            LocalDate endDate,
+            List<HistoryListItemVo> records,
+            PredictionTypeEnum predictionType
+    ) {
+        return new StatisticsWindowVo(startDate, endDate, statisticsCalculator.calculate(records, predictionType));
     }
 
-    private List<LeagueStatisticsVo> byLeague(List<HistoryListItemVo> records) {
+    private List<LeagueStatisticsVo> byLeague(List<HistoryListItemVo> records, PredictionTypeEnum predictionType) {
         Map<LeagueKey, List<HistoryListItemVo>> grouped = records.stream().collect(Collectors.groupingBy(
                 record -> new LeagueKey(record.match().leagueId(), record.match().leagueName())
         ));
@@ -116,7 +131,7 @@ public class StatisticsQueryServiceImpl implements StatisticsQueryService {
         grouped.forEach((key, values) -> result.add(new LeagueStatisticsVo(
                 key.leagueId(),
                 key.leagueName(),
-                statisticsCalculator.calculate(values)
+                statisticsCalculator.calculate(values, predictionType)
         )));
         result.sort(Comparator
                 .comparing((LeagueStatisticsVo item) -> item.leagueName(), Comparator.nullsLast(String::compareTo))
@@ -124,14 +139,17 @@ public class StatisticsQueryServiceImpl implements StatisticsQueryService {
         return List.copyOf(result);
     }
 
-    private List<ModelVersionStatisticsVo> byModelVersion(List<HistoryListItemVo> records) {
+    private List<ModelVersionStatisticsVo> byModelVersion(
+            List<HistoryListItemVo> records,
+            PredictionTypeEnum predictionType
+    ) {
         Map<String, List<HistoryListItemVo>> grouped = records.stream().collect(Collectors.groupingBy(
                 HistoryListItemVo::modelVersion
         ));
         List<ModelVersionStatisticsVo> result = new ArrayList<>(grouped.size());
         grouped.forEach((modelVersion, values) -> result.add(new ModelVersionStatisticsVo(
                 modelVersion,
-                statisticsCalculator.calculate(values)
+                statisticsCalculator.calculate(values, predictionType)
         )));
         result.sort(Comparator.comparing(ModelVersionStatisticsVo::modelVersion));
         return List.copyOf(result);

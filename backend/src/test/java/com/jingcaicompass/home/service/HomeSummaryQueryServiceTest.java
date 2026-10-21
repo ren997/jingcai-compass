@@ -2,11 +2,15 @@ package com.jingcaicompass.home.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.jingcaicompass.home.mapper.HomeSummaryMapper;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.settlement.enums.MarketTypeEnum;
+import com.jingcaicompass.statistics.dto.StatisticsSummaryQueryDto;
+import com.jingcaicompass.statistics.enums.ProbabilityScoringModeEnum;
 import com.jingcaicompass.statistics.service.StatisticsQueryService;
 import com.jingcaicompass.statistics.vo.MarketHitRateVo;
 import com.jingcaicompass.statistics.vo.ProbabilityMetricsVo;
@@ -50,7 +54,7 @@ class HomeSummaryQueryServiceTest {
                 .thenReturn(Instant.parse("2026-07-28T00:45:00Z"));
         when(homeSummaryMapper.selectLatestPublishedSnapshotAt())
                 .thenReturn(Instant.parse("2026-07-28T00:30:00Z"));
-        when(statisticsQueryService.summary(null)).thenReturn(statistics(today, sevenDays, thirtyDays));
+        when(statisticsQueryService.summary(any())).thenReturn(statistics(today, sevenDays, thirtyDays));
 
         var result = new HomeSummaryQueryServiceImpl(
                 homeSummaryMapper,
@@ -68,13 +72,15 @@ class HomeSummaryQueryServiceTest {
         assertThat(result.latestPublishedSnapshotAt()).isEqualTo(Instant.parse("2026-07-28T00:30:00Z"));
         assertThat(result.trailingSevenDays()).isSameAs(sevenDays);
         assertThat(result.trailingThirtyDays()).isSameAs(thirtyDays);
-        verify(statisticsQueryService).summary(null);
+        // 首页固定请求亚盘口径：竞彩与亚盘的命中/Brier/ROI 不可混算。
+        verify(statisticsQueryService).summary(
+                new StatisticsSummaryQueryDto(null, null, null, null, PredictionTypeEnum.ASIAN));
     }
 
     @Test
     void keepsFreshnessUnavailableWhenTodayHasNoSportterySnapshot() {
         LocalDate today = LocalDate.of(2026, 7, 28);
-        when(statisticsQueryService.summary(null)).thenReturn(statistics(today, window(today, today), window(today, today)));
+        when(statisticsQueryService.summary(any())).thenReturn(statistics(today, window(today, today), window(today, today)));
 
         var result = new HomeSummaryQueryServiceImpl(
                 homeSummaryMapper,
@@ -98,7 +104,7 @@ class HomeSummaryQueryServiceTest {
     private StatisticsSummaryVo statistics(LocalDate asOfDate, StatisticsWindowVo sevenDays, StatisticsWindowVo thirtyDays) {
         return new StatisticsSummaryVo(
                 asOfDate,
-                new StatisticsAppliedFilterVo(null, null),
+                new StatisticsAppliedFilterVo(null, null, PredictionTypeEnum.ASIAN),
                 thirtyDays,
                 sevenDays,
                 thirtyDays,
@@ -113,9 +119,20 @@ class HomeSummaryQueryServiceTest {
                 0,
                 0,
                 0,
-                new ProbabilityMetricsVo(0, null, null, List.of()),
-                new MarketHitRateVo(MarketTypeEnum.HAD, 0, 0, 0, 0, 0, null),
-                new MarketHitRateVo(MarketTypeEnum.HHAD, 0, 0, 0, 0, 0, null),
+                List.of(
+                        new MarketHitRateVo(MarketTypeEnum.ASIAN_HANDICAP, 0, 0, 0, 0, 0, 0, 0, 0, null, null),
+                        new MarketHitRateVo(MarketTypeEnum.ASIAN_TOTAL_GOALS, 0, 0, 0, 0, 0, 0, 0, 0, null, null)
+                ),
+                new ProbabilityMetricsVo(
+                        0,
+                        ProbabilityScoringModeEnum.ASIAN_DIRECTION,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        List.of()
+                ),
                 new RoiMetricsVo(false, null, null, 0, List.of())
         );
         return new StatisticsWindowVo(startDate, endDate, metrics);

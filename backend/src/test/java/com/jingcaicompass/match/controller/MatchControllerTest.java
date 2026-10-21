@@ -1,6 +1,7 @@
 package com.jingcaicompass.match.controller;
 
 import com.jingcaicompass.match.enums.MatchStatusEnum;
+import com.jingcaicompass.match.dto.MatchListQueryDto;
 import com.jingcaicompass.match.service.MatchQueryService;
 import com.jingcaicompass.match.vo.MatchDetailVo;
 import com.jingcaicompass.match.vo.MatchListItemVo;
@@ -26,7 +27,10 @@ import java.time.OffsetDateTime;
 import java.math.BigDecimal;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
+import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -132,6 +136,20 @@ class MatchControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.matchId").value(42))
                 .andExpect(jsonPath("$.data.asianOddsAvailability").value("NO_ASIAN_ODDS_SNAPSHOT"));
+    }
+
+    @Test
+    void bindsPublishedPredictionFilterForThePublicList() throws Exception {
+        when(matchQueryService.list(any())).thenReturn(new PageResult<>(List.of(), 1, 20, 0));
+
+        mockMvc.perform(post("/api/public/matches/list")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"lotteryDate\":\"2026-07-22\",\"hasPublishedPrediction\":true}"))
+                .andExpect(status().isOk());
+
+        org.mockito.ArgumentCaptor<MatchListQueryDto> query = org.mockito.ArgumentCaptor.forClass(MatchListQueryDto.class);
+        verify(matchQueryService).list(query.capture());
+        assertThat(query.getValue().hasPublishedPrediction()).isTrue();
     }
 
     @Test

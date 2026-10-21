@@ -49,9 +49,12 @@ describe('admin draft prediction page', () => {
     vi.mocked(fetch).mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith('/api/admin/predictions/drafts/list')) return response(page);
-      if (url.endsWith('/api/admin/predictions/publish')) return response({
-        predictionId: 101, matchId: 27, modelVersion: first.modelVersion, predictionVersion: 1,
-        predictionStatus: 'PUBLISHED', publishTime: '2026-08-11T01:10:00Z', lockTime: '2026-08-11T11:30:00Z', predictionHash: 'b'.repeat(64), alreadyPublished: false,
+      if (url.endsWith('/api/admin/predictions/publish/batch')) return response({
+        requestedCount: 1, successCount: 1, failureCount: 0,
+        results: [{
+          predictionId: 101, success: true, matchId: 27, predictionVersion: 1,
+          predictionStatus: 'PUBLISHED', predictionHash: 'b'.repeat(64), reused: false, errorMessage: null,
+        }],
       });
       return response(null);
     });
@@ -68,8 +71,8 @@ describe('admin draft prediction page', () => {
     await user.click(screen.getByRole('button', { name: '确认逐条发布' }));
 
     expect(await screen.findByText('发布成功，当前为第 1 版。')).toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledWith('/api/admin/predictions/publish', expect.objectContaining({
-      method: 'POST', body: JSON.stringify({ predictionId: 101 }),
+    expect(fetch).toHaveBeenCalledWith('/api/admin/predictions/publish/batch', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ predictionIds: [101] }),
     }));
     await waitFor(() => expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/api/admin/predictions/drafts/list')).length).toBeGreaterThan(1));
   });
@@ -79,11 +82,17 @@ describe('admin draft prediction page', () => {
     vi.mocked(fetch).mockImplementation(async (input, init) => {
       const url = String(input);
       if (url.endsWith('/api/admin/predictions/drafts/list')) return response(page);
-      if (url.endsWith('/api/admin/predictions/publish')) {
-        const request = JSON.parse(String(init?.body)) as { predictionId: number };
-        return request.predictionId === 101
-          ? response({ predictionId: 101, matchId: 27, modelVersion: first.modelVersion, predictionVersion: 1, predictionStatus: 'PUBLISHED', publishTime: '2026-08-11T01:10:00Z', lockTime: '2026-08-11T11:30:00Z', predictionHash: 'b'.repeat(64), alreadyPublished: false })
-          : response(null, false, '比赛已开赛，无法发布');
+      if (url.endsWith('/api/admin/predictions/publish/batch')) {
+        const request = JSON.parse(String(init?.body)) as { predictionIds: number[] };
+        // 服务端按 (matchId, predictionId) 重排结果，这里故意倒序返回，验证前端按 ID 回填而不是按下标
+        return response({
+          requestedCount: request.predictionIds.length,
+          successCount: 1,
+          failureCount: request.predictionIds.length - 1,
+          results: [...request.predictionIds].reverse().map((predictionId) => (predictionId === 101
+            ? { predictionId, success: true, matchId: 27, predictionVersion: 1, predictionStatus: 'PUBLISHED', predictionHash: 'b'.repeat(64), reused: false, errorMessage: null }
+            : { predictionId, success: false, matchId: null, predictionVersion: null, predictionStatus: null, predictionHash: null, reused: false, errorMessage: '比赛已开赛，无法发布' })),
+        });
       }
       return response(null);
     });
@@ -95,7 +104,8 @@ describe('admin draft prediction page', () => {
     await user.click(await screen.findByRole('button', { name: '确认逐条发布' }));
 
     expect(await screen.findByText('成功 1 条 · 失败 1 条')).toBeInTheDocument();
-    expect(screen.getByText(/比赛已开赛，无法发布（追踪号：draft-page-trace）/)).toBeInTheDocument();
+    // 批量接口在 200 响应里带回逐条失败原因，不再靠异常里的追踪号区分条目
+    expect(screen.getByText(/比赛已开赛，无法发布/)).toBeInTheDocument();
   });
 
   it('generates V3 Asian drafts only after the administrator confirms the target business date', async () => {
@@ -150,5 +160,54 @@ describe('admin draft prediction page', () => {
     renderPage();
 
     expect(await screen.findByText(/亚盘让球（平手）：主队赢盘/)).toBeInTheDocument();
+  });
+
+  it('loads the odds ladder only when the drawer opens and marks the frozen row', async () => {
+    const user = userEvent.setup();
+    vi.mocked(fetch).mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith('/api/admin/predictions/drafts/list')) return response(page);
+      if (url.endsWith('/api/admin/predictions/odds-ladder')) return response({
+        predictionId: 101,
+        matchId: 27,
+        frozenSnapshotId: 900,
+        handicap: {
+          bestLine: 0.5, bestFirstProbability: 0.512, bestSecondProbability: 0.488,
+          bestDispersion: 0.0132, bestSampleCount: 2, bestSampleSource: '回退全量 2 家（白名单仅 0 家）',
+          lines: [
+            { line: 0.5, sampleCount: 2, whitelistCount: 0, whitelistApplied: false, firstProbability: 0.512, secondProbability: 0.488, dispersion: 0.0132, fairFirstPrice: 1.9531, fairSecondPrice: 2.0492, best: true },
+            { line: 0.75, sampleCount: 2, whitelistCount: 0, whitelistApplied: false, firstProbability: 0.42, secondProbability: 0.58, dispersion: 0.018, fairFirstPrice: 2.3810, fairSecondPrice: 1.7241, best: false },
+          ],
+        },
+        totals: {
+          bestLine: 2.5, bestFirstProbability: 0.494, bestSecondProbability: 0.506,
+          bestDispersion: 0.0207, bestSampleCount: 2, bestSampleSource: '回退全量 2 家（白名单仅 0 家）',
+          lines: [
+            { line: 2.5, sampleCount: 2, whitelistCount: 0, whitelistApplied: false, firstProbability: 0.494, secondProbability: 0.506, dispersion: 0.0207, fairFirstPrice: 2.0243, fairSecondPrice: 1.9763, best: true },
+          ],
+        },
+        rows: [
+          { snapshotId: 900, providerCode: 'THE_ODDS_API', bookmakerCode: 'pinnacle', handicapLine: 0.5, homeOdds: 1.95, awayOdds: 1.95, totalLine: 2.5, overOdds: 1.9, underOdds: 1.95, capturedAt: '2026-08-11T01:00:00Z', frozen: true },
+          { snapshotId: 901, providerCode: 'THE_ODDS_API', bookmakerCode: 'bet365', handicapLine: 0.5, homeOdds: 1.98, awayOdds: 1.92, totalLine: 2.5, overOdds: 1.85, underOdds: 2.0, capturedAt: '2026-08-11T01:00:00Z', frozen: false },
+        ],
+      });
+      return response(null);
+    });
+    renderPage();
+
+    await screen.findByText(/周一001.*主队.*vs.*客队/);
+    // 阶梯是排障视图，不打开抽屉就不应产生请求
+    expect(vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/api/admin/predictions/odds-ladder'))).toHaveLength(0);
+
+    await user.click(screen.getAllByRole('button', { name: '盘口阶梯' })[0]);
+
+    expect(await screen.findByText(/冻结行 #900/)).toBeInTheDocument();
+    // 主盘摘要是一整段文本，按子串匹配而不是精确相等
+    expect(screen.getByText(/主队赢盘 51\.2%/)).toBeInTheDocument();
+    // 两个市场各有一份主盘摘要，因此这里按「至少一处」断言
+    expect(screen.getAllByText(/回退全量 2 家/).length).toBeGreaterThan(0);
+    expect(fetch).toHaveBeenCalledWith('/api/admin/predictions/odds-ladder', expect.objectContaining({
+      method: 'POST', body: JSON.stringify({ predictionId: 101 }),
+    }));
   });
 });

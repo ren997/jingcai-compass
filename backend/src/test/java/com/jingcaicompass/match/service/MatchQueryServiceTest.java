@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import com.jingcaicompass.data.mapper.RawDataPayloadMapper;
 import com.jingcaicompass.match.dto.MatchDetailQueryDto;
+import com.jingcaicompass.match.dto.MatchListCriteriaDto;
 import com.jingcaicompass.match.dto.MatchListQueryDto;
 import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.entity.MatchSourceMapping;
@@ -37,8 +38,10 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 class MatchQueryServiceTest {
 
@@ -111,6 +114,26 @@ class MatchQueryServiceTest {
             assertThat(item.officialHandicap()).isEqualByComparingTo("0.5");
             assertThat(item.sportteryAvailability()).isEqualTo(MatchDataAvailabilityEnum.AVAILABLE);
         });
+    }
+
+    @Test
+    void normalizesPublishedPredictionFilterBeforePaging() {
+        when(matchMapper.countPublicPage(any())).thenReturn(0L);
+
+        var page = matchQueryService.list(new MatchListQueryDto(
+                LocalDate.of(2026, 7, 22), 8L, Set.of(MatchStatusEnum.SCHEDULED), true,
+                MatchListSortEnum.KICKOFF_ASC, 2, 20
+        ));
+        ArgumentCaptor<MatchListCriteriaDto> criteria = ArgumentCaptor.forClass(MatchListCriteriaDto.class);
+
+        verify(matchMapper).countPublicPage(criteria.capture());
+
+        assertThat(page.total()).isZero();
+        assertThat(criteria.getValue()).satisfies(value -> {
+            assertThat(value.hasPublishedPrediction()).isTrue();
+            assertThat(value.offset()).isEqualTo(20);
+        });
+        verify(matchMapper, never()).selectPublicPage(any());
     }
 
     @Test

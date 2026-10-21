@@ -41,7 +41,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V22 与数据库原生行为。
+ * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V24 与数据库原生行为。
  */
 @Testcontainers
 @ActiveProfiles("integration")
@@ -49,6 +49,17 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class PostgresApplicationIT {
 
     private static final String POSTGRES_IMAGE = "postgres:16-alpine";
+
+    /**
+     * V24 的十列模型输出。逐列断言发布后不可变——漏掉任何一列，就等于允许事后改写
+     * 已发布预测背后的概率，而 ROI 与 Brier 正是拿这些概率计账的。
+     */
+    private static final List<String> ASIAN_MODEL_OUTPUT_COLUMNS = List.of(
+            "lambda_home", "lambda_away",
+            "model_cover_prob", "market_cover_prob", "edge_cover",
+            "model_over_prob", "market_over_prob", "edge_over",
+            "handicap_dispersion", "totals_dispersion"
+    );
 
     @Container
     private static final PostgreSQLContainer<?> POSTGRES =
@@ -105,8 +116,8 @@ class PostgresApplicationIT {
                 .filter(info -> info.getVersion() != null)
                 .toArray(MigrationInfo[]::new);
 
-        assertThat(applied).hasSize(22);
-        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("22");
+        assertThat(applied).hasSize(24);
+        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("24");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
@@ -186,7 +197,11 @@ class PostgresApplicationIT {
         );
         assertThat(predictionColumns).contains(
                 "prediction_type", "asian_odds_snapshot_id", "asian_handicap_pick", "total_goals_pick",
-                "asian_handicap_confidence_level", "total_goals_confidence_level"
+                "asian_handicap_confidence_level", "total_goals_confidence_level",
+                "lambda_home", "lambda_away",
+                "model_cover_prob", "market_cover_prob", "edge_cover",
+                "model_over_prob", "market_over_prob", "edge_over",
+                "handicap_dispersion", "totals_dispersion"
         );
     }
 
@@ -284,6 +299,186 @@ class PostgresApplicationIT {
         assertThatThrownBy(() -> jdbcTemplate.update(
                 "UPDATE predictions SET asian_handicap_confidence_level = 'MEDIUM' WHERE id = ?",
                 predictionId
+        )).isInstanceOf(DataAccessException.class);
+    }
+
+    @Test
+    void storesAsianModelOutputAndProtectsEveryColumnAfterPublish() {
+        long matchId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO matches (
+                    lottery_match_no, lottery_date, league_name, home_team_name, away_team_name,
+                    kickoff_time, match_status
+                )
+                VALUES ('T613-E01', DATE '2036-02-01', 'T613 League', 'T613 Home', 'T613 Away',
+                        TIMESTAMPTZ '2036-02-01 12:00:00+08', 'SCHEDULED')
+                RETURNING id
+                """,
+                Long.class
+        );
+        long asianSnapshotId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO asian_odds_snapshots (
+                    match_id, provider_code, bookmaker_code, handicap_line, home_odds, away_odds,
+                    total_line, over_odds, under_odds, snapshot_type, captured_at, raw_payload_hash
+                )
+                VALUES (?, 'T613_E_ASIAN', 'T613_E_BOOK', -0.25, 1.90, 1.90, 2.75, 1.95, 1.85,
+                        'PRE_KICKOFF', TIMESTAMPTZ '2036-02-01 10:00:00+08', ?)
+                RETURNING id
+                """,
+                Long.class,
+                matchId,
+                "1".repeat(64)
+        );
+        long predictionId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, prediction_type, asian_odds_snapshot_id, asian_handicap_pick,
+                    total_goals_pick, asian_handicap_confidence_level, total_goals_confidence_level,
+                    analysis_summary, generated_at,
+                    lambda_home, lambda_away,
+                    model_cover_prob, market_cover_prob, edge_cover,
+                    model_over_prob, market_over_prob, edge_over,
+                    handicap_dispersion, totals_dispersion
+                )
+                VALUES (?, 't306-asian-baseline-v6', 't306-asian-mainline-v6', 'T613-E-BATCH', ?, 1,
+                        'ASIAN', ?, 'HOME_COVER', 'OVER', 'HIGH', 'MEDIUM',
+                        'T613 阶段 E 亚盘概率落库。', TIMESTAMPTZ '2036-02-01 10:01:00+08',
+                        1.250000, 0.950000,
+                        0.512345, 0.512345, 0.000000,
+                        0.487500, 0.450000, 0.037500,
+                        0.011800, 0.010500)
+                RETURNING id
+                """,
+                Long.class,
+                matchId,
+                "2".repeat(64),
+                asianSnapshotId
+        );
+
+        // 携带模型输出正常发布，不能被两处 ROW 比较误伤。
+        jdbcTemplate.update(
+                """
+                UPDATE predictions
+                SET prediction_status = 'PUBLISHED',
+                    publish_time = TIMESTAMPTZ '2036-02-01 10:02:00+08',
+                    lock_time = TIMESTAMPTZ '2036-02-01 11:00:00+08',
+                    prediction_hash = ?
+                WHERE id = ?
+                """,
+                "3".repeat(64),
+                predictionId
+        );
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT lambda_home FROM predictions WHERE id = ?",
+                BigDecimal.class,
+                predictionId
+        )).isEqualByComparingTo("1.250000");
+
+        for (String column : ASIAN_MODEL_OUTPUT_COLUMNS) {
+            assertThatThrownBy(() -> jdbcTemplate.update(
+                    "UPDATE predictions SET " + column + " = 0.500000 WHERE id = ?",
+                    predictionId
+            ))
+                    .as("published column %s must be immutable", column)
+                    .isInstanceOf(DataAccessException.class);
+        }
+    }
+
+    @Test
+    void rejectsAsianModelOutputViolatingRangePairAndTypeRules() {
+        long matchId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO matches (
+                    lottery_match_no, lottery_date, league_name, home_team_name, away_team_name,
+                    kickoff_time, match_status
+                )
+                VALUES ('T613-E02', DATE '2036-02-02', 'T613 League', 'T613 Home', 'T613 Away',
+                        TIMESTAMPTZ '2036-02-02 12:00:00+08', 'SCHEDULED')
+                RETURNING id
+                """,
+                Long.class
+        );
+        long asianSnapshotId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO asian_odds_snapshots (
+                    match_id, provider_code, bookmaker_code, handicap_line, home_odds, away_odds,
+                    total_line, over_odds, under_odds, snapshot_type, captured_at, raw_payload_hash
+                )
+                VALUES (?, 'T613_E_ASIAN', 'T613_E_BOOK', -0.25, 1.90, 1.90, 2.75, 1.95, 1.85,
+                        'PRE_KICKOFF', TIMESTAMPTZ '2036-02-02 10:00:00+08', ?)
+                RETURNING id
+                """,
+                Long.class,
+                matchId,
+                "4".repeat(64)
+        );
+
+        // 半套 λ：两列必须同生同灭，否则反解结果无法复现。
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, prediction_type, asian_odds_snapshot_id, asian_handicap_pick,
+                    total_goals_pick, asian_handicap_confidence_level, total_goals_confidence_level,
+                    analysis_summary, generated_at, lambda_home
+                )
+                VALUES (?, 't306-asian-baseline-v6', 't306-asian-mainline-v6', 'T613-E-BATCH', ?, 1,
+                        'ASIAN', ?, 'HOME_COVER', 'OVER', 'HIGH', 'MEDIUM',
+                        '半套 λ。', TIMESTAMPTZ '2036-02-02 10:01:00+08', 1.250000)
+                """,
+                matchId, "5".repeat(64), asianSnapshotId
+        )).isInstanceOf(DataAccessException.class);
+
+        // 大小球只写概率不写离散度：会让 Brier 拿没有分歧证据的方向计账。
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, prediction_type, asian_odds_snapshot_id, asian_handicap_pick,
+                    total_goals_pick, asian_handicap_confidence_level, total_goals_confidence_level,
+                    analysis_summary, generated_at, model_over_prob, market_over_prob, edge_over
+                )
+                VALUES (?, 't306-asian-baseline-v6', 't306-asian-mainline-v6', 'T613-E-BATCH', ?, 1,
+                        'ASIAN', ?, 'HOME_COVER', 'OVER', 'HIGH', 'MEDIUM',
+                        '缺离散度。', TIMESTAMPTZ '2036-02-02 10:01:00+08', 0.487500, 0.450000, 0.037500)
+                """,
+                matchId, "6".repeat(64), asianSnapshotId
+        )).isInstanceOf(DataAccessException.class);
+
+        // 概率越出 0～1。
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, prediction_type, asian_odds_snapshot_id, asian_handicap_pick,
+                    total_goals_pick, asian_handicap_confidence_level, total_goals_confidence_level,
+                    analysis_summary, generated_at,
+                    model_cover_prob, market_cover_prob, edge_cover
+                )
+                VALUES (?, 't306-asian-baseline-v6', 't306-asian-mainline-v6', 'T613-E-BATCH', ?, 1,
+                        'ASIAN', ?, 'HOME_COVER', 'OVER', 'HIGH', 'MEDIUM',
+                        '概率越界。', TIMESTAMPTZ '2036-02-02 10:01:00+08',
+                        1.500000, 0.512345, 0.987655)
+                """,
+                matchId, "7".repeat(64), asianSnapshotId
+        )).isInstanceOf(DataAccessException.class);
+
+        // 竞彩行携带亚盘概率：会让遗留行污染亚盘统计。
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, prediction_type, home_win_prob, draw_prob, away_win_prob,
+                    handicap_pick, expected_total_goals, confidence_level,
+                    analysis_summary, generated_at, model_cover_prob
+                )
+                VALUES (?, 't306-sporttery', 't306-sporttery', 'T613-E-BATCH', ?, 1,
+                        'SPORTTERY', 0.450000, 0.270000, 0.280000, 'HOME_COVER', 2.50, 'HIGH',
+                        '竞彩携带亚盘概率。', TIMESTAMPTZ '2036-02-02 10:01:00+08', 0.512345)
+                """,
+                matchId, "8".repeat(64)
         )).isInstanceOf(DataAccessException.class);
     }
 

@@ -14,6 +14,7 @@ const item: AdminPredictionStatusPage['records'][number] = {
   modelVersion: 'model-v1',
   featureVersion: 'feature-v2',
   predictionVersion: 2,
+  predictionType: 'SPORTTERY',
   predictionStatus: 'LOCKED',
   publishTime: '2026-07-29T00:00:00Z',
   lockTime: '2026-07-29T01:00:00Z',
@@ -21,9 +22,11 @@ const item: AdminPredictionStatusPage['records'][number] = {
   match: { matchId: 42, lotteryDate: '2026-07-29', lotteryMatchNo: '周三042', leagueName: '英超', homeTeamName: '主队', awayTeamName: '客队', kickoffTime: '2026-07-29T12:00:00Z' },
   lockDiagnostics: [{ code: 'LOCKED', description: '预测已锁定' }],
   currentResultFact: { factId: 102, factVersion: 2, supersedesFactVersion: 1, factStatus: 'FINAL', matchStatus: 'FINISHED', homeScore: 2, awayScore: 1, providerUpdatedAt: '2026-07-29T14:00:00Z', current: true, createdAt: '2026-07-29T14:01:00Z' },
-  hadSettlement: { marketType: 'HAD', currentStatus: 'MISS', currentSettlementPersisted: true, settlementId: 302, settlementVersion: 2, matchFactId: 102, ruleVersion: 't403-v1', stale: false },
-  hhadSettlement: { marketType: 'HHAD', currentStatus: 'PENDING', currentSettlementPersisted: false, settlementId: null, settlementVersion: null, matchFactId: null, ruleVersion: null, stale: false },
-  settlementDiagnostics: [{ code: 'SETTLEMENT_MISSING_HHAD', description: 'HHAD 当前结算缺失' }],
+  settlementMarkets: [
+    { marketType: 'HAD', currentStatus: 'MISS', currentSettlementPersisted: true, settlementId: 302, settlementVersion: 2, matchFactId: 102, ruleVersion: 't403-v1', stale: false, profit: -1 },
+    { marketType: 'HHAD', currentStatus: 'PENDING', currentSettlementPersisted: false, settlementId: null, settlementVersion: null, matchFactId: null, ruleVersion: null, stale: false, profit: null },
+  ],
+  settlementDiagnostics: [{ code: 'SETTLEMENT_MISSING', description: '当前结算缺失', marketType: 'HHAD' }],
 };
 
 const page: AdminPredictionStatusPage = { records: [item], pageNo: 2, pageSize: 20, total: 21, manualAttentionCount: 1 };
@@ -34,11 +37,11 @@ const detail: AdminPredictionStatusDetail = {
     item.currentResultFact!,
   ],
   settlementMarkets: [
-    { marketType: 'HAD', currentStatus: 'MISS', currentSettlementPersisted: true, currentSettlementStale: false, versions: [
-      { settlementId: 301, settlementVersion: 1, supersedesSettlementVersion: null, settlementStatus: 'HIT', matchFactId: 101, ruleVersion: 't403-v1', current: false, createdAt: '2026-07-29T13:00:00Z' },
-      { settlementId: 302, settlementVersion: 2, supersedesSettlementVersion: 1, settlementStatus: 'MISS', matchFactId: 102, ruleVersion: 't403-v1', current: true, createdAt: '2026-07-29T14:01:00Z' },
+    { marketType: 'HAD', currentStatus: 'MISS', currentSettlementPersisted: true, currentSettlementStale: false, currentProfit: -1, versions: [
+      { settlementId: 301, settlementVersion: 1, supersedesSettlementVersion: null, settlementStatus: 'HIT', matchFactId: 101, ruleVersion: 't403-v1', current: false, createdAt: '2026-07-29T13:00:00Z', profit: 0.95 },
+      { settlementId: 302, settlementVersion: 2, supersedesSettlementVersion: 1, settlementStatus: 'MISS', matchFactId: 102, ruleVersion: 't403-v1', current: true, createdAt: '2026-07-29T14:01:00Z', profit: -1 },
     ] },
-    { marketType: 'HHAD', currentStatus: 'PENDING', currentSettlementPersisted: false, currentSettlementStale: false, versions: [] },
+    { marketType: 'HHAD', currentStatus: 'PENDING', currentSettlementPersisted: false, currentSettlementStale: false, currentProfit: null, versions: [] },
   ],
 };
 
@@ -85,10 +88,10 @@ describe('admin prediction status pages', () => {
     expect(screen.getByText('PENDING（未落库）')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /主队 vs 客队/ })).toHaveAttribute('href', '/admin/settlements/7');
 
-    renderRoute('/admin/settlements/7?diagnostics=SETTLEMENT_MISSING_HHAD');
+    renderRoute('/admin/settlements/7?diagnostics=SETTLEMENT_MISSING');
     expect(await screen.findByText('赛果版本链')).toBeInTheDocument();
     expect(screen.getByText(/当前权威事实/)).toBeInTheDocument();
     expect(screen.getByText('市场结算版本链')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '返回结算状态' })).toHaveAttribute('href', '/admin/settlements?diagnostics=SETTLEMENT_MISSING_HHAD');
+    expect(screen.getByRole('link', { name: '返回结算状态' })).toHaveAttribute('href', '/admin/settlements?diagnostics=SETTLEMENT_MISSING');
   });
 });

@@ -79,6 +79,38 @@ public class Prediction {
     private ConfidenceLevelEnum totalGoalsConfidenceLevel;
 
     /**
+     * 亚盘模型输出。十列随 V24 落库，供 ROI 与双 Brier 计账；概率一律为首边口径
+     * （主队赢盘 / 大球），看另一边时消费方自行取 {@code 1 − p}。
+     */
+    private BigDecimal lambdaHome;
+
+    private BigDecimal lambdaAway;
+
+    /** 模型认为主队赢下冻结让球线的概率。 */
+    private BigDecimal modelCoverProb;
+
+    /** 跨庄去水后主队赢盘的共识概率。 */
+    private BigDecimal marketCoverProb;
+
+    /** 让球方向模型概率减共识概率；在主盘上结构性为 0。 */
+    private BigDecimal edgeCover;
+
+    /** 模型认为总进球高过冻结大小球线的概率。 */
+    private BigDecimal modelOverProb;
+
+    /** 跨庄去水后大球的共识概率。 */
+    private BigDecimal marketOverProb;
+
+    /** 大小球方向模型概率减共识概率；仅在冻结线不等于大小球主盘时非零。 */
+    private BigDecimal edgeOver;
+
+    /** 各庄让球去水概率的总体标准差。 */
+    private BigDecimal handicapDispersion;
+
+    /** 各庄大小球去水概率的总体标准差。 */
+    private BigDecimal totalsDispersion;
+
+    /**
      * 模型置信等级
      *
      * @see ConfidenceLevelEnum#DESC

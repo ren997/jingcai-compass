@@ -2089,3 +2089,110 @@ h1 {
     padding-bottom: 12px;
   }
 }
+
+/* 产品线切换：两条口径不可混算，同一时刻只展示一条，因此按 tab 语义而不是复选框。 */
+.prediction-type-switch {
+  display: inline-flex;
+  grid-column: 1 / -1;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 999px;
+  background: #eef3ef;
+}
+
+.prediction-type-switch button {
+  padding: 6px 18px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: #526259;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.prediction-type-switch button[aria-selected='true'] {
+  border-color: #dbe4dc;
+  background: #fff;
+  color: #1f2d26;
+  box-shadow: 0 1px 2px rgb(31 45 38 / 8%);
+}
+
+/* 卡片上的概率行：与盘口、方向区分开，避免被当成赔率。 */
+.match-prediction-probability {
+  margin: 2px 0;
+  color: #526259;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.statistics-metrics .metric-secondary {
+  margin-top: 2px;
+  color: #6b7a71;
+  font-size: 12px;
+}
+
+/* 草稿卡片头部右侧的次要动作区：盘口阶梯按钮与状态徽标并排 */
+.admin-draft-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 盘口阶梯抽屉：表格只读，靠斑马纹与冻结行高亮区分层级 */
+.admin-ladder {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-ladder-market {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-ladder-market header h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: #1f2d26;
+}
+
+.admin-ladder-market header p {
+  margin: 0;
+  color: #526259;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.admin-ladder-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-ladder-table th,
+.admin-ladder-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #e8eee9;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-ladder-table th {
+  color: #6b7a71;
+  font-weight: 650;
+  background: #f4f8f5;
+}
+
+.admin-ladder-table tbody tr:nth-child(even) {
+  background: #fbfdfb;
+}
+
+.admin-ladder-table tr.frozen {
+  background: #eef5ff;
+}
+
+.admin-ladder-table small {
+  color: #84928b;
+  font-size: 11px;
+}

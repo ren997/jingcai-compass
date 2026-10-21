@@ -54,13 +54,15 @@
 
 ## Session Recovery and CI Delivery
 
-- A new Codex session must recover state from this file, `docs/dev-tasks.md`, Git status/history, the current branch, and the current pull request. Previous chat history is not a source of truth.
+- A new agent session must recover state from this file, `docs/dev-tasks.md`, Git status/history, the current branch, and the current pull request. Previous chat history is not a source of truth.
 - At the start of a resumed task, inspect `git status --short --branch`, recent commits, the task-board header, and the current task's execution record before editing. Preserve all existing worktree changes.
-- If acceptance requires Testcontainers, PostgreSQL-specific behavior, concurrency checks, a hosted runner, or any other GitHub Actions result, develop on a `codex/<task>-<topic>` branch and complete the Draft PR/CI/merge flow in `docs/dev-tasks.md`.
+- If acceptance requires Testcontainers, PostgreSQL-specific behavior, concurrency checks, a hosted runner, or any other GitHub Actions result, develop on a `feat/<topic>` branch and complete the Draft PR/CI/merge flow in `docs/dev-tasks.md`.
+- Do not create one branch per task. A single `feat/<topic>` branch may carry a sequence of tasks that belong to the same delivery; keep exactly one task `IN_PROGRESS` at a time, and name the branch after the whole delivery rather than its first task.
 - A task whose full acceptance can be verified locally may be developed locally without creating or pushing a branch unless the project owner requests publication.
 - Never replace an unavailable CI/Testcontainers check with a shared development or cloud database. Keep the task `PARTIAL` or `BLOCKED` and record the exact missing evidence.
 - Do not mark a CI-dependent task `DONE` until the required GitHub Actions run succeeds and its URL, commit SHA, environment versions, and test results are recorded.
-- After the implementation run succeeds, commit the final task-board update, wait for the resulting check again, mark the PR ready, merge it, switch back to `master`, and fast-forward from `origin/master`.
+- Keep the branch unmerged until the whole delivery is complete. A task reaching `DONE` inside an open `feat/<topic>` branch does not trigger a merge; merge the Draft PR only when the last task of that delivery is `DONE`.
+- After the final implementation run of the delivery succeeds, commit the final task-board update, wait for the resulting check again, mark the PR ready, merge it, switch back to `master`, and fast-forward from `origin/master`.
 
 ## Commit Messages
 

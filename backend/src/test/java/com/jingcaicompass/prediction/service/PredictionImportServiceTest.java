@@ -16,6 +16,7 @@ import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.prediction.dto.AsianModelOutputDto;
 import com.jingcaicompass.prediction.dto.PredictionImportBatchDto;
 import com.jingcaicompass.prediction.dto.PredictionImportDto;
 import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
@@ -226,6 +227,92 @@ class PredictionImportServiceTest {
         });
     }
 
+    @ParameterizedTest
+    @MethodSource("invalidAsianModelItems")
+    void rejectsAsianModelOutputViolatingContractBeforeDatabaseAccess(
+            PredictionImportDto item,
+            String expectedMessage
+    ) {
+        when(fileParser.parse(any())).thenReturn(batch("batch-asian-model-invalid", List.of(item)));
+
+        assertThatThrownBy(() -> service.importFile(new byte[] {1}))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.errorCode()).isEqualTo(ErrorCode.INVALID_PARAMETER);
+                    assertThat(exception).hasMessageContaining(expectedMessage);
+                });
+        verifyNoInteractions(matchMapper, predictionMapper, importWriter);
+    }
+
+    static Stream<Arguments> invalidAsianModelItems() {
+        return Stream.of(
+                Arguments.of(baselineV3Item(1L, null), "asianModel is required for t306-asian-baseline-v6"),
+                Arguments.of(
+                        sportteryItemWithAsianModel(1L),
+                        "asianModel must be absent for Sporttery prediction"),
+                Arguments.of(
+                        baselineV3Item(1L, withLambda(asianModelOutput(), "1.250000", null)),
+                        "lambdaHome and lambdaAway must be present together"),
+                Arguments.of(
+                        baselineV3Item(1L, withCover(asianModelOutput(), "0.512345", null, null)),
+                        "handicap probability trio must be present together"),
+                Arguments.of(
+                        baselineV3Item(1L, withHandicapDispersion(asianModelOutput(), null)),
+                        "handicapDispersion are required for"),
+                Arguments.of(
+                        baselineV3Item(1L, withTotalsDispersion(asianModelOutput(), null)),
+                        "totals probabilities and totalsDispersion must be present together"),
+                Arguments.of(
+                        baselineV3Item(1L, withCover(asianModelOutput(), "0.512345", "0.512345", "0.500000")),
+                        "edgeCover must equal modelCoverProb minus marketCoverProb"),
+                Arguments.of(
+                        baselineV3Item(1L, withCover(asianModelOutput(), "1.500000", "0.512345", "0.987655")),
+                        "must be between 0 and 1"),
+                Arguments.of(
+                        baselineV3Item(1L, withLambda(asianModelOutput(), "-1.250000", "0.950000")),
+                        "must not be negative"),
+                Arguments.of(
+                        baselineV3Item(1L, withLambda(asianModelOutput(), "1.2500000", "0.9500000")),
+                        "must have at most 6 decimal places")
+        );
+    }
+
+    @Test
+    void persistsAsianModelOutputColumnsForAsianPrediction() {
+        when(fileParser.parse(any())).thenReturn(batch(
+                "batch-asian-model",
+                List.of(baselineV3Item(1L))));
+        when(predictionMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        when(matchMapper.selectBatchIds(anyCollection())).thenReturn(List.of(
+                match(1L, MatchStatusEnum.SCHEDULED, NOW.plusSeconds(3600))
+        ));
+        when(asianOddsSnapshotMapper.selectBatchIds(List.of(9001L)))
+                .thenReturn(List.of(completeAsianSnapshot(1L)));
+        when(predictionMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+        when(importWriter.writeAll(anyList())).thenAnswer(invocation -> {
+            List<Prediction> predictions = invocation.getArgument(0);
+            predictions.getFirst().setId(301L);
+            return predictions;
+        });
+
+        PredictionImportResultDto result = service.importFile(new byte[] {1});
+
+        assertThat(result.insertedCount()).isOne();
+        ArgumentCaptor<List<Prediction>> captor = ArgumentCaptor.forClass(List.class);
+        verify(importWriter).writeAll(captor.capture());
+        assertThat(captor.getValue()).singleElement().satisfies(prediction -> {
+            assertThat(prediction.getLambdaHome()).isEqualByComparingTo("1.250000");
+            assertThat(prediction.getLambdaAway()).isEqualByComparingTo("0.950000");
+            assertThat(prediction.getModelCoverProb()).isEqualByComparingTo("0.512345");
+            assertThat(prediction.getMarketCoverProb()).isEqualByComparingTo("0.512345");
+            assertThat(prediction.getEdgeCover()).isEqualByComparingTo("0.000000");
+            assertThat(prediction.getModelOverProb()).isEqualByComparingTo("0.487500");
+            assertThat(prediction.getMarketOverProb()).isEqualByComparingTo("0.450000");
+            assertThat(prediction.getEdgeOver()).isEqualByComparingTo("0.037500");
+            assertThat(prediction.getHandicapDispersion()).isEqualByComparingTo("0.011800");
+            assertThat(prediction.getTotalsDispersion()).isEqualByComparingTo("0.010500");
+        });
+    }
+
     @Test
     void rejectsBaselineV3WithLowConfidenceDirectionBeforeDatabaseAccess() {
         PredictionImportDto lowConfidence = new PredictionImportDto(
@@ -240,7 +327,8 @@ class PredictionImportServiceTest {
                 null,
                 ConfidenceLevelEnum.LOW,
                 null,
-                PredictionTypeEnum.ASIAN
+                PredictionTypeEnum.ASIAN,
+                null
         );
         when(fileParser.parse(any())).thenReturn(batch("batch-v3-low", List.of(lowConfidence)));
 
@@ -405,6 +493,10 @@ class PredictionImportServiceTest {
     }
 
     private static PredictionImportDto baselineV3Item(Long matchId) {
+        return baselineV3Item(matchId, asianModelOutput());
+    }
+
+    private static PredictionImportDto baselineV3Item(Long matchId, AsianModelOutputDto asian) {
         return new PredictionImportDto(
                 matchId,
                 BaselinePredictionGenerationServiceImpl.MODEL_VERSION,
@@ -422,7 +514,122 @@ class PredictionImportServiceTest {
                 TotalGoalsPickEnum.UNDER,
                 ConfidenceLevelEnum.HIGH,
                 ConfidenceLevelEnum.MEDIUM,
-                PredictionTypeEnum.ASIAN
+                PredictionTypeEnum.ASIAN,
+                asian
+        );
+    }
+
+    /** 六位小数、首边口径，与 V24 列及导入校验的严格口径一致。 */
+    private static AsianModelOutputDto asianModelOutput() {
+        return new AsianModelOutputDto(
+                new BigDecimal("1.250000"),
+                new BigDecimal("0.950000"),
+                new BigDecimal("0.512345"),
+                new BigDecimal("0.512345"),
+                new BigDecimal("0.000000"),
+                new BigDecimal("0.487500"),
+                new BigDecimal("0.450000"),
+                new BigDecimal("0.037500"),
+                new BigDecimal("0.011800"),
+                new BigDecimal("0.010500")
+        );
+    }
+
+    private static AsianModelOutputDto withLambda(
+            AsianModelOutputDto base,
+            String lambdaHome,
+            String lambdaAway
+    ) {
+        return new AsianModelOutputDto(
+                lambdaHome == null ? null : new BigDecimal(lambdaHome),
+                lambdaAway == null ? null : new BigDecimal(lambdaAway),
+                base.modelCoverProb(),
+                base.marketCoverProb(),
+                base.edgeCover(),
+                base.modelOverProb(),
+                base.marketOverProb(),
+                base.edgeOver(),
+                base.handicapDispersion(),
+                base.totalsDispersion()
+        );
+    }
+
+    private static AsianModelOutputDto withCover(
+            AsianModelOutputDto base,
+            String model,
+            String market,
+            String edge
+    ) {
+        return new AsianModelOutputDto(
+                base.lambdaHome(),
+                base.lambdaAway(),
+                model == null ? null : new BigDecimal(model),
+                market == null ? null : new BigDecimal(market),
+                edge == null ? null : new BigDecimal(edge),
+                base.modelOverProb(),
+                base.marketOverProb(),
+                base.edgeOver(),
+                base.handicapDispersion(),
+                base.totalsDispersion()
+        );
+    }
+
+    private static AsianModelOutputDto withHandicapDispersion(
+            AsianModelOutputDto base,
+            String dispersion
+    ) {
+        return new AsianModelOutputDto(
+                base.lambdaHome(),
+                base.lambdaAway(),
+                base.modelCoverProb(),
+                base.marketCoverProb(),
+                base.edgeCover(),
+                base.modelOverProb(),
+                base.marketOverProb(),
+                base.edgeOver(),
+                dispersion == null ? null : new BigDecimal(dispersion),
+                base.totalsDispersion()
+        );
+    }
+
+    private static AsianModelOutputDto withTotalsDispersion(
+            AsianModelOutputDto base,
+            String dispersion
+    ) {
+        return new AsianModelOutputDto(
+                base.lambdaHome(),
+                base.lambdaAway(),
+                base.modelCoverProb(),
+                base.marketCoverProb(),
+                base.edgeCover(),
+                base.modelOverProb(),
+                base.marketOverProb(),
+                base.edgeOver(),
+                base.handicapDispersion(),
+                dispersion == null ? null : new BigDecimal(dispersion)
+        );
+    }
+
+    private static PredictionImportDto sportteryItemWithAsianModel(Long matchId) {
+        return new PredictionImportDto(
+                matchId,
+                "model-v1",
+                "feature-v1",
+                new BigDecimal("0.450000"),
+                new BigDecimal("0.270000"),
+                new BigDecimal("0.280000"),
+                HandicapPickEnum.HOME_WIN,
+                new BigDecimal("2.50"),
+                ConfidenceLevelEnum.HIGH,
+                "第一场分析",
+                Instant.parse("2026-07-26T00:00:00.123456789Z"),
+                null,
+                null,
+                null,
+                null,
+                null,
+                PredictionTypeEnum.SPORTTERY,
+                asianModelOutput()
         );
     }
 

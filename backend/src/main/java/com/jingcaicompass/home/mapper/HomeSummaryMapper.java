@@ -37,7 +37,14 @@ public interface HomeSummaryMapper {
     long countHistoricalPublishedPredictionMatches();
 
     /**
-     * 任一锁定预测的 HAD 当前结算未达到终态时，该比赛仍进入待结算数量。
+     * 任一锁定预测的「期望市场」当前结算未达到终态时，该比赛仍进入待结算数量。
+     *
+     * <p>期望市场按预测类型分派，不能用同一套市场常量判定：
+     * <ul>
+     *   <li>体彩只看 HAD（与既有口径一致，两个市场通常同时结算）；</li>
+     *   <li>亚盘只要求「已经给出方向的市场」终态，且终态必须包含 {@code PUSH} 与半赢半输——
+     *       漏掉这三种状态会让所有走盘场次永久停留在「待结算」。</li>
+     * </ul>
      *
      * <p>未生成 current 结算和持久化为 PENDING 都不会被误计为已结算。</p>
      */
@@ -45,13 +52,49 @@ public interface HomeSummaryMapper {
             SELECT COUNT(DISTINCT p.match_id)
             FROM predictions p
             WHERE p.prediction_status = 'LOCKED'
-              AND NOT EXISTS (
-                  SELECT 1
-                  FROM settlements s
-                  WHERE s.prediction_id = p.id
-                    AND s.market_type = 'HAD'
-                    AND s.is_current = TRUE
-                    AND s.settlement_status IN ('HIT', 'MISS', 'VOID')
+              AND (
+                  (
+                      p.prediction_type = 'SPORTTERY'
+                      AND NOT EXISTS (
+                          SELECT 1
+                          FROM settlements s
+                          WHERE s.prediction_id = p.id
+                            AND s.market_type = 'HAD'
+                            AND s.is_current = TRUE
+                            AND s.settlement_status IN ('HIT', 'MISS', 'VOID')
+                      )
+                  )
+                  OR (
+                      p.prediction_type = 'ASIAN'
+                      AND (
+                          (
+                              p.asian_handicap_pick IS NOT NULL
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM settlements s
+                                  WHERE s.prediction_id = p.id
+                                    AND s.market_type = 'ASIAN_HANDICAP'
+                                    AND s.is_current = TRUE
+                                    AND s.settlement_status IN (
+                                        'HIT', 'MISS', 'VOID', 'PUSH', 'HALF_WIN', 'HALF_LOSS'
+                                    )
+                              )
+                          )
+                          OR (
+                              p.total_goals_pick IS NOT NULL
+                              AND NOT EXISTS (
+                                  SELECT 1
+                                  FROM settlements s
+                                  WHERE s.prediction_id = p.id
+                                    AND s.market_type = 'ASIAN_TOTAL_GOALS'
+                                    AND s.is_current = TRUE
+                                    AND s.settlement_status IN (
+                                        'HIT', 'MISS', 'VOID', 'PUSH', 'HALF_WIN', 'HALF_LOSS'
+                                    )
+                              )
+                          )
+                      )
+                  )
               )
             """)
     long countPendingSettlementMatches();

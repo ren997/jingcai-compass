@@ -30,8 +30,9 @@
 ## 已知未收口事项
 
 - `T610` 仍为 `PARTIAL`，剩余 Draft PR + 完整 CI 证据。
-- `T613` 阶段 A 已收口（`e9c2b34`）、阶段 B 已收口（`166e87e`）、阶段 C 已收口（`0bd5450`）、阶段 D 已收口（`74a5adc`），均已推送 `feat/asian-model-v1`；**阶段 E（概率落库与统计）未开始**。
-- 阶段 E 待办：`StatisticsCalculator.MarketAccumulator.record` 的 switch 未处理 `PUSH`/`HALF_WIN`/`HALF_LOSS`（switch 语句不要求穷尽，会静默漏计）；`AdminPredictionStatusQueryServiceImpl` 硬编码只展示 HAD/HHAD；V24 模型概率列（设计文档 §7 归阶段 E）。
+- `T613` 阶段 A 已收口（`e9c2b34`）、阶段 B 已收口（`166e87e`）、阶段 C 已收口（`0bd5450`）、阶段 D 已收口（`74a5adc`），均已推送 `feat/asian-model-v1`。
+- 阶段 E 分两批：**E1~E6（V24 概率落库）已收口（`7b29b91`）**；E7~E14（统计重构、批量发布、后台亚盘展示、前端）未开始，计划文件在 `C:\Users\Admin\.workbuddy\plans\cosmic-aurora-curie-ZBnmGq5O.md`。
+- E7 起的 P0 前置（潜伏状态，一上线就炸）：统计查询只过滤 `prediction_status='LOCKED'` 不过滤 `prediction_type`，任何 ASIAN 预测被锁定后 `StatisticsCalculator` 会抛 `missing HAD history` 导致统计接口整页 500 —— 亚盘尚未批量发布，但 E11 的批量发布一上线即引爆。另有 `MarketAccumulator.record` 的 switch 未处理 `PUSH`/`HALF_WIN`/`HALF_LOSS`（静默漏计）、`AdminPredictionStatusQueryServiceImpl` 硬编码只展示 HAD/HHAD。
 
 ## 亚盘模型的硬约束（阶段 B、C、D 建立，后续阶段不得违反）
 
@@ -42,9 +43,13 @@
 - **σ 可以真拦，但两种 source 不可比**：σ = 跨庄去水概率的**总体**标准差，衡量"市场是否自相矛盾"，与 λ 求解无关，所以适合做硬过滤（阈值 `0.0200`，严格大于才拒，分市场独立判定）。但白名单按线生效，达标时样本常从十几家掉到两三家，σ 系统性偏小 → `source=whitelist` 与 `source=fallback` 的 σ 不能横向比较，指标必须带 `source` 标签。
 - 聚合顺序固定为 **逐家去水 → 中位 → 归一**；主盘 = 偏离 50/50 最小的线（不是众数），线型偏好仅在精确同分（ε=0）时生效。
 - 统一概率口径 `p_eff = (W + 0.5·HW) / (W + 0.5·HW + 0.5·HL + L)`，市场侧与模型侧必须逐字一致。
+- **落库口径是首边，不是所选方向**：`model_cover_prob` / `market_cover_prob` / `edge_cover` 一律按主队（让球）与**大球**（大小球）记，而 `AsianPublishGate.Verdict` 里的概率**已按方向做过 `1 − p` 换算**。混用会让方向字段与概率字段互相矛盾，且统计侧无法再按首边归一。
+- **新增落库列必须同时改三处**：V 版本迁移的列定义 + `protect_published_prediction()` 两处 ROW 列表（漏改等于允许事后重写已发布预测背后的概率）+ `PredictionImportDto` 的模型输出校验。列精度统一 `numeric(9,6)`，不用 5 位（生成侧 `PROBABILITY_SCALE = 6`，5 位会静默四舍五入）。
+- **「值只在某个分支才算」是落库陷阱**：`overProbability` 原先只在置信度非 LOW 的分支里投影，直接落库会写入 0 而非真实概率。给任何市场新增落库列前，先确认该值在**所有分支**都被计算。
 
 ## 迁移编号陷阱
 
 - `backend/src/main/java/db/migration/` 下有 **Java 版 Flyway 迁移**（`V22__RepairLegacyNameKeyIdentityCleanup`）。新建 SQL 迁移前先 `ls` 这个目录，否则会撞号并报 `Found more than one migration with version <n>`。
-- 当前最高版本：V23（亚盘结算市场与 profit）。设计文档 §6 的模型概率列顺延为 V24。
+- 当前最高版本：**V24**（亚盘模型概率输出 10 列）。V23 = 亚盘结算市场与 profit。
+- `PostgresApplicationIT` 会断言迁移总数与末版本号，**每次加迁移必须同步改**（阶段 A 加 V23 后它红了一整个阶段没人发现，因为只跑定向 IT）。
 

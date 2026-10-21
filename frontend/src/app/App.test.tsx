@@ -375,6 +375,31 @@ describe('App routes', () => {
     expect(window.location.search).not.toContain('leagueId');
   });
 
+  it('filters for published predictions through the URL and server-side page query', async () => {
+    const user = userEvent.setup();
+    mockPublicMatches({ list: page([match], 2, 41) });
+    renderApp('/matches?date=2026-07-22&leagueId=7&published=true&page=2');
+
+    expect(await screen.findByText('第 2 / 3 页')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '已发布预测' })).toBeChecked();
+    await waitFor(() => expect(publicListBodies()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ hasPublishedPrediction: true, pageNo: 2 }),
+    ])));
+
+    await user.click(screen.getByRole('checkbox', { name: '已发布预测' }));
+
+    await waitFor(() => expect(window.location.search).not.toContain('published'));
+    expect(window.location.search).toContain('page=1');
+    await waitFor(() => expect(publicListBodies()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        lotteryDate: '2026-07-22',
+        leagueId: 7,
+        pageNo: 1,
+        pageSize: 20,
+      }),
+    ])));
+  });
+
   it('moves to the next server page without changing the active filters', async () => {
     const user = userEvent.setup();
     mockPublicMatches({ list: page([match], 1, 41) });
@@ -406,8 +431,8 @@ describe('App routes', () => {
     expect(screen.getByText('BOOK_A · ODDS_API')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: '预测结果' })).toBeInTheDocument();
     expect(screen.getByText('model-v1')).toBeInTheDocument();
-    expect(screen.getByText(/亚盘让球（主队 -0.5）：主队赢盘/)).toBeInTheDocument();
-    expect(screen.getByText(/亚盘大小球（2.5）：大球/)).toBeInTheDocument();
+    expect(screen.getByText(/亚盘让球：主 -0.5（赔率 1.92）/)).toBeInTheDocument();
+    expect(screen.getByText(/亚盘大小球：大 2.5（赔率 1.88）/)).toBeInTheDocument();
   });
 
   it('renders public detail in separate Sporttery and Asian Odds sections and preserves the list URL', async () => {

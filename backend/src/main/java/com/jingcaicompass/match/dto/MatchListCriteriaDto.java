@@ -10,8 +10,21 @@ public record MatchListCriteriaDto(
         LocalDate lotteryDate,
         Long leagueId,
         Set<MatchStatusEnum> matchStatuses,
+        boolean hasPublishedPrediction,
         MatchListSortEnum sort,
         long pageSize,
         long offset
 ) {
+
+    /** 兼容未使用已发布预测筛选的既有调用方。 */
+    public MatchListCriteriaDto(
+            LocalDate lotteryDate,
+            Long leagueId,
+            Set<MatchStatusEnum> matchStatuses,
+            MatchListSortEnum sort,
+            long pageSize,
+            long offset
+    ) {
+        this(lotteryDate, leagueId, matchStatuses, false, sort, pageSize, offset);
+    }
 }

@@ -69,6 +69,7 @@ describe('public match API service', () => {
       lotteryDate: '2026-07-22',
       leagueId: 7,
       matchStatuses: ['SCHEDULED'],
+      hasPublishedPrediction: true,
       sort: 'KICKOFF_ASC',
       pageNo: 1,
       pageSize: 20,

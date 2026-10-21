@@ -27,7 +27,10 @@ public class PredictionContentHasher {
     public static final int LEGACY_HASH_SCHEMA_VERSION = 1;
     public static final int HASH_SCHEMA_VERSION = 2;
     public static final int ASIAN_HASH_SCHEMA_VERSION = 3;
+    /** 亚盘十列模型概率进入规范化内容后的结构版本；v1~v3 永久保留以复算存量行。 */
+    public static final int ASIAN_PROBABILITY_HASH_SCHEMA_VERSION = 4;
     private static final int PROBABILITY_SCALE = 6;
+    private static final int MODEL_PROBABILITY_SCALE = 6;
     private static final int EXPECTED_GOALS_SCALE = 2;
     private static final BigDecimal MIN_PROBABILITY_SUM = new BigDecimal("0.999999");
     private static final BigDecimal MAX_PROBABILITY_SUM = new BigDecimal("1.000001");
@@ -119,16 +122,73 @@ public class PredictionContentHasher {
         return sha256Hex(canonical);
     }
 
-    /** 返回当前预测内容所使用的规范化哈希结构版本。 */
+    /**
+     * 返回当前预测内容所使用的规范化哈希结构版本。
+     *
+     * <p>亚盘按十列模型概率是否落库区分 v3 / v4：十列是发布后被触发器冻结的公开内容，
+     * 若不进哈希，「公开可验证」就只能覆盖方向与置信度，算不出模型当时给出的概率。
+     */
     public int hashSchemaVersion(Prediction prediction) {
         Objects.requireNonNull(prediction, "prediction must not be null");
         if (effectivePredictionType(prediction) == PredictionTypeEnum.ASIAN) {
-            return ASIAN_HASH_SCHEMA_VERSION;
+            return hasAsianModelProbabilities(prediction)
+                    ? ASIAN_PROBABILITY_HASH_SCHEMA_VERSION
+                    : ASIAN_HASH_SCHEMA_VERSION;
         }
         return hasAsianMarketPrediction(prediction) ? HASH_SCHEMA_VERSION : LEGACY_HASH_SCHEMA_VERSION;
     }
 
+    /**
+     * 校验已落库的哈希并返回实际生效的结构版本。
+     *
+     * <p>V24 上线到本结构上线之间存在「十列已填、哈希仍按 v3 计算」的存量行。发布侧不重算这些行，
+     * 因此复算必须回落到 v3，否则快照生成会以「哈希不匹配」整批失败——那是比不覆盖概率更坏的结局。
+     */
+    public ResolvedPredictionHash verifyStoredHash(
+            Prediction prediction,
+            Instant publishTime,
+            Instant lockTime
+    ) {
+        Objects.requireNonNull(prediction, "prediction must not be null");
+        String stored = requireSha256(prediction.getPredictionHash(), "predictionHash");
+        // 1) 先按当前结构复算
+        int version = hashSchemaVersion(prediction);
+        if (stored.equals(sha256Hex(prediction, publishTime, lockTime))) {
+            return new ResolvedPredictionHash(version, stored);
+        }
+
+        // 2) 亚盘 v4 行可能仍是 v3 时期的哈希，回落到 v3 规范化内容再比一次
+        if (version == ASIAN_PROBABILITY_HASH_SCHEMA_VERSION
+                && stored.equals(sha256Asian(prediction, publishTime, lockTime, false))) {
+            return new ResolvedPredictionHash(ASIAN_HASH_SCHEMA_VERSION, stored);
+        }
+        throw new IllegalArgumentException("prediction hash mismatch: " + prediction.getId());
+    }
+
     private String sha256Asian(Prediction prediction, Instant publishTime, Instant lockTime) {
+        return sha256Hex(canonicalAsian(
+                prediction,
+                publishTime,
+                lockTime,
+                hasAsianModelProbabilities(prediction)
+        ));
+    }
+
+    private String sha256Asian(
+            Prediction prediction,
+            Instant publishTime,
+            Instant lockTime,
+            boolean withModelProbabilities
+    ) {
+        return sha256Hex(canonicalAsian(prediction, publishTime, lockTime, withModelProbabilities));
+    }
+
+    private Object canonicalAsian(
+            Prediction prediction,
+            Instant publishTime,
+            Instant lockTime,
+            boolean withModelProbabilities
+    ) {
         if (prediction.getHomeWinProb() != null || prediction.getDrawProb() != null
                 || prediction.getAwayWinProb() != null || prediction.getHandicapPick() != null
                 || prediction.getExpectedTotalGoals() != null || prediction.getConfidenceLevel() != null) {
@@ -141,7 +201,7 @@ public class PredictionContentHasher {
                 || (hasTotals != (prediction.getTotalGoalsConfidenceLevel() != null))) {
             throw new IllegalArgumentException("Asian prediction direction and confidence fields are inconsistent");
         }
-        return sha256Hex(new CanonicalPredictionV3(
+        CanonicalPredictionV3 base = new CanonicalPredictionV3(
                 ASIAN_HASH_SCHEMA_VERSION,
                 requirePositive(prediction.getId(), "predictionId"),
                 requirePositive(prediction.getMatchId(), "matchId"),
@@ -159,7 +219,39 @@ public class PredictionContentHasher {
                 formatInstant(requireInstant(prediction.getGeneratedAt(), "generatedAt")),
                 formatInstant(publishTime),
                 formatInstant(lockTime)
-        ));
+        );
+        if (!withModelProbabilities) {
+            return base;
+        }
+        return new CanonicalPredictionV4(
+                ASIAN_PROBABILITY_HASH_SCHEMA_VERSION,
+                base.predictionId(),
+                base.matchId(),
+                base.modelVersion(),
+                base.featureVersion(),
+                base.generationBatchId(),
+                base.generationBatchHash(),
+                base.predictionVersion(),
+                base.asianOddsSnapshotId(),
+                base.asianHandicapPick(),
+                base.asianHandicapConfidenceLevel(),
+                base.totalGoalsPick(),
+                base.totalGoalsConfidenceLevel(),
+                requirePositiveLambda(prediction.getLambdaHome(), "lambdaHome"),
+                requirePositiveLambda(prediction.getLambdaAway(), "lambdaAway"),
+                requireProbability(prediction.getModelCoverProb(), "modelCoverProb"),
+                requireProbability(prediction.getMarketCoverProb(), "marketCoverProb"),
+                requireEdge(prediction.getEdgeCover(), "edgeCover"),
+                requireProbability(prediction.getModelOverProb(), "modelOverProb"),
+                requireProbability(prediction.getMarketOverProb(), "marketOverProb"),
+                requireEdge(prediction.getEdgeOver(), "edgeOver"),
+                requireNonNegative(prediction.getHandicapDispersion(), "handicapDispersion"),
+                requireNonNegative(prediction.getTotalsDispersion(), "totalsDispersion"),
+                base.analysisSummary(),
+                base.generatedAt(),
+                base.publishTime(),
+                base.lockTime()
+        );
     }
 
     private PredictionTypeEnum effectivePredictionType(Prediction prediction) {
@@ -194,6 +286,75 @@ public class PredictionContentHasher {
             throw new IllegalArgumentException("Asian market prediction fields must be all present or all absent");
         }
         return true;
+    }
+
+    /**
+     * 判断亚盘十列模型概率是否落库。
+     *
+     * <p>只允许「十列全有」或「十列全无」。部分落库的行既不能按 v3 也不能按 v4 复算，
+     * 一旦放过就会让公开快照的摘要与库内哈希长期不一致，且没有任何告警。
+     */
+    private boolean hasAsianModelProbabilities(Prediction prediction) {
+        BigDecimal[] columns = {
+            prediction.getLambdaHome(),
+            prediction.getLambdaAway(),
+            prediction.getModelCoverProb(),
+            prediction.getMarketCoverProb(),
+            prediction.getEdgeCover(),
+            prediction.getModelOverProb(),
+            prediction.getMarketOverProb(),
+            prediction.getEdgeOver(),
+            prediction.getHandicapDispersion(),
+            prediction.getTotalsDispersion()
+        };
+        int present = 0;
+        for (BigDecimal column : columns) {
+            if (column != null) {
+                present++;
+            }
+        }
+        if (present == 0) {
+            return false;
+        }
+        if (present != columns.length) {
+            throw new IllegalArgumentException(
+                    "asian model probability columns must be all present or all absent"
+            );
+        }
+        return true;
+    }
+
+    private BigDecimal requireProbability(BigDecimal value, String field) {
+        BigDecimal normalized = requireDecimal(value, field, MODEL_PROBABILITY_SCALE);
+        if (normalized.compareTo(BigDecimal.ZERO) < 0 || normalized.compareTo(BigDecimal.ONE) > 0) {
+            throw new IllegalArgumentException(field + " must be between 0 and 1");
+        }
+        return normalized;
+    }
+
+    /** edge 是模型概率减市场概率，取值在 [-1, 1]，符号有意义不能取绝对值。 */
+    private BigDecimal requireEdge(BigDecimal value, String field) {
+        BigDecimal normalized = requireDecimal(value, field, MODEL_PROBABILITY_SCALE);
+        if (normalized.compareTo(BigDecimal.ONE.negate()) < 0 || normalized.compareTo(BigDecimal.ONE) > 0) {
+            throw new IllegalArgumentException(field + " must be between -1 and 1");
+        }
+        return normalized;
+    }
+
+    private BigDecimal requirePositiveLambda(BigDecimal value, String field) {
+        BigDecimal normalized = requireDecimal(value, field, MODEL_PROBABILITY_SCALE);
+        if (normalized.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException(field + " must be positive");
+        }
+        return normalized;
+    }
+
+    private BigDecimal requireNonNegative(BigDecimal value, String field) {
+        BigDecimal normalized = requireDecimal(value, field, MODEL_PROBABILITY_SCALE);
+        if (normalized.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException(field + " must not be negative");
+        }
+        return normalized;
     }
 
     private BigDecimal normalizeProbability(BigDecimal value, String field) {
@@ -378,5 +539,56 @@ public class PredictionContentHasher {
             String publishTime,
             String lockTime
     ) {
+    }
+
+    /**
+     * V4：V3 字段顺序原样保留，在方向与置信度之后插入十列模型概率。
+     *
+     * <p>V3 不能改动——已发布行的 `prediction_hash` 被触发器冻结，字段顺序或精度一变，
+     * 存量行就再也复算不出自己的哈希。十列精度统一 6 位，与 `numeric(9,6)` 的落库口径一致；
+     * 用 4 位或 5 位会静默四舍五入，让快照复算结果与库内数据出现无法解释的偏差。
+     */
+    @JsonPropertyOrder({
+            "hashSchemaVersion", "predictionId", "matchId", "modelVersion", "featureVersion",
+            "generationBatchId", "generationBatchHash", "predictionVersion", "asianOddsSnapshotId",
+            "asianHandicapPick", "asianHandicapConfidenceLevel", "totalGoalsPick",
+            "totalGoalsConfidenceLevel", "lambdaHome", "lambdaAway", "modelCoverProb",
+            "marketCoverProb", "edgeCover", "modelOverProb", "marketOverProb", "edgeOver",
+            "handicapDispersion", "totalsDispersion", "analysisSummary", "generatedAt",
+            "publishTime", "lockTime"
+    })
+    private record CanonicalPredictionV4(
+            int hashSchemaVersion,
+            Long predictionId,
+            Long matchId,
+            String modelVersion,
+            String featureVersion,
+            String generationBatchId,
+            String generationBatchHash,
+            Integer predictionVersion,
+            Long asianOddsSnapshotId,
+            String asianHandicapPick,
+            String asianHandicapConfidenceLevel,
+            String totalGoalsPick,
+            String totalGoalsConfidenceLevel,
+            BigDecimal lambdaHome,
+            BigDecimal lambdaAway,
+            BigDecimal modelCoverProb,
+            BigDecimal marketCoverProb,
+            BigDecimal edgeCover,
+            BigDecimal modelOverProb,
+            BigDecimal marketOverProb,
+            BigDecimal edgeOver,
+            BigDecimal handicapDispersion,
+            BigDecimal totalsDispersion,
+            String analysisSummary,
+            String generatedAt,
+            String publishTime,
+            String lockTime
+    ) {
+    }
+
+    /** 已落库哈希的复算结果：实际生效的哈希与其结构版本。 */
+    public record ResolvedPredictionHash(int schemaVersion, String hash) {
     }
 }

@@ -9,6 +9,7 @@ import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
 import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.service.PredictionContentHasher;
 import java.math.BigDecimal;
@@ -142,6 +143,96 @@ class SnapshotManifestGeneratorTest {
         ))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("multiple current versions");
+    }
+
+    /**
+     * 十列进 manifest 是「公开可验证」的最后一块：触发器把十列锁死，若快照不含它们，
+     * 外部只能复算出方向，复算不出模型当时给出的概率。
+     */
+    @Test
+    void includesAsianModelProbabilitiesInV4Manifest() {
+        Prediction asian = asianPrediction(304_001L, 304_101L);
+        populateModelProbabilities(asian);
+        asian.setPredictionHash(predictionContentHasher.sha256Hex(asian, PUBLISH_TIME, LOCK_TIME));
+
+        String json = new String(generator.generate(SNAPSHOT_DATE, List.of(asian)).bytes(), StandardCharsets.UTF_8);
+
+        assertThat(json).contains(
+                "\"schemaVersion\":4",
+                "\"predictionHashSchemaVersion\":4",
+                "\"lambdaHome\":1.420000",
+                "\"lambdaAway\":1.180000",
+                "\"modelCoverProb\":0.530000",
+                "\"marketCoverProb\":0.510000",
+                "\"edgeCover\":0.020000",
+                "\"modelOverProb\":0.490000",
+                "\"marketOverProb\":0.500000",
+                "\"edgeOver\":-0.010000",
+                "\"handicapDispersion\":0.013000",
+                "\"totalsDispersion\":0.021000"
+        );
+    }
+
+    /**
+     * 同批混 v3/v4 时 manifest 版本取最高。取最低会让新条目被降级标注，
+     * 外部按 v3 的字段集合复算 v4 条目必然失败。
+     */
+    @Test
+    void takesHighestSchemaVersionForMixedBatchAndStillAcceptsV3StoredHash() {
+        Prediction legacy = asianPrediction(304_002L, 304_102L);
+        // 存量行：十列已落库，但哈希是 v3 结构下算出的
+        String v3 = predictionContentHasher.sha256Hex(legacy, PUBLISH_TIME, LOCK_TIME);
+        populateModelProbabilities(legacy);
+        legacy.setPredictionHash(v3);
+
+        Prediction current = asianPrediction(304_003L, 304_103L);
+        populateModelProbabilities(current);
+        current.setPredictionHash(predictionContentHasher.sha256Hex(current, PUBLISH_TIME, LOCK_TIME));
+
+        String json = new String(
+                generator.generate(SNAPSHOT_DATE, List.of(legacy, current)).bytes(),
+                StandardCharsets.UTF_8
+        );
+
+        assertThat(json).contains("\"schemaVersion\":4");
+        // 存量条目保留自己的 v3 标注，且十列仍如实公开（值本身是真的，只是没进它的哈希）
+        assertThat(json).contains("\"predictionHashSchemaVersion\":3", "\"predictionHashSchemaVersion\":4");
+    }
+
+    private Prediction asianPrediction(Long predictionId, Long matchId) {
+        Prediction prediction = new Prediction();
+        prediction.setPredictionType(PredictionTypeEnum.ASIAN);
+        prediction.setId(predictionId);
+        prediction.setMatchId(matchId);
+        prediction.setModelVersion("t306-asian-baseline-v6");
+        prediction.setFeatureVersion("feature-v1");
+        prediction.setGenerationBatchId("t613-batch-1");
+        prediction.setGenerationBatchHash("b".repeat(64));
+        prediction.setPredictionVersion(1);
+        prediction.setAsianOddsSnapshotId(9_901L);
+        prediction.setAsianHandicapPick(AsianHandicapPickEnum.AWAY_COVER);
+        prediction.setAsianHandicapConfidenceLevel(ConfidenceLevelEnum.MEDIUM);
+        prediction.setTotalGoalsPick(TotalGoalsPickEnum.UNDER);
+        prediction.setTotalGoalsConfidenceLevel(ConfidenceLevelEnum.HIGH);
+        prediction.setAnalysisSummary("客队受让与小球的模型概率高于市场");
+        prediction.setGeneratedAt(Instant.parse("2026-07-26T07:30:00.654321Z"));
+        prediction.setPredictionStatus(PredictionStatusEnum.PUBLISHED);
+        prediction.setPublishTime(PUBLISH_TIME);
+        prediction.setLockTime(LOCK_TIME);
+        return prediction;
+    }
+
+    private void populateModelProbabilities(Prediction prediction) {
+        prediction.setLambdaHome(new BigDecimal("1.420000"));
+        prediction.setLambdaAway(new BigDecimal("1.180000"));
+        prediction.setModelCoverProb(new BigDecimal("0.530000"));
+        prediction.setMarketCoverProb(new BigDecimal("0.510000"));
+        prediction.setEdgeCover(new BigDecimal("0.020000"));
+        prediction.setModelOverProb(new BigDecimal("0.490000"));
+        prediction.setMarketOverProb(new BigDecimal("0.500000"));
+        prediction.setEdgeOver(new BigDecimal("-0.010000"));
+        prediction.setHandicapDispersion(new BigDecimal("0.013000"));
+        prediction.setTotalsDispersion(new BigDecimal("0.021000"));
     }
 
     private Prediction publishedPrediction(

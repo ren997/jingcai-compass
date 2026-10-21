@@ -860,23 +860,31 @@ prediction_type = ASIAN     → 新路径（ASIAN_HANDICAP / ASIAN_TOTAL_GOALS�
 > `V22__RepairLegacyNameKeyIdentityCleanup` 占用，V23 被阶段 A 的结算约束迁移
 > `V23__add_asian_settlement_markets_and_profit` 占用，故本节的模型概率列顺延为 **V24**。
 
-`predictions` 表新增列（**不复用竞彩三概率字段**，语义隔离，且不破坏 V21 约束）：
+`predictions` 表新增列（**不复用竞彩三概率字段**，语义隔离，且不破坏 V21 约束）。
+十列精度统一 `numeric(9,6)`：生成侧 `PROBABILITY_SCALE = 6`，用 4 位或 5 位会在落库时
+静默四舍五入，让公开快照复算出的概率与库内值出现无法解释的偏差：
 
 | 列 | 类型 | 说明 |
 |---|---|---|
-| `lambda_home` | numeric(6,4) | 反解得到的预期主队进球 |
-| `lambda_away` | numeric(6,4) | 预期客队进球 |
-| `model_cover_prob` | numeric(6,5) | 模型的主队赢盘概率（条件于不 push） |
-| `model_over_prob` | numeric(6,5) | 模型的大球概率 |
-| `market_cover_prob` | numeric(6,5) | 市场的赢盘概率（去水中位） |
-| `market_over_prob` | numeric(6,5) | 市场的大球概率 |
-| `edge_cover` | numeric(7,5) | `model − market` |
-| `edge_over` | numeric(7,5) | 同上 |
-| `odds_dispersion` | numeric(6,5) | 两家以上报价的离散度 |
+| `lambda_home` | numeric(9,6) | 反解得到的预期主队进球 |
+| `lambda_away` | numeric(9,6) | 预期客队进球 |
+| `model_cover_prob` | numeric(9,6) | 模型的主队赢盘概率（首边口径，含 push 修正） |
+| `market_cover_prob` | numeric(9,6) | 市场的赢盘概率（去水中位，首边口径） |
+| `edge_cover` | numeric(9,6) | `model_cover_prob − market_cover_prob` |
+| `model_over_prob` | numeric(9,6) | 模型的大球概率（首边口径） |
+| `market_over_prob` | numeric(9,6) | 市场的大球概率（去水中位，首边口径） |
+| `edge_over` | numeric(9,6) | `model_over_prob − market_over_prob` |
+| `handicap_dispersion` | numeric(9,6) | 跨庄让球去水概率的总体标准差 σ |
+| `totals_dispersion` | numeric(9,6) | 跨庄大小球去水概率的总体标准差 σ |
+
+两个离散度必须分列：σ 是分市场独立否决的（阶段 D），合成一个数就无法判断是哪一侧超限。
+`edge` 允许为负，不能加 `>= 0` 约束。
 
 这些列必须加入 `protect_published_prediction()` 的不可变字段列表——发布后任何变动都应被触发器拒绝。
+十列同时进入 `CanonicalPredictionV4` 与 manifest v4：只锁库不进哈希的话，「公开可验证」
+只能覆盖方向与置信度，复算不出模型当时给出的概率。
 
-**`bookmaker_count` 不加到 `asian_odds_snapshots`**：家数是跨庄聚合量，不是某家庄报价的属性，放进只追加快照表在语义上错误。阶段 B 把参与家数与白名单家数写进 `analysis_summary`；阶段 E 需要结构化筛选时，落在 `predictions` 侧的 `market_*` 与 `odds_dispersion` 上。
+**`bookmaker_count` 不加到 `asian_odds_snapshots`**：家数是跨庄聚合量，不是某家庄报价的属性，放进只追加快照表在语义上错误。阶段 B 把参与家数与白名单家数写进 `analysis_summary`；阶段 E 需要结构化筛选时，落在 `predictions` 侧的 `market_*` 与两个 `*_dispersion` 上。
 
 ---
 
@@ -888,7 +896,7 @@ prediction_type = ASIAN     → 新路径（ASIAN_HANDICAP / ASIAN_TOTAL_GOALS�
 | **B. 聚合与主盘** | 逐家去水、中位数、最平衡线选择 | 用真实响应 fixture 验证三次主盘选择命中 Pinnacle；`count < 2` 正确跳过 |
 | **C. λ 反解模型** | 统一概率口径 + 两段一维二分 + 邻线回投校验（见 4.2） | 反解 λ 与独立 Decimal 原型四位小数一致；往返误差 `1e-16`；邻线最大偏差实测 ≤ 3.508%；缺约束/不自洽各自独立跳过 |
 | **D. 选择性发布** | 离散度硬过滤 + edge 影子门槛（见 4.6 / 4.7） | 构造 σ > 0.0200 的输入 → 只砍对应市场，两个市场都超限才整场跳过（`MARKET_DISPERSION_TOO_HIGH`）；构造"模型=市场"的输入 → 影子门槛 `outcome=fail`，草稿照常生成 |
-| **E. 概率落库与统计** | V24 迁移 + 统计页并列双 Brier | 统计页同时展示 `model_brier` 与 `market_brier` |
+| **E. 概率落库与统计** | V24 迁移 + 统计口径按产品线隔离 + 并列双 Brier + 十列进哈希与快照 | 统计页同时展示 `model_brier` 与 `market_brier`；竞彩与亚盘不混算；发布快照可复算出模型概率 |
 
 A 与 B/C 可并行。**A 优先**，因为没有结算，模型再好也无法验证。
 

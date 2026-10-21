@@ -38,7 +38,10 @@ public class SnapshotManifestGenerator {
     public static final int LEGACY_MANIFEST_SCHEMA_VERSION = 1;
     public static final int MANIFEST_SCHEMA_VERSION = 2;
     public static final int ASIAN_MANIFEST_SCHEMA_VERSION = 3;
+    /** 亚盘十列模型概率进入 manifest 后的版本；v1~v3 快照永久保留可复算。 */
+    public static final int ASIAN_PROBABILITY_MANIFEST_SCHEMA_VERSION = 4;
     private static final int PROBABILITY_SCALE = 6;
+    private static final int MODEL_PROBABILITY_SCALE = 6;
     private static final int EXPECTED_GOALS_SCALE = 2;
     private static final String SHA256_PATTERN = "^[0-9a-f]{64}$";
     private static final DateTimeFormatter INSTANT_FORMATTER =
@@ -108,7 +111,17 @@ public class SnapshotManifestGenerator {
         }
     }
 
+    /**
+     * 取本批条目里最高的结构版本。
+     *
+     * <p>同批可能混有 v3/v4 条目（十列在 V24 之后才落库）。取最高而不是「有任何 v3 就是 v3」：
+     * 否则新条目会被降级标注，摘要复算按错的版本解释字段集合。
+     */
     private int manifestSchemaVersion(List<PredictionSnapshotManifestItemDto> items) {
+        if (items.stream().anyMatch(item -> item.predictionHashSchemaVersion()
+                == PredictionContentHasher.ASIAN_PROBABILITY_HASH_SCHEMA_VERSION)) {
+            return ASIAN_PROBABILITY_MANIFEST_SCHEMA_VERSION;
+        }
         if (items.stream().anyMatch(item ->
                 item.predictionHashSchemaVersion() == PredictionContentHasher.ASIAN_HASH_SCHEMA_VERSION)) {
             return ASIAN_MANIFEST_SCHEMA_VERSION;
@@ -127,20 +140,13 @@ public class SnapshotManifestGenerator {
 
         Instant publishTime = requireInstant(source.getPublishTime(), "publishTime");
         Instant lockTime = requireInstant(source.getLockTime(), "lockTime");
-        String storedHash = requireSha256(source.getPredictionHash(), "predictionHash");
-        String recalculatedHash = predictionContentHasher.sha256Hex(
-                source,
-                publishTime,
-                lockTime
-        );
-        if (!storedHash.equals(recalculatedHash)) {
-            throw new IllegalArgumentException(
-                    "prediction hash mismatch: " + source.getId()
-            );
-        }
+        // 复算并核对已落库哈希：存量 v3 亚盘行会回落到 v3 结构，不会因新增十列而整批失败
+        PredictionContentHasher.ResolvedPredictionHash resolved =
+                predictionContentHasher.verifyStoredHash(source, publishTime, lockTime);
+        String storedHash = resolved.hash();
 
         return new PredictionSnapshotManifestItemDto(
-                predictionContentHasher.hashSchemaVersion(source),
+                resolved.schemaVersion(),
                 requirePositive(source.getId(), "predictionId"),
                 requirePositive(source.getMatchId(), "matchId"),
                 requireText(source.getModelVersion(), "modelVersion"),
@@ -159,6 +165,16 @@ public class SnapshotManifestGenerator {
                 source.getTotalGoalsPick() == null ? null : source.getTotalGoalsPick().getCode(),
                 source.getAsianHandicapConfidenceLevel() == null ? null : source.getAsianHandicapConfidenceLevel().getCode(),
                 source.getTotalGoalsConfidenceLevel() == null ? null : source.getTotalGoalsConfidenceLevel().getCode(),
+                normalizeModelDecimal(source.getLambdaHome(), "lambdaHome"),
+                normalizeModelDecimal(source.getLambdaAway(), "lambdaAway"),
+                normalizeModelDecimal(source.getModelCoverProb(), "modelCoverProb"),
+                normalizeModelDecimal(source.getMarketCoverProb(), "marketCoverProb"),
+                normalizeModelDecimal(source.getEdgeCover(), "edgeCover"),
+                normalizeModelDecimal(source.getModelOverProb(), "modelOverProb"),
+                normalizeModelDecimal(source.getMarketOverProb(), "marketOverProb"),
+                normalizeModelDecimal(source.getEdgeOver(), "edgeOver"),
+                normalizeModelDecimal(source.getHandicapDispersion(), "handicapDispersion"),
+                normalizeModelDecimal(source.getTotalsDispersion(), "totalsDispersion"),
                 source.getConfidenceLevel() == null ? null : source.getConfidenceLevel().getCode(),
                 requireText(source.getAnalysisSummary(), "analysisSummary"),
                 formatInstant(requireInstant(source.getGeneratedAt(), "generatedAt")),
@@ -166,6 +182,16 @@ public class SnapshotManifestGenerator {
                 formatInstant(lockTime),
                 storedHash
         );
+    }
+
+    /**
+     * 十列模型概率的公开精度统一 6 位，与 `numeric(9,6)` 落库口径一致。
+     *
+     * <p>空值原样保留：V24 之前的亚盘行没有这些列，manifest 靠 NON_NULL 把字段省掉，
+     * 补 0 会让「没有概率」变成「概率为 0」，公开复算会得出相反结论。
+     */
+    private BigDecimal normalizeModelDecimal(BigDecimal value, String field) {
+        return value == null ? null : normalizeDecimal(value, field, MODEL_PROBABILITY_SCALE);
     }
 
     private BigDecimal normalizeDecimal(BigDecimal value, String field, int scale) {

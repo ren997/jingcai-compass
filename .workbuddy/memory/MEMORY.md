@@ -30,4 +30,11 @@
 ## 已知未收口事项
 
 - `T610` 仍为 `PARTIAL`，剩余 Draft PR + 完整 CI 证据。
-- 本地分支 `codex/t611-published-filter` 有 2 个提交（16 文件、364 行，前端已发布预测筛选与盘口展示）**未合入 master 且未记录在任务板**。
+- `T613` 阶段 A 已收口（`e9c2b34`，已推送 `feat/asian-model-v1`），阶段 B~E 未开始。
+- 阶段 D/E 待办：`StatisticsCalculator.MarketAccumulator.record` 的 switch 未处理 `PUSH`/`HALF_WIN`/`HALF_LOSS`（switch 语句不要求穷尽，会静默漏计）；`AdminPredictionStatusQueryServiceImpl` 硬编码只展示 HAD/HHAD。
+
+## 迁移编号陷阱
+
+- `backend/src/main/java/db/migration/` 下有 **Java 版 Flyway 迁移**（`V22__RepairLegacyNameKeyIdentityCleanup`）。新建 SQL 迁移前先 `ls` 这个目录，否则会撞号并报 `Found more than one migration with version <n>`。
+- 当前最高版本：V23（亚盘结算市场与 profit）。设计文档 §6 的模型概率列顺延为 V24。
+

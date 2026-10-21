@@ -27,20 +27,17 @@ public class SportteryPoolSyncServiceImpl implements SportteryPoolSyncService {
 
     private final SportteryProvider sportteryProvider;
     private final ProviderSyncTemplate providerSyncTemplate;
-    private final SportteryPoolPayloadMapper payloadMapper;
     private final SportteryPoolMatchWriter matchWriter;
     private final ObjectMapper objectMapper;
 
     public SportteryPoolSyncServiceImpl(
             SportteryProvider sportteryProvider,
             ProviderSyncTemplate providerSyncTemplate,
-            SportteryPoolPayloadMapper payloadMapper,
             SportteryPoolMatchWriter matchWriter,
             ObjectMapper objectMapper
     ) {
         this.sportteryProvider = sportteryProvider;
         this.providerSyncTemplate = providerSyncTemplate;
-        this.payloadMapper = payloadMapper;
         this.matchWriter = matchWriter;
         this.objectMapper = objectMapper;
     }
@@ -61,8 +58,9 @@ public class SportteryPoolSyncServiceImpl implements SportteryPoolSyncService {
                 ProviderDataTypeEnum.SPORTTERY_POOL,
                 () -> sportteryProvider.fetchMatchPoolRaw(businessDate),
                 (dataType, requestKey, payload) -> {
-                    // 3) 原始 JSON → 同步条目
-                    List<SportteryPoolSyncItemDto> items = payloadMapper.parseItems(
+                    // 3) 原始 JSON → 同步条目。解析交给 Provider：不同数据源的包装结构
+                    //    不同，写库路径必须完全一致。
+                    List<SportteryPoolSyncItemDto> items = sportteryProvider.parseMatchPool(
                             toJson(payload.getPayload()),
                             businessDate
                     );

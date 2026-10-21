@@ -5,8 +5,10 @@ import com.jingcaicompass.data.dto.ProviderFetchResult;
 import com.jingcaicompass.match.dto.ChinaSportteryResponseDto;
 import com.jingcaicompass.match.dto.SportteryMatchDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultDto;
+import com.jingcaicompass.match.dto.SportteryPoolSyncItemDto;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.exception.SportteryDataAccessException;
+import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.system.provider.ProviderErrorCategory;
 import com.jingcaicompass.system.provider.ProviderHttpException;
@@ -39,17 +41,20 @@ public class ChinaSportteryProvider implements SportteryProvider {
     private final SportteryProviderProperties properties;
     private final ProviderHttpExecutor httpExecutor;
     private final ObjectMapper objectMapper;
+    private final SportteryPoolPayloadMapper payloadMapper;
 
     public ChinaSportteryProvider(
             @Qualifier("chinaSportteryRestClient") RestClient restClient,
             SportteryProviderProperties properties,
             ProviderHttpExecutor httpExecutor,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            SportteryPoolPayloadMapper payloadMapper
     ) {
         this.restClient = restClient;
         this.properties = properties;
         this.httpExecutor = httpExecutor;
         this.objectMapper = objectMapper;
+        this.payloadMapper = payloadMapper;
     }
 
     @Override
@@ -125,6 +130,14 @@ public class ChinaSportteryProvider implements SportteryProvider {
                 ProviderErrorCategory.UPSTREAM_FAILURE,
                 "中国体彩网赛果接口尚未完成验证，无法同步官方赛果"
         );
+    }
+
+    @Override
+    public List<SportteryPoolSyncItemDto> parseMatchPool(
+            String rawJson,
+            LocalDate businessDate
+    ) {
+        return payloadMapper.parseItems(rawJson, businessDate);
     }
 
     @Override

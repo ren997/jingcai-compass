@@ -1,6 +1,7 @@
 package com.jingcaicompass.match.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
 import com.jingcaicompass.match.exception.SportteryDataAccessException;
 import com.jingcaicompass.system.exception.ErrorCode;
 import com.jingcaicompass.system.provider.ProviderErrorCategory;
@@ -192,12 +193,14 @@ class ChinaSportteryProviderTest {
                 new SportteryProviderProperties.RetryProperties(2, Duration.ofMillis(100)),
                 0
         );
+        ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         return new ChinaSportteryProvider(
                 restClient,
                 properties,
                 new ProviderHttpExecutor(duration -> {
                 }),
-                new ObjectMapper().findAndRegisterModules()
+                objectMapper,
+                new SportteryPoolPayloadMapper(objectMapper)
         );
     }
 

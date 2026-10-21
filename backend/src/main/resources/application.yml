@@ -75,6 +75,20 @@ app:
       max-attempts: ${SPORTTERY_RETRY_MAX_ATTEMPTS:2}
       delay: ${SPORTTERY_RETRY_DELAY:500ms}
     quota-warning-threshold: ${SPORTTERY_QUOTA_WARNING_THRESHOLD:0}
+  # NovaAPI：赛程、赔率、赛果共用同一个 matchId 的单源数据源。
+  # api-key / private-key 无默认值：缺失时只在真正发起请求的那一刻报错，
+  # 而不是让 provider=china 的部署因为缺凭据启动失败。
+  nova:
+    base-url: ${NOVA_BASE_URL:https://novaapi.tsgnkj.com}
+    api-key: ${NOVA_API_KEY:}
+    private-key: ${NOVA_PRIVATE_KEY:}
+    connect-timeout: ${NOVA_CONNECT_TIMEOUT:5s}
+    # 单次 /nova/tf/odds 要返回几十家机构的全部玩法，比体彩单接口重得多。
+    read-timeout: ${NOVA_READ_TIMEOUT:20s}
+    retry:
+      max-attempts: ${NOVA_RETRY_MAX_ATTEMPTS:2}
+      delay: ${NOVA_RETRY_DELAY:500ms}
+    quota-warning-threshold: ${NOVA_QUOTA_WARNING_THRESHOLD:0}
   asian-odds:
     provider: ${ASIAN_ODDS_PROVIDER:stub}
     base-url: ${ASIAN_ODDS_BASE_URL:https://api.the-odds-api.com}

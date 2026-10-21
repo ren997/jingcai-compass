@@ -78,7 +78,6 @@ import com.jingcaicompass.match.service.MatchNormalizationWorker;
 import com.jingcaicompass.match.service.ProviderNormalizationReviewService;
 import com.jingcaicompass.match.service.ProviderNormalizationReviewServiceImpl;
 import com.jingcaicompass.match.service.SportteryPoolMatchWriter;
-import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
 import com.jingcaicompass.match.service.SportteryPoolSyncService;
 import com.jingcaicompass.match.service.SportteryPoolSyncServiceImpl;
 import com.jingcaicompass.match.service.SportteryMatchResultPayloadMapper;
@@ -636,14 +635,12 @@ public class PersistenceServicesAutoConfiguration {
     SportteryPoolSyncService sportteryPoolSyncService(
             SportteryProvider sportteryProvider,
             ProviderSyncTemplate providerSyncTemplate,
-            SportteryPoolPayloadMapper sportteryPoolPayloadMapper,
             SportteryPoolMatchWriter sportteryPoolMatchWriter,
             ObjectMapper objectMapper
     ) {
         return new SportteryPoolSyncServiceImpl(
                 sportteryProvider,
                 providerSyncTemplate,
-                sportteryPoolPayloadMapper,
                 sportteryPoolMatchWriter,
                 objectMapper
         );

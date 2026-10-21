@@ -80,13 +80,32 @@ public class SportteryPoolMatchWriter {
         );
     }
 
-    /** 按 lotteryMatchNo + lotteryDate 查找，不存在则插入，存在则更新展示字段。 */
+    /**
+     * 幂等 upsert：外部 ID 优先，竞彩编号+业务日兜底。
+     *
+     * <p>两个键并存是过渡期的必然：{@code external_match_id} 是单源后的权威键，
+     * 但历史数据与手工造数的测试行没有它。查找顺序因此是「先外部 ID，再编号+日期」，
+     * 若两者指向不同的行则直接报错——那说明同一编号被两个数据源同时占用，
+     * 静默合并会让后续赔率挂到错误的比赛上。</p>
+     */
     private MatchEntity upsertMatch(SportteryPoolSyncItemDto item) {
-        MatchEntity existing = matchMapper.selectOne(new LambdaQueryWrapper<MatchEntity>()
-                .eq(MatchEntity::getLotteryMatchNo, item.lotteryMatchNo())
-                .eq(MatchEntity::getLotteryDate, item.lotteryDate())
-                .last("LIMIT 1"));
+        MatchEntity byExternal = findByExternalMatchId(item.externalMatchId());
+        MatchEntity byLotteryNo = findByLotteryMatchNo(item);
 
+        if (byExternal != null && byLotteryNo != null && !byExternal.getId().equals(byLotteryNo.getId())) {
+            throw new IllegalStateException(
+                    "external_match_id=%s 与 %s/%s 指向不同比赛（%d vs %d），拒绝静默合并"
+                            .formatted(
+                                    item.externalMatchId(),
+                                    item.lotteryMatchNo(),
+                                    item.lotteryDate(),
+                                    byExternal.getId(),
+                                    byLotteryNo.getId()
+                            )
+            );
+        }
+
+        MatchEntity existing = byExternal != null ? byExternal : byLotteryNo;
         if (existing == null) {
             MatchEntity created = new MatchEntity();
             applyMatchFields(created, item);
@@ -99,13 +118,37 @@ public class SportteryPoolMatchWriter {
         return existing;
     }
 
+    private MatchEntity findByExternalMatchId(String externalMatchId) {
+        if (externalMatchId == null || externalMatchId.isBlank()) {
+            return null;
+        }
+        return matchMapper.selectOne(new LambdaQueryWrapper<MatchEntity>()
+                .eq(MatchEntity::getExternalMatchId, externalMatchId)
+                .last("LIMIT 1"));
+    }
+
+    private MatchEntity findByLotteryMatchNo(SportteryPoolSyncItemDto item) {
+        if (item.lotteryMatchNo() == null || item.lotteryDate() == null) {
+            return null;
+        }
+        return matchMapper.selectOne(new LambdaQueryWrapper<MatchEntity>()
+                .eq(MatchEntity::getLotteryMatchNo, item.lotteryMatchNo())
+                .eq(MatchEntity::getLotteryDate, item.lotteryDate())
+                .last("LIMIT 1"));
+    }
+
     private void applyMatchFields(MatchEntity entity, SportteryPoolSyncItemDto item) {
         entity.setLotteryMatchNo(item.lotteryMatchNo());
         entity.setLotteryDate(item.lotteryDate());
+        if (item.externalMatchId() != null && !item.externalMatchId().isBlank()) {
+            entity.setExternalMatchId(item.externalMatchId());
+        }
         entity.setLeagueName(item.leagueName());
         entity.setHomeTeamName(item.homeTeamName());
         entity.setAwayTeamName(item.awayTeamName());
         entity.setKickoffTime(item.kickoffTime().toInstant());
+        // 已有当前赛果事实时不覆盖 match_status：赛程接口没有「比赛是否结束」这一字段，
+        // 每日重跑若照写会把已完赛的比赛打回 SCHEDULED，结算候选随即整体消失。
         if (entity.getId() == null || !matchResultFactMapper.existsCurrentByMatchId(entity.getId())) {
             entity.setMatchStatus(item.matchStatus());
         }

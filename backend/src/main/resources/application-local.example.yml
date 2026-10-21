@@ -34,11 +34,25 @@ app:
   pagination:
     max-page-size: 100
   # 离线联调可将 sporttery/asian-odds.provider 都设为 stub（classpath:stub/** fixtures）
+  # sporttery.provider 可选值：china | nova | stub
   sporttery:
     provider: china
     base-url: https://webapi.sporttery.cn
     connect-timeout: 5s
     read-timeout: 10s
+    retry:
+      max-attempts: 2
+      delay: 500ms
+    quota-warning-threshold: 0
+  # 仅 sporttery.provider=nova 时使用。api-key / private-key 缺失时只在
+  # 真正发起请求的那一刻报错，不影响其它 provider 的启动。
+  # private-key 是 Ed25519 私钥的 Base64（PKCS#8 或裸 32 字节种子均可）。
+  nova:
+    base-url: https://novaapi.tsgnkj.com
+    api-key: <api-key>
+    private-key: <base64-ed25519-private-key>
+    connect-timeout: 5s
+    read-timeout: 20s
     retry:
       max-attempts: 2
       delay: 500ms

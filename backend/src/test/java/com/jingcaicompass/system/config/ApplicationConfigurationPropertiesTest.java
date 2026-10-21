@@ -3,6 +3,7 @@ package com.jingcaicompass.system.config;
 import com.jingcaicompass.match.client.SportteryProviderProperties;
 import com.jingcaicompass.match.client.SportteryProviderType;
 import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
+import com.jingcaicompass.odds.client.AsianModelProperties;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum;
 import com.jingcaicompass.snapshot.enums.SnapshotStorageTypeEnum;
@@ -50,6 +51,9 @@ class ApplicationConfigurationPropertiesTest {
                     "app.asian-odds.aggregation.bookmaker-whitelist=pinnacle,matchbook",
                     "app.asian-odds.aggregation.min-bookmakers=2",
                     "app.asian-odds.aggregation.min-whitelist-bookmakers=2",
+                    "app.asian-model.neighbor-tolerance=0.0350",
+                    "app.asian-model.residual-tolerance=0.0005",
+                    "app.asian-model.max-goals=28",
                     "app.pagination.max-page-size=100",
                     "app.snapshot.storage.type=local",
                     "app.snapshot.storage.path=./runtime/test-snapshots",
@@ -107,6 +111,11 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(aggregation.normalizedWhitelist()).containsExactly("pinnacle", "matchbook");
             assertThat(aggregation.minBookmakers()).isEqualTo(2);
             assertThat(aggregation.minWhitelistBookmakers()).isEqualTo(2);
+
+            AsianModelProperties asianModel = context.getBean(AsianModelProperties.class);
+            assertThat(asianModel.neighborTolerance()).isEqualByComparingTo("0.0350");
+            assertThat(asianModel.residualTolerance()).isEqualByComparingTo("0.0005");
+            assertThat(asianModel.maxGoals()).isEqualTo(28);
 
             SyncTaskProperties tasks = context.getBean(SyncTaskProperties.class);
             assertThat(tasks.enabled()).isFalse();
@@ -325,11 +334,34 @@ class ApplicationConfigurationPropertiesTest {
         assertThat(defaults.normalizedWhitelist()).containsExactly("pinnacle", "matchbook", "betfair");
     }
 
+    @Test
+    void rejectsAsianModelMaxGoalsOutsideRange() {
+        contextRunner
+                .withPropertyValues("app.asian-model.max-goals=19")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.asian-model.max-goals");
+                });
+    }
+
+    @Test
+    void appliesAsianModelDefaultsWhenSectionIsAbsent() {
+        // 未配置 app.asian-model 时构造绑定会以 null 实例化 record，须回落到实测标定的默认值。
+        AsianModelProperties defaults = new AsianModelProperties(null, null, null);
+
+        assertThat(defaults.neighborTolerance()).isEqualByComparingTo("0.0400");
+        assertThat(defaults.residualTolerance()).isEqualByComparingTo("0.0010");
+        assertThat(defaults.maxGoals()).isEqualTo(24);
+    }
+
     @Configuration(proxyBeanMethods = false)
     @EnableConfigurationProperties({
             SportteryProviderProperties.class,
             AsianOddsProviderProperties.class,
             AsianOddsAggregationProperties.class,
+            AsianModelProperties.class,
             SyncTaskProperties.class,
             PaginationProperties.class,
             SnapshotStorageProperties.class

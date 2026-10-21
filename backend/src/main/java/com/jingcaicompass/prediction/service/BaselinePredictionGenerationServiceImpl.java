@@ -7,12 +7,14 @@ import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
+import com.jingcaicompass.odds.client.AsianModelProperties;
 import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.odds.service.AsianFreezeSnapshotSelector;
 import com.jingcaicompass.odds.service.AsianMarketConsensusAggregator;
 import com.jingcaicompass.odds.service.AsianMarketMath;
+import com.jingcaicompass.odds.service.ImpliedPoissonModel;
 import com.jingcaicompass.prediction.dto.PredictionImportDto;
 import com.jingcaicompass.prediction.dto.PredictionImportFileDto;
 import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
@@ -26,6 +28,7 @@ import com.jingcaicompass.prediction.vo.BaselinePredictionGenerationVo;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -42,6 +45,7 @@ import java.util.EnumMap;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -54,21 +58,25 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 /**
- * 使用跨庄去水共识主盘生成可复现的分项方向草稿。
+ * 以两个市场的主盘概率反解 λ，再把 λ 投影回冻结行自身盘口线来生成分项方向草稿。
  *
  * <p>取数从「每场最新一条完整快照」改为「每场每家每档线的最新报价」：主盘必须由聚合选出，
  * 取数阶段一旦收敛到单条就无法判断哪条线最平衡。结算仍只认冻结行，所以决策线与计账线必然一致。</p>
+ *
+ * <p>方向改由模型概率给出而不是直接读共识概率：阶段 D 的 edge 由模型概率算，若方向取其一共识而
+ * edge 取模型，会出现「方向说主队、edge 说客队」的自相矛盾记录。两者在主盘上几乎必然一致
+ * （残差在 1e-16 量级），因此这次切换不改变既有行为，只统一了来源。</p>
  */
 @Service
 @ConditionalOnBean(DataSource.class)
 public class BaselinePredictionGenerationServiceImpl implements BaselinePredictionGenerationService {
 
-    static final String MODEL_VERSION = "t306-asian-baseline-v4";
-    static final String FEATURE_VERSION = "t306-asian-mainline-v4";
+    static final String MODEL_VERSION = "t306-asian-baseline-v5";
+    static final String FEATURE_VERSION = "t306-asian-mainline-v5";
     static final String CONSENSUS_METRIC = "jingcai.prediction.asian.consensus";
+    static final String MODEL_METRIC = "jingcai.prediction.asian.model";
 
     private static final Logger LOG = LoggerFactory.getLogger(BaselinePredictionGenerationServiceImpl.class);
-    private static final BigDecimal HALF = new BigDecimal("0.5");
     private static final BigDecimal MEDIUM_DIRECTION_SIGNAL = new BigDecimal("0.0250");
     private static final BigDecimal HIGH_DIRECTION_SIGNAL = new BigDecimal("0.0750");
     private static final BigDecimal HIGH_CONFIDENCE_MARGIN = new BigDecimal("0.1000");
@@ -83,6 +91,9 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
     private final Clock clock;
     private final AsianMarketConsensusAggregator consensusAggregator;
     private final AsianFreezeSnapshotSelector freezeSnapshotSelector;
+    private final ImpliedPoissonModel poissonModel;
+    private final BigDecimal neighborTolerance;
+    private final BigDecimal residualTolerance;
     private final MeterRegistry meterRegistry;
 
     public BaselinePredictionGenerationServiceImpl(
@@ -94,10 +105,13 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
             ObjectMapper objectMapper,
             Clock clock,
             AsianOddsAggregationProperties aggregationProperties,
+            AsianModelProperties modelProperties,
             MeterRegistry meterRegistry
     ) {
         AsianOddsAggregationProperties effectiveProperties =
                 aggregationProperties == null ? AsianOddsAggregationProperties.defaults() : aggregationProperties;
+        AsianModelProperties effectiveModelProperties =
+                modelProperties == null ? AsianModelProperties.defaults() : modelProperties;
         this.matchMapper = matchMapper;
         this.asianOddsSnapshotMapper = asianOddsSnapshotMapper;
         this.predictionMapper = predictionMapper;
@@ -106,6 +120,9 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
         this.clock = clock;
         this.consensusAggregator = new AsianMarketConsensusAggregator(effectiveProperties);
         this.freezeSnapshotSelector = new AsianFreezeSnapshotSelector(effectiveProperties);
+        this.poissonModel = new ImpliedPoissonModel(effectiveModelProperties);
+        this.neighborTolerance = effectiveModelProperties.neighborTolerance();
+        this.residualTolerance = effectiveModelProperties.residualTolerance();
         this.meterRegistry = meterRegistry;
     }
 
@@ -274,6 +291,40 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 consensusAggregator.aggregate(totalsQuotesByMatchId.getOrDefault(match.getId(), List.of()));
         AsianMarketConsensusAggregator.LineConsensus totalsBest = totalsAggregate.best().orElse(null);
         recordConsensus("totals", totalsBest);
+        // 一个方程两个未知数不可辨识，缺大小球主盘就没有第二个约束。
+        // 这一步必须早于冻结行选择：缺约束是更根本的失败，先报 NO_ASIAN_SNAPSHOT_ON_CONSENSUS_LINE 会误导排障。
+        if (totalsBest == null) {
+            skip(skipped, BaselinePredictionSkipReasonEnum.INSUFFICIENT_ASIAN_CONSTRAINTS);
+            recordModel("no-constraint", null, null);
+            return null;
+        }
+
+        ImpliedPoissonModel.Solution solution = poissonModel.solve(
+                handicapConsensus.line(),
+                handicapConsensus.firstProbability().doubleValue(),
+                totalsBest.line(),
+                totalsBest.firstProbability().doubleValue());
+        if (!solution.feasible()) {
+            skip(skipped, BaselinePredictionSkipReasonEnum.INCONSISTENT_ASIAN_MARKETS);
+            recordModel("infeasible", solution, null);
+            return null;
+        }
+        ImpliedPoissonModel.NeighborCheck neighborCheck = poissonModel.check(
+                solution.lambdaHome(),
+                solution.lambdaAway(),
+                handicapAggregate.ranked(),
+                handicapConsensus.line(),
+                totalsAggregate.ranked(),
+                totalsBest.line());
+        // 主盘两方程是恰定的，残差只反映收敛精度；真正判断两个市场是否打架的是邻线复现能力。
+        if (BigDecimal.valueOf(solution.maxResidual()).compareTo(residualTolerance) > 0
+                || !neighborCheck.within(neighborTolerance)) {
+            skip(skipped, BaselinePredictionSkipReasonEnum.INCONSISTENT_ASIAN_MARKETS);
+            recordModel("inconsistent", solution, neighborCheck);
+            return null;
+        }
+        // lineCount == 0 时单独打标签：没有邻线不等于校验通过，不能让它伪装成「完美自洽」。
+        recordModel(neighborCheck.validated() ? "solved" : "no-neighbor", solution, neighborCheck);
 
         Optional<AsianOddsSnapshot> frozenRow =
                 freezeSnapshotSelector.select(rows, handicapConsensus, Optional.ofNullable(totalsBest));
@@ -286,7 +337,7 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 totalsAggregate.atLine(frozen.getTotalLine()).orElse(null);
         recordConsensus("totals-at-frozen-line", totalsAtFrozenLine);
         return new FeatureSet(
-                match, frozen, handicapConsensus, totalsAtFrozenLine, totalsBest,
+                match, frozen, handicapConsensus, totalsAtFrozenLine, totalsBest, solution, neighborCheck,
                 frozen.getCapturedAt().truncatedTo(ChronoUnit.MICROS)
         );
     }
@@ -305,10 +356,13 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
 
     private PredictionImportDto toPrediction(FeatureSet featureSet, Instant generatedAt) {
         AsianOddsSnapshot frozen = featureSet.frozen();
+        ImpliedPoissonModel.Solution solution = featureSet.solution();
+        double coverProbability = project(
+                solution, frozen.getHandicapLine(), ImpliedPoissonModel.Market.HANDICAP);
         ConfidenceLevelEnum handicapConfidence = confidence(frozen.getHomeOdds(), frozen.getAwayOdds());
         AsianHandicapPickEnum handicapPick = handicapConfidence == ConfidenceLevelEnum.LOW
                 ? null
-                : (favorsFirstSide(featureSet.handicapConsensus(), frozen.getHomeOdds(), frozen.getAwayOdds())
+                : (favorsFirstSide(coverProbability, frozen.getHomeOdds(), frozen.getAwayOdds())
                         ? AsianHandicapPickEnum.HOME_COVER
                         : AsianHandicapPickEnum.AWAY_COVER);
 
@@ -317,8 +371,9 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
         if (featureSet.totalsAtFrozenLine() != null) {
             totalsConfidence = confidence(frozen.getOverOdds(), frozen.getUnderOdds());
             if (totalsConfidence != ConfidenceLevelEnum.LOW) {
-                totalsPick = favorsFirstSide(
-                        featureSet.totalsAtFrozenLine(), frozen.getOverOdds(), frozen.getUnderOdds())
+                double overProbability = project(
+                        solution, frozen.getTotalLine(), ImpliedPoissonModel.Market.TOTALS);
+                totalsPick = favorsFirstSide(overProbability, frozen.getOverOdds(), frozen.getUnderOdds())
                         ? TotalGoalsPickEnum.OVER
                         : TotalGoalsPickEnum.UNDER;
             }
@@ -337,17 +392,22 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
         );
     }
 
+    private double project(
+            ImpliedPoissonModel.Solution solution,
+            BigDecimal line,
+            ImpliedPoissonModel.Market market
+    ) {
+        return poissonModel.project(
+                solution.lambdaHome(), solution.lambdaAway(), line, market, ImpliedPoissonModel.Side.FIRST);
+    }
+
     /**
-     * 方向取自跨庄共识；共识恰好 50/50 时回退到冻结行自身的水位高低。
+     * 方向取自模型概率在冻结行上的投影；恰好 50/50 时回退到冻结行自身的水位高低。
      *
      * <p>不能用冻结行水位直接定方向：那是单家观点，会把「押低水方」的老逻辑带回来。</p>
      */
-    private boolean favorsFirstSide(
-            AsianMarketConsensusAggregator.LineConsensus consensus,
-            BigDecimal firstPrice,
-            BigDecimal secondPrice
-    ) {
-        int comparison = consensus.firstProbability().compareTo(HALF);
+    private boolean favorsFirstSide(double modelProbability, BigDecimal firstPrice, BigDecimal secondPrice) {
+        double comparison = modelProbability - 0.5d;
         if (comparison > 0) {
             return true;
         }
@@ -381,8 +441,10 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
     ) {
         AsianOddsSnapshot frozen = featureSet.frozen();
         AsianMarketConsensusAggregator.LineConsensus handicap = featureSet.handicapConsensus();
-        StringBuilder text = new StringBuilder(420);
-        text.append("亚盘共识基线 v4：快照 #").append(frozen.getId())
+        ImpliedPoissonModel.Solution solution = featureSet.solution();
+        ImpliedPoissonModel.NeighborCheck neighborCheck = featureSet.neighborCheck();
+        StringBuilder text = new StringBuilder(560);
+        text.append("亚盘 λ 反解 v5：快照 #").append(frozen.getId())
                 .append("（").append(frozen.getBookmakerCode()).append(" / ").append(frozen.getProviderCode())
                 .append("），让球主盘 ").append(handicap.line().toPlainString())
                 .append(" 由").append(handicap.sampleSource()).append("去水共识选出")
@@ -391,10 +453,17 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 .append("，σ ").append(probability(handicap.dispersion()))
                 .append("，公平价 ").append(handicap.fairFirstPrice()).append("/").append(handicap.fairSecondPrice())
                 .append("，冻结报价 ").append(frozen.getHomeOdds()).append("/").append(frozen.getAwayOdds())
-                .append("；让球 ").append(frozen.getHandicapLine().toPlainString()).append(" ")
+                .append("；反解 λ 主 ").append(decimal(solution.lambdaHome()))
+                .append(" / 客 ").append(decimal(solution.lambdaAway()))
+                .append("（残差 ").append(scientific(solution.coverResidual()))
+                .append(" / ").append(scientific(solution.overResidual()))
+                .append("，").append(neighborCheckText(neighborCheck)).append("）；")
+                .append("让球 ").append(frozen.getHandicapLine().toPlainString()).append(" ")
                 .append(handicapPick == null
                         ? "方向因低置信度不发布"
                         : "为 " + handicapPick.getDesc() + "（" + handicapConfidence.getDesc() + "）")
+                .append("，模型概率 ").append(decimal(project(
+                        solution, frozen.getHandicapLine(), ImpliedPoissonModel.Market.HANDICAP)))
                 .append("；");
 
         if (featureSet.totalsAtFrozenLine() == null) {
@@ -414,10 +483,35 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                     .append(" / 小 ").append(probability(totals.secondProbability()))
                     .append("，σ ").append(probability(totals.dispersion()))
                     .append("，冻结报价 ").append(frozen.getOverOdds()).append("/").append(frozen.getUnderOdds())
+                    .append("，模型概率 ").append(decimal(project(
+                            solution, frozen.getTotalLine(), ImpliedPoissonModel.Market.TOTALS)))
                     .append("；");
         }
-        text.append("方向取自跨庄共识、置信度按冻结报价计算，只作为方向筛选，不代表独立校准概率或正期望。");
+        text.append("模型概率由两个市场主盘反解 λ 后投影得到，仍源自市场定价，不构成独立校准概率或正期望。");
         return text.toString();
+    }
+
+    /**
+     * 邻线校验结果的措辞。
+     *
+     * <p>没有合格邻线时必须明写「无合格邻线」而不是「偏差 0」：后者会被读成完美自洽。</p>
+     */
+    private String neighborCheckText(ImpliedPoissonModel.NeighborCheck neighborCheck) {
+        if (!neighborCheck.validated()) {
+            return "无合格邻线，未做自洽校验";
+        }
+        return "邻线最大偏差 " + decimal(neighborCheck.maxDeviation() * 100) + "%（"
+                + neighborCheck.lineCount() + " 档）";
+    }
+
+    private String decimal(double value) {
+        return BigDecimal.valueOf(value)
+                .setScale(SUMMARY_PROBABILITY_SCALE, RoundingMode.HALF_UP)
+                .toPlainString();
+    }
+
+    private String scientific(double value) {
+        return String.format(Locale.ROOT, "%.1e", value);
     }
 
     private String probability(BigDecimal value) {
@@ -496,6 +590,34 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
         }
     }
 
+    /**
+     * 记录反解结果的分布。
+     *
+     * <p>{@code outcome} 把「没有邻线可校验」与「校验通过」分开：前者不代表自洽，若混为一谈，
+     * 邻线校验静默失效时监控上看不出任何异常。</p>
+     */
+    private void recordModel(
+            String outcome,
+            ImpliedPoissonModel.Solution solution,
+            ImpliedPoissonModel.NeighborCheck neighborCheck
+    ) {
+        Counter.builder(MODEL_METRIC)
+                .tags("outcome", outcome).register(meterRegistry).increment();
+        if (solution != null && solution.feasible()) {
+            recordLambda("home", solution.lambdaHome());
+            recordLambda("away", solution.lambdaAway());
+        }
+        if (neighborCheck != null && neighborCheck.validated()) {
+            DistributionSummary.builder(MODEL_METRIC + ".neighbor-deviation")
+                    .register(meterRegistry).record(neighborCheck.maxDeviation());
+        }
+    }
+
+    private void recordLambda(String side, double lambda) {
+        DistributionSummary.builder(MODEL_METRIC + ".lambda")
+                .tag("side", side).register(meterRegistry).record(lambda);
+    }
+
     private void logResult(
             LocalDate lotteryDate, String operatorUsername, int candidateCount, int generatedCount,
             String batchId, Map<BaselinePredictionSkipReasonEnum, Integer> skipped, String status
@@ -528,6 +650,8 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
             AsianMarketConsensusAggregator.LineConsensus handicapConsensus,
             AsianMarketConsensusAggregator.LineConsensus totalsAtFrozenLine,
             AsianMarketConsensusAggregator.LineConsensus totalsBest,
+            ImpliedPoissonModel.Solution solution,
+            ImpliedPoissonModel.NeighborCheck neighborCheck,
             Instant featureAsOf
     ) {
         Long matchId() {

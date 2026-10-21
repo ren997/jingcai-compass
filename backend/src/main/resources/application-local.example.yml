@@ -60,6 +60,12 @@ app:
       bookmaker-whitelist: pinnacle,matchbook,betfair
       min-bookmakers: 2
       min-whitelist-bookmakers: 2
+  # λ 反解：邻线容差由 3 场真实抓包的最大偏差 3.508% 标定；
+  # max-goals 由 λ 总和最大 8.0 时的截断尾部质量标定（16 → 3.7e-3，24 → 1.2e-6）。
+  asian-model:
+    neighbor-tolerance: 0.0400
+    residual-tolerance: 0.0010
+    max-goals: 24
   tasks:
     enabled: false
     sporttery-pool:

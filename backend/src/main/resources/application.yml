@@ -94,6 +94,11 @@ app:
       bookmaker-whitelist: ${ASIAN_ODDS_AGGREGATION_BOOKMAKER_WHITELIST:pinnacle,matchbook,betfair}
       min-bookmakers: ${ASIAN_ODDS_AGGREGATION_MIN_BOOKMAKERS:2}
       min-whitelist-bookmakers: ${ASIAN_ODDS_AGGREGATION_MIN_WHITELIST_BOOKMAKERS:2}
+  # λ 反解：搜索域与解法固化在代码里（属模型定义），这里只放数据质量阈值与精度旋钮。
+  asian-model:
+    neighbor-tolerance: ${ASIAN_MODEL_NEIGHBOR_TOLERANCE:0.0400}
+    residual-tolerance: ${ASIAN_MODEL_RESIDUAL_TOLERANCE:0.0010}
+    max-goals: ${ASIAN_MODEL_MAX_GOALS:24}
   tasks:
     enabled: ${SYNC_TASKS_ENABLED:false}
     sporttery-pool:

@@ -5,9 +5,9 @@
 - 文档版本：v0.6
 - 最后更新：2026-10-21
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无进行中任务`。`T613 亚盘模型 v1 交付`已合入 master（PR #26，merge commit `2885739`），master 主干 CI 全绿。
-- 下一任务：`T611、T612 收尾确认`（两者代码已随 PR #26 进入 master，此前缺失的 CI 证据同样已具备，需确认是否一并置 `DONE`；均不需要单独开 Draft PR）
-- 最近完成增量：`T613 收口并合入 master`（PR #26 merge commit `2885739`，164 文件 +13728/−701，25 个提交；PR CI 与 master push CI 均全绿：单测 698 项 + 集成 68 项 + 24 个迁移 apply；顺带修掉 CI 首轮抓出的迁移 IT 版本号硬编码回归）；`T613 阶段 E 概率落库与统计`（统计口径按产品线隔离 + `PUSH`/`HALF_*` 连续化 + 双 Brier + 前端 tab 与亚盘展示 + 十列进哈希/快照 v4 + 批量发布 + 后台盘口阶梯）；`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）；`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（已随本分支合入 master 并取得 CI 证据）
+- 当前活动任务：`无进行中任务`。亚盘模型交付线（`T610`/`T611`/`T612`/`T613`）已全部收口并合入 master（PR #26，merge commit `2885739`），master 主干 CI 全绿。
+- 下一任务：`待定向`。剩余未完成项全部属于数据源与上线链：`T106`/`T107`（两周连续观测，`PARTIAL`）→ `T108`（Go/No-Go，`BLOCKED`，依赖前三者）→ `T604`（Docker 部署，`BLOCKED`）→ `T605`（MVP 验收，`TODO`）。其中 `T108` 需要 14 天中国大陆节点观测证据，需项目负责人决定是否现在启动该链；若要继续产品打磨，可选 `T208`（联赛与球队标准化复核闭环，`PARTIAL`）。
+- 最近完成增量：`T610/T611/T612 收档`（T610、T611 缺口由 PR #26 的真覆盖补齐；T612 经核对确认「CI 证据」是伪缺口——仓库 CI 只跑后端 `mvn -Pintegration verify`、无前端步骤，按「本地可完整验收」口径收档）；`T613 收口并合入 master`（PR #26 merge commit `2885739`，164 文件 +13728/−701，25 个提交；PR CI 与 master push CI 均全绿：单测 698 项 + 集成 68 项 + 24 个迁移 apply；顺带修掉 CI 首轮抓出的迁移 IT 版本号硬编码回归）；`T613 阶段 E 概率落库与统计`（统计口径按产品线隔离 + `PUSH`/`HALF_*` 连续化 + 双 Brier + 前端 tab 与亚盘展示 + 十列进哈希/快照 v4 + 批量发布 + 后台盘口阶梯）；`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -2153,7 +2153,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T611 公开比赛已发布预测筛选
 
-- 状态：`PARTIAL`
+- 状态：`DONE`
 - 优先级：P1
 - 依赖：T303、T501、T503、T609
 - 交付物：
@@ -2183,10 +2183,11 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 - 验证记录：
   - 2026-08-13：`mvn -B -ntp -f backend/pom.xml test` 通过（472 项）；`npm --prefix frontend run test -- --run` 通过（15 文件、72 项）；`npm --prefix frontend run build` 通过；`mvn -B -ntp -f backend/pom.xml -Pintegration "-Dit.test=PublicMatchQueryApplicationIT" verify` 在 PostgreSQL 16.14、Flyway V1～V22 上通过（4 项，覆盖 `PUBLISHED`/`LOCKED` 保留、单独 `DRAFT` 与 `SPORTTERY` 排除及计数一致）；`git diff --check` 通过。`gh auth status` 仍未登录，无法建立 Draft PR 或等待 GitHub Actions，故保持 `PARTIAL`；恢复时先登录具备仓库权限的 GitHub CLI，按本看板建立 Draft PR 并完成 CI/合并交付。
   - 2026-10-21：补注——上述记录中的「Flyway V1～V22」应为 **V1～V21**（核对 `backend/src/main/resources/db/migration` 确认当时最新迁移为 `V21__add_asian_only_prediction_contract.sql`，V22 尚未创建）。同日该分支已由本地实测复核（后端 472 项、前端 75 项全部通过）并合并入 `master`（`42ece66`）；因仍缺 CI 证据，状态维持 `PARTIAL`，不标记 `DONE`。
+  - 2026-10-21：任务收口。缺口已补齐且是**真覆盖**而非形式补齐：本任务的 `PublicMatchQueryApplicationIT`（4 项，覆盖 `PUBLISHED`/`LOCKED` 保留、单独 `DRAFT` 与 `SPORTTERY` 排除、列表与计数一致）包含在 PR #26 的 68 项集成测试中实际执行，CI 日志可见该测试类；PR CI（`39610773844`）与合并后 master push CI（`39612394966`）均全绿。至此完成标准三条（分页前过滤、列表与总数一致、URL 可恢复且不影响联赛下拉）各有自动化或实测证据，置 `DONE`。
 
 ### T612 公开预测盘口与赔率文案
 
-- 状态：`PARTIAL`
+- 状态：`DONE`
 - 优先级：P1
 - 依赖：T609、T610
 - 交付物：
@@ -2212,6 +2213,9 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 - 验证记录：
   - 2026-08-13：浏览器实测 `http://localhost:5173/matches?date=2026-08-13&published=true`：米拉索尔 vs 基多体大显示“亚盘让球：主 -0.5（赔率 1.73）”“亚盘大小球：大 2（赔率 1.71）”；罗萨里奥 vs 科林蒂安显示“亚盘让球：客 +0.5（赔率 1.61）”“亚盘大小球：小 2（赔率 1.76）”。`npm --prefix frontend run test -- --run` 通过（16 文件、75 项）；`npm --prefix frontend run build` 通过；`git diff --check` 通过。`gh auth status` 仍未登录，无法建立 Draft PR 或等待 GitHub Actions，故状态为 `PARTIAL`；恢复时先登录具备仓库权限的 GitHub CLI，按本看板完成 CI / PR 交付。
   - 2026-10-21：该分支已合并入 `master`（`42ece66`），并随 `master` 并入 `feat/asian-model-v1`。因仍缺 CI 证据，状态维持 `PARTIAL`。
+  - 2026-10-21：任务收口，并**修正此前对「CI 证据」的错误套用**。本任务是纯前端文案与展示，而本仓库唯一的 GitHub Actions 工作流（`.github/workflows/backend-integration.yml`）只执行 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`，**不含任何 npm / vitest 步骤**（已核对该工作流文件与 CI 日志全文）。因此「等 CI 证据」对本任务是永远等不到的伪缺口——之前置 `PARTIAL` 属于把后端任务的收口条件机械套用到前端任务上。
+    按 `AGENTS.md`「A task whose full acceptance can be verified locally may be developed locally」，本任务验收完全可在本地完成，证据为：`npm --prefix frontend run test -- --run` 前端 16 文件 **75 项**通过、`npm --prefix frontend run build` 通过、`git diff --check` 通过，以及下方 2026-08-13 的浏览器实测（两场比赛四条文案逐一核对，含客队方向从主队盘口反向换算）。两项完成标准（可直接读出所选项盘口与赔率、使用生成时绑定的快照而非当前主盘）均有对应证据，故置 `DONE`。
+    **遗留提示（不影响本任务）**：仓库 CI 无前端门禁，前端回归只能靠本地跑 `vitest`。若要让前端改动也被 CI 拦住，需单独新增一个前端工作流，属独立事项。
 
 ### T604 Docker 与 Nginx 部署
 
@@ -2534,6 +2538,8 @@ T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PAR
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-10-21 | T612 | `PARTIAL -> DONE` | 纯前端文案任务，缺口「CI 证据」实为**伪缺口**：仓库唯一工作流只跑 `mvn -Pintegration verify`，不含 npm/vitest（已核对工作流文件与 CI 日志）。此前 `PARTIAL` 是把后端收口条件机械套用到前端任务。按 `AGENTS.md`「本地可完整验收的任务无需 CI」，证据为前端 16 文件 75 项 + 生产构建 + 差异检查 + 08-13 浏览器实测（两场四条文案，含客队方向反向换算）。两项完成标准均有对应证据。遗留提示：仓库 CI 无前端门禁，前端回归只能靠本地 `vitest`；若要 CI 拦住前端改动需单独新增工作流，属独立事项。 |
+| 2026-10-21 | T611 | `PARTIAL -> DONE` | 缺口由 PR #26 补齐，且是**真覆盖**：本任务的 `PublicMatchQueryApplicationIT`（4 项，覆盖 `PUBLISHED`/`LOCKED` 保留、单独 `DRAFT` 与 `SPORTTERY` 排除、列表与计数一致）包含在该 PR 的 68 项集成测试中实际执行，CI 日志可见该类；PR CI 与 master push CI 均全绿。完成标准三条各有自动化或实测证据。 |
 | 2026-10-21 | T610 | `PARTIAL -> DONE` | 历次 `PARTIAL` 的唯一缺口是「Draft PR + GitHub Actions 证据」（交付期间 `gh` 未登录），代码与本地验证在各增量中均已完备。本任务的改动随交付分支 `feat/asian-model-v1` 进入 PR #26（`2885739`），PR CI 与 master push CI 均全绿（单测 698 项 + 集成 68 项 + 24 个迁移 apply），完成标准最后一条由此满足。归属说明：本任务交付的亚盘专用 V3 输出此后由 T613 沿 v4/v5/v6 演进，但 V3 契约（V21：亚盘专用、方向与置信度成对、`LOW` 不落库、已发布不可变）仍是现行基础，故按「已完成」收档而非「被取代」；后续模型行为与结算口径变更归 T613 及其后续任务。 |
 | 2026-10-21 | T613 | `PARTIAL -> DONE`（交付收口） | Draft PR **#26** 创建后 CI 首轮（`39609921647`）失败 1 项：`LegacyNameKeyIdentityCleanupMigrationIT.migrateV22` 断言 `expect: 1 but was: 3`。根因是用无 target 的全量迁移并断言「V21→V22 只执行 1 个」，把「V22 之后不再有迁移」写死；V23、V24 落地后必然变 3 个。属本分支引入的回归，但开发机 Docker/WSL/原生 PostgreSQL 均不可用使该 IT 从未被执行，CI 首次运行即抓出。改为 `flyway("22")` 显式限定 target（`4fa12bf`）后第二轮 CI（`39610773844`）**全绿**：单测 698 项 + 集成 68 项 0 失败 0 错误，24 个迁移在空库连续 apply，`BUILD SUCCESS`。至此「代码、测试、文档、完成标准」四类证据齐备，置 `DONE`；合并 Draft PR 属交付动作，按约定不改变任务状态。 |
 | 2026-10-21 | T613 | `IN_PROGRESS -> PARTIAL`（阶段 E 收口） | 阶段 E 概率落库与统计完成（E1~E17）：统计口径按产品线隔离（`markets` 数组替代 `had`/`hhad` 具名字段，首页固定亚盘，统计页 tab 切换）；`PUSH`/`HALF_WIN`/`HALF_LOSS` 进连续化 outcome 与双 Brier，`hitRate` 与 `weightedHitRate` 并列；后台状态页四个市场各自 JOIN、诊断码收缩为 3 个通用码；公开 VO 透出十列；`CanonicalPredictionV4` 与 manifest v4 把十列纳入公开可复算范围（存量 v3 行回落兼容）；批量发布按 `(matchId, predictionId)` 串行防死锁；后台新增盘口阶梯只读接口与抽屉。分支 `feat/asian-model-v1` 领先本地 9 个提交。后端全量 699 项、前端 16 文件 85 项、tsc 与生产构建通过；**集成测试未在本机执行**（Docker/WSL 均不可用），CI 与 Draft PR 为唯一缺失证据，故置 `PARTIAL`。 |

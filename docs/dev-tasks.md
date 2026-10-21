@@ -5,7 +5,7 @@
 - 文档版本：v0.6
 - 最后更新：2026-10-21
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A~E 代码全部收口，分支 feat/asian-model-v1，待 CI 与 Draft PR）`
+- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A~E 代码全部收口，Draft PR #26 已建，CI 首轮抓出 1 项迁移 IT 回归已修复并重跑）`
 - 下一任务：`T610 收尾（Draft PR + 完整 CI 证据）`
 - 最近完成增量：`T613 阶段 E 概率落库与统计`（统计口径按产品线隔离 + `PUSH`/`HALF_*` 连续化 + 双 Brier + 前端 tab 与亚盘展示 + 十列进哈希/快照 v4 + 批量发布 + 后台盘口阶梯）；`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）；`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（代码已合入 master，CI 证据待补）
 
@@ -2433,6 +2433,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-10-21（阶段 E）：`mvn -B -ntp -f backend/pom.xml test` 全量 **699 项**通过，0 失败 0 错误（基线 640 → 阶段 E 新增 59）。分段：E7/E8 后 672、E14 后 687、E15/E16 后 694、E17 后 699。
   - 2026-10-21（阶段 E）：`npm --prefix frontend run test` **16 个测试文件 85 项**通过，`npx tsc -b` 与 `npx vite build` 通过。新增用例覆盖：亚盘方向换算（押客队受让取 `1 − p`）、走盘/半赢半输进统计分母、产品线切换时市场与状态同步重置、`market=ASIAN_TOTAL_GOALS` 无 `type` 的老链接反推、批量发布结果按 ID 回填（服务端故意倒序返回）、盘口阶梯抽屉按需加载与冻结行标注。
   - 2026-10-21（阶段 E）：**集成测试未在本机执行。** `docker` 命令缺失、`//./pipe/docker_engine` 不存在、WSL 被安全策略拦截、无原生 PostgreSQL 监听，Testcontainers 无法启动。`AdminPredictionStatusApplicationIT`（3 项）与 `PredictionImportApplicationIT` 的亚盘用例已写好但未运行；SQL 渲染由 `AdminPredictionStatusMapperSqlContractTest` 静态兜住。这是本阶段唯一缺失的本地证据，需由 CI 补齐。
+  - 2026-10-21（阶段 E，Draft PR #26 首个 CI run `39609921647`）：**失败 1 项**，`LegacyNameKeyIdentityCleanupMigrationIT.migrateV22` 断言 `expect: 1 but was: 3`；整次运行 68 项集成测试、67 项通过，失败仅此一项。根因不是「亚盘代码写错」，而是该 IT 用**无 target 的全量迁移**（`flyway(null).migrate()`）并断言「从 V21 迁到 V22 只执行了 1 个迁移」，等于把「V22 之后不再有迁移」写死；阶段 A 加 V23、阶段 E 加 V24 后必然变成 3 个。这是**本分支引入的回归**，但开发机无 Docker 使该 IT 从未被执行，CI 首次运行即抓出——印证「涉及 Flyway 迁移必须真库验证一次」这条约束的必要性。修法：`migrateV22()` 改用 `flyway("22")` 显式限定 target，与同文件 `migrateV19ThroughV21()` 的 `flyway("21")` 用法一致，从此不再耦合未来版本号。同批排查其余三处版本断言：`ProviderNormalizationMigrationApplicationIT`（16/17/19 全程 target 固定，不受影响）、`PostgresApplicationIT:120`（全量迁移用例，本意即验末版本，属「加迁移必须同步改」的既有约定，已在阶段 E 同步为 `"24"`）、`PostgresApplicationIT:122`（二次 migrate 幂等，应为 0）。
 - 阶段 E 收口说明：
   - **本阶段的核心不是「把亚盘加进统计」，而是承认两种产品线的指标不可混算。** 竞彩是三向 Brier + 命中/未中两态，亚盘是二选一 + 走盘 + 半赢半输；混在一个 `had`/`hhad` 结构里，两边的分母、样本和概率含义都不同。因此响应形状从具名字段改为 `markets` 数组，首页固定亚盘，统计页 tab 切换——把「混算」从计算层的问题变成展示层不可能发生的事。
   - **走盘进 Brier 样本、不进命中率分母。** 连续化 outcome 用 `HIT=1 / HALF_WIN=0.75 / PUSH=0.5 / HALF_LOSS=0.25 / MISS=0`，与结算侧 0.25 刻度的 margin 判定同源；`hitRate` 的分母是 `hit+miss+halfWin+halfLoss`（不含 PUSH），另给 `weightedHitRate` 按 0.75/0.25 计分。两个口径都摆出来，是因为任何单一数字都会在走盘比例高时骗人。

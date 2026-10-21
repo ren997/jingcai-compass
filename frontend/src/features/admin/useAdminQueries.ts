@@ -4,6 +4,7 @@ import {
   confirmMappingReviewBundle,
   fetchAdminPredictionLocks,
   fetchAdminDraftPredictions,
+  fetchAdminOddsLadder,
   generateAdminBaselinePredictions,
   fetchAdminPredictionStatusDetail,
   fetchAdminSettlementStatuses,
@@ -99,6 +100,10 @@ export function adminSettlementStatusesQueryKey(query: AdminSettlementStatusList
 
 export function adminPredictionStatusDetailQueryKey(predictionId: number) {
   return ['admin', 'prediction-status', 'detail', predictionId] as const;
+}
+
+export function adminOddsLadderQueryKey(predictionId: number) {
+  return ['admin', 'odds-ladder', predictionId] as const;
 }
 
 /** 读取后台同步运行列表。 */
@@ -233,6 +238,20 @@ export function useAdminPredictionLocksQuery(query: AdminPredictionLockListQuery
   return useQuery({
     queryKey: adminPredictionLocksQueryKey(query),
     queryFn: ({ signal }) => fetchAdminPredictionLocks(query, signal),
+  });
+}
+
+/**
+ * 读取一条草稿的盘口阶梯。
+ *
+ * <p>只在抽屉真正打开时请求（predictionId 未定义即关闭），阶梯数据量大且只在排障时使用，
+ * 提前拉取会让草稿列表多出几十次无谓请求。
+ */
+export function useAdminOddsLadderQuery(predictionId: number | undefined) {
+  return useQuery({
+    queryKey: adminOddsLadderQueryKey(predictionId ?? 0),
+    queryFn: ({ signal }) => fetchAdminOddsLadder(predictionId!, signal),
+    enabled: predictionId !== undefined,
   });
 }
 

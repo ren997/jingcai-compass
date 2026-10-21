@@ -252,6 +252,54 @@ export type AdminBatchPublishResult = {
   results: AdminBatchPublishItem[];
 };
 
+/** 亚盘某一档盘的跨庄共识；概率已由服务端去水，前端不再重算。 */
+export type AdminOddsLadderLine = {
+  line: number;
+  sampleCount: number;
+  whitelistCount: number;
+  whitelistApplied: boolean;
+  firstProbability: number;
+  secondProbability: number;
+  dispersion: number;
+  fairFirstPrice: number;
+  fairSecondPrice: number;
+  best: boolean;
+};
+
+export type AdminOddsLadderMarket = {
+  bestLine: number | null;
+  bestFirstProbability: number | null;
+  bestSecondProbability: number | null;
+  bestDispersion: number | null;
+  bestSampleCount: number | null;
+  bestSampleSource: string | null;
+  lines: AdminOddsLadderLine[];
+};
+
+/** 一条原始报价；frozen 表示结算与摘要实际引用的那一行。 */
+export type AdminOddsLadderRow = {
+  snapshotId: number;
+  providerCode: string;
+  bookmakerCode: string;
+  handicapLine: number | null;
+  homeOdds: number | null;
+  awayOdds: number | null;
+  totalLine: number | null;
+  overOdds: number | null;
+  underOdds: number | null;
+  capturedAt: string;
+  frozen: boolean;
+};
+
+export type AdminOddsLadder = {
+  predictionId: number;
+  matchId: number;
+  frozenSnapshotId: number | null;
+  handicap: AdminOddsLadderMarket;
+  totals: AdminOddsLadderMarket;
+  rows: AdminOddsLadderRow[];
+};
+
 export type AdminResultFact = {
   factId: number;
   factVersion: number;
@@ -621,6 +669,13 @@ export function publishAdminPrediction(predictionId: number) {
 export function publishAdminPredictions(predictionIds: number[]) {
   return requestApi<AdminBatchPublishResult>('/api/admin/predictions/publish/batch', {
     method: 'POST', body: { predictionIds }, authenticated: true,
+  });
+}
+
+/** 读取一条亚盘预测当时的盘口阶梯与冻结行。 */
+export function fetchAdminOddsLadder(predictionId: number, signal?: AbortSignal) {
+  return requestApi<AdminOddsLadder>('/api/admin/predictions/odds-ladder', {
+    method: 'POST', body: { predictionId }, signal, authenticated: true,
   });
 }
 

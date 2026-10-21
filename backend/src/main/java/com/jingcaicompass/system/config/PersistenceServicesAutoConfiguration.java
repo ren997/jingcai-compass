@@ -12,6 +12,7 @@ import com.jingcaicompass.admin.service.AdminAuthService;
 import com.jingcaicompass.admin.service.AdminAuthServiceImpl;
 import com.jingcaicompass.admin.service.AdminJwtService;
 import com.jingcaicompass.admin.service.AdminLoginAttemptWriter;
+import com.jingcaicompass.admin.service.AdminOddsLadderQueryService;
 import com.jingcaicompass.admin.service.AdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.AdminPredictionStatusQueryServiceImpl;
 import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
@@ -454,6 +455,20 @@ public class PersistenceServicesAutoConfiguration {
                 predictionContentHasher,
                 auditLogService,
                 predictionImportClock
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    AdminOddsLadderQueryService adminOddsLadderQueryService(
+            PredictionMapper predictionMapper,
+            AsianOddsSnapshotMapper asianOddsSnapshotMapper,
+            AsianOddsAggregationProperties asianOddsAggregationProperties
+    ) {
+        return new AdminOddsLadderQueryService(
+                predictionMapper,
+                asianOddsSnapshotMapper,
+                asianOddsAggregationProperties
         );
     }
 

@@ -2131,3 +2131,68 @@ h1 {
   color: #6b7a71;
   font-size: 12px;
 }
+
+/* 草稿卡片头部右侧的次要动作区：盘口阶梯按钮与状态徽标并排 */
+.admin-draft-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 盘口阶梯抽屉：表格只读，靠斑马纹与冻结行高亮区分层级 */
+.admin-ladder {
+  display: grid;
+  gap: 18px;
+}
+
+.admin-ladder-market {
+  display: grid;
+  gap: 8px;
+}
+
+.admin-ladder-market header h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: #1f2d26;
+}
+
+.admin-ladder-market header p {
+  margin: 0;
+  color: #526259;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.admin-ladder-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-ladder-table th,
+.admin-ladder-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #e8eee9;
+  text-align: left;
+  vertical-align: top;
+}
+
+.admin-ladder-table th {
+  color: #6b7a71;
+  font-weight: 650;
+  background: #f4f8f5;
+}
+
+.admin-ladder-table tbody tr:nth-child(even) {
+  background: #fbfdfb;
+}
+
+.admin-ladder-table tr.frozen {
+  background: #eef5ff;
+}
+
+.admin-ladder-table small {
+  color: #84928b;
+  font-size: 11px;
+}

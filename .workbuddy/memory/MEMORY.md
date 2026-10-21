@@ -47,6 +47,13 @@
 - **新增落库列必须同时改三处**：V 版本迁移的列定义 + `protect_published_prediction()` 两处 ROW 列表（漏改等于允许事后重写已发布预测背后的概率）+ `PredictionImportDto` 的模型输出校验。列精度统一 `numeric(9,6)`，不用 5 位（生成侧 `PROBABILITY_SCALE = 6`，5 位会静默四舍五入）。
 - **「值只在某个分支才算」是落库陷阱**：`overProbability` 原先只在置信度非 LOW 的分支里投影，直接落库会写入 0 而非真实概率。给任何市场新增落库列前，先确认该值在**所有分支**都被计算。
 
+## 跑真实预测的前置条件（2026-10-21 实操确认）
+
+- **亚盘快照要求比赛映射已确认**：`AsianOddsSyncServiceImpl` 对 `!isConfirmed(mapped)` 直接 `skippedUnmapped++`，而自动确认要求 score ≥ 0.85，打分只做 id / 队名的**精确相等**比较 → 中英文队名永远拿不到分。**每次跑新比赛前必须人工写 `match_source_mappings`（`MANUAL_CONFIRMED` + `MANUAL_REVIEW`），目前没有 admin 接口，只能用 SQL 或一次性运行类。** 对应地，`provider_team_mappings` 里 68 条 THE_ODDS_API 记录全是 `PENDING`，不要指望复用。
+- **联赛 sport key 必须对得上赛季阶段**：`app.asian-odds.the-odds.league-sport-keys` 的欧冠要指向 `soccer_uefa_champs_league`（正赛），不是 `_qualification`；西甲需补 `soccer_spain_la_liga`。YAML 里 `"[欧冠]":` 的方括号是引号语法，map key 实际是 `欧冠`，与 `matches.league_name` 一致。
+- **生成不幂等**：`generationBatchHash` 含 `generatedAt`，重跑会插入新批次。要么先删当日 DRAFT，要么导出时按 `match_id` 取 `id` 最大的一条。
+- **亚盘同步是追加快照**：每次同步都写新行，冻结行会随最新报价变化，因此同一场比赛重跑后方向/置信度可能翻转。这不是 bug，但对比两次结果时必须先确认快照时间。
+
 ## 迁移编号陷阱
 
 - `backend/src/main/java/db/migration/` 下有 **Java 版 Flyway 迁移**（`V22__RepairLegacyNameKeyIdentityCleanup`）。新建 SQL 迁移前先 `ls` 这个目录，否则会撞号并报 `Found more than one migration with version <n>`。

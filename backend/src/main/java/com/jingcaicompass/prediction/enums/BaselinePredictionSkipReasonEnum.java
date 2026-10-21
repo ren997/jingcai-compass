@@ -17,12 +17,17 @@ public enum BaselinePredictionSkipReasonEnum {
     INVALID_SPORTTERY_MARKET("INVALID_SPORTTERY_MARKET", "体彩 SP 必须为正数"),
     MISSING_CONFIRMED_ASIAN_MARKET("MISSING_CONFIRMED_ASIAN_MARKET", "缺少已确认映射的完整亚盘和大小球快照"),
     INVALID_ASIAN_MARKET("INVALID_ASIAN_MARKET", "亚盘和大小球水位必须为正数"),
+    INSUFFICIENT_ASIAN_BOOKMAKERS("INSUFFICIENT_ASIAN_BOOKMAKERS", "报价庄家不足 2 家，无法形成去水共识主盘"),
+    NO_ASIAN_SNAPSHOT_ON_CONSENSUS_LINE("NO_ASIAN_SNAPSHOT_ON_CONSENSUS_LINE",
+            "共识主盘线上没有让球与大小球完整可冻结的真实快照"),
     LOW_CONFIDENCE_ASIAN_MARKETS("LOW_CONFIDENCE_ASIAN_MARKETS", "亚盘让球和大小球均为低置信度，不生成草稿");
 
     public static final String DESC =
             "预测基线跳过原因：NOT_SCHEDULED-非未开赛，KICKOFF_PASSED-已开赛，"
                     + "MISSING_SPORTTERY_MARKET-缺体彩盘口，INVALID_SPORTTERY_MARKET-体彩盘口无效，"
                     + "MISSING_CONFIRMED_ASIAN_MARKET-缺已确认亚盘，INVALID_ASIAN_MARKET-亚盘无效，"
+                    + "INSUFFICIENT_ASIAN_BOOKMAKERS-报价庄家不足，"
+                    + "NO_ASIAN_SNAPSHOT_ON_CONSENSUS_LINE-共识线上无完整快照，"
                     + "LOW_CONFIDENCE_ASIAN_MARKETS-两项亚盘预测均低置信度";
 
     private static final Map<String, BaselinePredictionSkipReasonEnum> CODE_MAP = Stream.of(values())

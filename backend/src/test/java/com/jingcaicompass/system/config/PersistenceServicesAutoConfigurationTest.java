@@ -47,6 +47,7 @@ import com.jingcaicompass.match.service.ProviderNormalizationReviewService;
 import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.match.client.SportteryProviderProperties;
+import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.job.AsianOddsSyncJob;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
@@ -104,6 +105,7 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(PasswordEncoder.class, () -> new BCryptPasswordEncoder(4))
             .withBean(JwtEncoder.class, () -> mock(JwtEncoder.class))
             .withBean(PaginationProperties.class, () -> new PaginationProperties(100))
+            .withBean(AsianOddsAggregationProperties.class, AsianOddsAggregationProperties::defaults)
             .withBean(SimpleMeterRegistry.class, SimpleMeterRegistry::new)
             .withBean(AdminAccountMapper.class, PersistenceServicesAutoConfigurationTest::existingAdminMapper)
             .withBean(AdminDraftPredictionMapper.class, () -> mock(AdminDraftPredictionMapper.class))

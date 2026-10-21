@@ -5,7 +5,7 @@
 - 分支前缀**不再使用 `codex/`**（那是旧工具名）。约定为 `feat/<topic>`。
 - **不按功能/任务拆分支**。一个交付分支承载同一目标下的多个连续任务，分支名描述整个交付而不是第一个任务。
 - 同一时刻只允许一个任务 `IN_PROGRESS`；任务 `DONE` 不触发合并，整个交付完成后才合并 Draft PR。
-- 当前交付分支：`feat/asian-model-v1`（对应 T612）。
+- 当前交付分支：`feat/asian-model-v1`（对应 T613）。
 
 ## 验证策略（用户明确要求减负）
 
@@ -30,8 +30,14 @@
 ## 已知未收口事项
 
 - `T610` 仍为 `PARTIAL`，剩余 Draft PR + 完整 CI 证据。
-- `T613` 阶段 A 已收口（`e9c2b34`，已推送 `feat/asian-model-v1`），阶段 B~E 未开始。
+- `T613` 阶段 A、阶段 B 已收口并推送 `feat/asian-model-v1`；阶段 C（λ 反解）、D（选择性发布）、E（概率落库与统计）未开始。
 - 阶段 D/E 待办：`StatisticsCalculator.MarketAccumulator.record` 的 switch 未处理 `PUSH`/`HALF_WIN`/`HALF_LOSS`（switch 语句不要求穷尽，会静默漏计）；`AdminPredictionStatusQueryServiceImpl` 硬编码只展示 HAD/HHAD。
+
+## 亚盘模型的两条硬约束（阶段 B 建立，后续阶段不得违反）
+
+- **共识定线 + 真实行冻结**：决策线由跨庄聚合选出，但 `predictions.asian_odds_snapshot_id` 必须指向一条**确实报出该线**的真实快照行（复合外键 `(id, match_id)`，结算只读该行）。不要试图用共识公平价计账——公平价无法成交。
+- **方向与置信度有意不同源**：方向取自共识概率，置信度按冻结行真实报价计算。看到「共识方向明确却判低置信」不是 bug，是计账价偏高导致的真实不可交易性。
+- 聚合顺序固定为 **逐家去水 → 中位 → 归一**；主盘 = 偏离 50/50 最小的线（不是众数），线型偏好仅在精确同分（ε=0）时生效。
 
 ## 迁移编号陷阱
 

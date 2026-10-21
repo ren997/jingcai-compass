@@ -70,6 +70,12 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 - 主盘推断规则可直接落地：`argmin |odd_home - odd_away|`。
 - 多档盘口不是噪声，而是资源：可以选主盘 ± 相邻档联合反解 λ，比单盘更稳。
 
+**接入时必须遵守的三条（阶段 B 落地时确定）**：
+
+1. `suspended = true` 的 option 必须丢弃。V3 的 `asian_odds_snapshots` 没有该列，暂停报价会直接进入去水中位数。
+2. 庄家名必须映射成稳定 ASCII 编码（平博→`pinnacle`、必发→`betfair`、威廉希尔→`williamhill`、Bet365→`bet365`、1xBet→`1xbet`、韦德→`betvictor`、利记→`liji`）。白名单按编码匹配，直接写中文会永远不命中并**静默回退全量中位数**。
+3. 主盘判定以「去水概率最接近 50/50」为准，`argmin |odd_home - odd_away|` 只是它在对称盘口下的近似。2026-10-21 用仓库内 3 场抓包（events 2492881 / 2407136 / 2594567）复核，6 个市场两种口径结论一致，实现取去水口径。
+
 ### 2. 赛果口径：四层比分分离
 
 | 字段 | 口径 |
@@ -110,7 +116,7 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 ## 风险与待办
 
 1. **机构覆盖偏少**：日职仅 5 家（平博/威廉希尔/Bet365/1xBet/韦德），欧冠 7 家。若后续要用必发（交易所）做真实概率基准，只在大场次可用。
-2. **`main` / `suspended` 恒为 null**：主盘、停盘需自算；停盘判断只能靠 `odds` 缺失或异常。
+2. **`main` / `suspended` 恒为 null**：主盘、停盘需自算；停盘判断只能靠 `odds` 缺失或异常。入库解析必须显式丢弃 `suspended = true` 的 option（阶段 B 已在文档层面登记，代码侧等 NovaAPI Provider 接入时落地）。
 3. **单次赛果查询 30 天上限**：回测取数要按月分页，一年约 12 次请求，可接受。
 4. **日卡仅验证了单日**：跨日行为（赛程滚动、赛果出现时延、跨日赔率延续）仍需 3~5 天观察。
 5. **数据保留总深度未定**：已验证到 2026-01，再往前未测；若做多赛季训练集，需补测。
@@ -121,7 +127,7 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 |---|---|---|
 | 新增 `NovaApiProvider` | `match/client` | Ed25519 签名 + 上述 5 个端点 |
 | 补实赛果同步 | `ChinaSportteryProvider.fetchMatchResultsRaw()` 现为抛异常 | 用 `/nova/text/match-results` 替代，90 分钟口径天然正确 |
-| 亚盘赔率适配 | `odds/client` | `providers → markets → options` 映射，含主盘推断 |
+| 亚盘赔率适配 | `odds/client` | `providers → markets → options` 映射；每家每档一行完整入库（不要只留主盘）、中文庄名归一为 ASCII、丢弃 `suspended`。主盘由 `AsianMarketConsensusAggregator` 跨庄算，不在适配层决定 |
 | 新增 `score_scope` 字段 | `market_result_facts` | `REGULATION_90` / `FINAL`，防止口径污染 |
 | 阶段 A 结算闭环 | `SettlementWriter` / `MarketTypeEnum` | 与数据源无关，仍需先做 |
 

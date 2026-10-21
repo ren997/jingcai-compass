@@ -89,6 +89,11 @@ app:
       # 验证节点用外部 application-validation.yml 或 SPRING_APPLICATION_JSON 提供联赛映射。
       league-sport-keys: {}
       quota-budget: ${ASIAN_ODDS_QUOTA_BUDGET:0}
+    # 跨庄聚合范围：低抽水白名单按线判定，家数不足回退全量中位数。
+    aggregation:
+      bookmaker-whitelist: ${ASIAN_ODDS_AGGREGATION_BOOKMAKER_WHITELIST:pinnacle,matchbook,betfair}
+      min-bookmakers: ${ASIAN_ODDS_AGGREGATION_MIN_BOOKMAKERS:2}
+      min-whitelist-bookmakers: ${ASIAN_ODDS_AGGREGATION_MIN_WHITELIST_BOOKMAKERS:2}
   tasks:
     enabled: ${SYNC_TASKS_ENABLED:false}
     sporttery-pool:

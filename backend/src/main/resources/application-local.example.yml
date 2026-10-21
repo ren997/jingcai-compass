@@ -54,6 +54,12 @@ app:
       max-attempts: 2
       delay: 500ms
     quota-warning-threshold: 0
+    # 跨庄聚合：白名单按线判定（该线白名单家数 >= min-whitelist-bookmakers 才用白名单样本），
+    # 否则该线回退全量中位数；单线报价家数 < min-bookmakers 的线不参与主盘选择。
+    aggregation:
+      bookmaker-whitelist: pinnacle,matchbook,betfair
+      min-bookmakers: 2
+      min-whitelist-bookmakers: 2
   tasks:
     enabled: false
     sporttery-pool:

@@ -5,9 +5,9 @@
 - 文档版本：v0.6
 - 最后更新：2026-10-21
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A 结算闭环已收口，分支 feat/asian-model-v1）`
-- 下一任务：`T613-B 亚盘赔率聚合与主盘选择（逐家去水、中位数聚合、最平衡线）`
-- 最近完成增量：`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）；`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（代码已合入 master，CI 证据待补）
+- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A、阶段 B 均已收口，分支 feat/asian-model-v1）`
+- 下一任务：`T613-C λ 反解模型（网格搜索 + 概率投影 + 残差过滤）`
+- 最近完成增量：`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）；`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（代码已合入 master，CI 证据待补）
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -2297,7 +2297,16 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
     - [x] A7 结算重算路径 `SettlementRecalculationWriter` 同步支持亚盘市场与 `profit` 版本追加。
     - [x] A8 结算候选查询按预测类型分派：`SettlementMapper` 五条查询去掉 `prediction_type = 'SPORTTERY'` 独占，亚盘分支只要求「已给出方向的市场」结算完成，并同步逾期积压统计。
     - [x] A9 真实 PostgreSQL 16 验证：V23 约束与 `profit` 不可变、亚盘预测端到端结算（候选 → 结算 → `profit` → 幂等）。
-  - **阶段 B~E**：按 `docs/asian-model-design.md` 第 7 节逐阶段补充，每阶段独立验证后再进入下一阶段。
+  - **阶段 B（聚合与主盘）**
+    - [x] B1 新增 `AsianOddsAggregationProperties`（白名单 / 单线最少家数 / 白名单最少家数），三份 yml 与属性测试同步。
+    - [x] B2 新增 `AsianMarketMath`（去水、中位数、总体标准差、线归一、线型优先级）与 `AsianMarketConsensusAggregator`（逐家去水 → 中位 → 归一 → 排序）。
+    - [x] B3 用仓库内 3 场 NovaAPI 真实抓包（events 2492881 / 2407136 / 2594567）做验收，6 个市场全部命中平博自身最平衡线。
+    - [x] B4 新增 `AsianFreezeSnapshotSelector`：共识线硬过滤 + 六键排序（白名单 / 方向同向 / 大小球线对齐 / 抽水 / 时间 / id）。
+    - [x] B5 `AsianOddsSnapshotMapper` 新增让球与大小球两条按线去重的批量查询，并补静态 SQL 契约测试。
+    - [x] B6 接入 `BaselinePredictionGenerationServiceImpl`：取数改批量两条查询、方向取自共识、置信度仍按冻结行报价、版本升 v4、新增两条跳过原因。
+    - [x] B7 观察性：新增 `jingcai.prediction.asian.consensus{market,source,outcome}` 计数器；设计文档与数据源文档收口。
+    - [x] B8 分层验证与提交推送。
+  - **阶段 C~E**：按 `docs/asian-model-design.md` 第 7 节逐阶段补充，每阶段独立验证后再进入下一阶段。
 - 验证命令（按改动性质分层，不要求每次改动都跑全量集成测试）：
 
   ```bash
@@ -2326,15 +2335,27 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-10-21：完成 A3（迁移编号为 V23：核对 `backend/src/main/java/db/migration` 后发现 V22 已被 T209 的 Java 迁移占用，首次跑集成测试即报 `Found more than one migration with version 22`，故顺延为 V23）。除放宽两个 CHECK、新增 `profit` 外，补了 `ck_settlements_profit_scope`：竞彩市场必须无收益（无冻结水位），亚盘市场必须有收益，把代码中已成立的不变式下沉到库，挡住「半个市场只写了一半字段」。同时 `CREATE OR REPLACE protect_settlement()` 把 `profit` 纳入不可变 `ROW` 比较，否则新列会成为唯一可绕过「只追加」保护的字段。
   - 2026-10-21：完成 A8，修复本次会话发现的阻塞：`SettlementMapper` 五条查询原本全部硬编码 `prediction_type = 'SPORTTERY'` 且只检查 `HAD`/`HHAD`，**亚盘预测永远不会被结算任务选中**，会永久停在 `LOCKED`。此前单测全绿是因为测试直接调用 `SettlementWriter.settlePrediction(id)`，绕过了候选查询。修法：待结算与积压统计按类型分派，亚盘分支只对「已给出方向」的市场要求存在当前结算（亚盘允许单侧方向，若强制要求两个市场会永久空转）；重算查询改为 `prediction_type IN ('SPORTTERY','ASIAN')`。为避免 SQL 与枚举再次漂移，新增 `SettlementMapperSqlContractTest` 静态断言每个市场编码与方向判定都在查询里。
   - 2026-10-21：完成 A9，`SettlementApplicationIT` 新增亚盘端到端用例（冻结快照 → 候选 → 结算 → `profit` → 幂等），`SettlementMigrationApplicationIT` 新增亚盘行写入、未知市场/状态与收益组合拒绝、`profit` 不可变三组用例，均在真实 PostgreSQL 16 容器执行。
+  - 2026-10-21：完成阶段 B（聚合与共识主盘）。取数从「每场最新一条完整快照」改为「每场每家每档线的最新报价」——这一步不改就没有主盘可选：单条快照只能接受写入顺序，等于把「谁最后更新」当成主盘。聚合顺序严格按「逐家去水 → 中位 → 归一」，主盘定义为偏离 50/50 最小的线，线型偏好只在**精确同分**时生效（`ε = 0`）：2492881 的大小球 2.50 与 2.75 只差 0.002838，任何容差都会选中 2.50、偏离平博。白名单按线判定，家数不足该线回退全量并写入摘要与指标。
+  - 2026-10-21：新增 `AsianFreezeSnapshotSelector` 解决「共识线 vs 只能引用一条真实快照」的矛盾。`predictions.asian_odds_snapshot_id` 是真实行外键、结算只读该行，因此共识线必须落到一家确实报出该线且大小球完整的庄家上。计账价格用该行真实报价而非共识公平价——公平价无法成交，用它计账会让 `settlements.profit` 脱离实际收益。此设计同时避免改 `predictions` 表结构与 `CanonicalPredictionV3`（改哈希结构会让已发布行重算哈希不一致）。
+  - 2026-10-21：方向改由共识概率决定、置信度仍按冻结行报价计算，`confidence(...)` 阈值一行未改。代价已确认并接受：主盘两侧天然接近，旧启发式多数判 LOW，草稿量低于 v3，属「主盘上没有方向性信息」的真实反映；阶段 D 用 λ 边际重新拉起发布量，不得为改善数字回调阈值。
+  - 2026-10-21：大小球允许降级。冻结行的 `total_line` 上若不足两家报价，只出单侧方向并在摘要写明，不新增跳过原因（V21 允许单侧方向）。
 - 验证记录：
   - 2026-10-21：`mvn -B -ntp -f backend/pom.xml test` 通过，**525 项**（基线 472 项 + 新增 53 项），0 失败 0 错误。新增 `AsianSettlementCalculatorTest` 47 项覆盖半球/整数/四分之一盘 × 主客方向 × 赢/走/输矩阵、拆盘半赢半输、走盘、非法盘口线与净收益换算；`SettlementServiceTest` 新增 5 项覆盖亚盘两条市场落库与 `profit`、单方向缺失只结算另一侧、无绑定快照转人工复核，以及「竞彩预测不触碰亚盘市场」的回归守卫。
   - 2026-10-21：`-Dtest='*Settlement*Test,*Asian*Test,SettlementMapperSqlContractTest'` 通过 **120 项**，含新增 `SettlementMapperSqlContractTest` 4 项。
   - 2026-10-21：`mvn -B -ntp -f backend/pom.xml test` 全量 **529 项**通过（525 + 契约 4 项），0 失败 0 错误。
   - 2026-10-21：`mvn -B -ntp -f backend/pom.xml -Pintegration -Dit.test='SettlementMigrationApplicationIT,SettlementApplicationIT' verify` 在 `postgres:16-alpine` 通过，**共 12 项**（`SettlementMigrationApplicationIT` 8 项 + `SettlementApplicationIT` 4 项），Flyway 日志确认 23 个迁移连续 apply（V22 为 T209 的 Java 迁移，V23 为本轮 SQL 迁移），证明 V23 可在空库 apply、非法市场/状态/收益组合仍被拒绝、`profit` 不可被 UPDATE，且亚盘预测可被任务取到并落库 `profit`。
+  - 2026-10-21（阶段 B）：`-Dtest='AsianMarketMathTest,AsianMarketConsensusAggregatorTest,NovaApiOddsFixtureTest,AsianMarketConsensusFixtureTest,AsianFreezeSnapshotSelectorTest,AsianOddsSnapshotMapperSqlContractTest,BaselinePredictionGenerationServiceTest,ApplicationConfigurationPropertiesTest'` 通过 **73 项**（数学 11 + 聚合 14 + 抓包加载器 4 + 抓包验收 5 + 冻结行 9 + SQL 契约 5 + 生成服务 8 + 配置属性 17）。抓包验收的实测结论：让球三场均 -0.25（参与 4/4/5 家），大小球 2.75 / 3.25 / 3.0（参与 3/3/4 家），6 个市场全部等于平博自身最平衡线；三场最优线上都只有平博一家白名单庄，故走的是「回退全量」路径。
+  - 2026-10-21（阶段 B）：`PredictionImportApplicationIT` 的夹具改为每场两家同线不同价庄家（共识需要 ≥2 家），版本断言改为 v4；`mvn -f backend/pom.xml test-compile` 通过。
+  - 2026-10-21（阶段 B）：`mvn -B -ntp -f backend/pom.xml test` 全量 **585 项**通过（基线 529 + 阶段 B 新增 56），0 失败 0 错误。
+  - 2026-10-21（阶段 B）：`mvn -B -ntp -f backend/pom.xml -Pintegration -Dit.test='AsianOddsAggregationQueryIT,PredictionImportApplicationIT' verify` 在 `postgres:16-alpine` 通过，**集成 9 项**（`AsianOddsAggregationQueryIT` 4 项 + `PredictionImportApplicationIT` 5 项），同次 `verify` 覆盖的 585 项单测亦全绿，`BUILD SUCCESS`。这一步不可省：两条新查询含 `DISTINCT ON` + 多列 `ORDER BY` + 双状态 `JOIN`，注解文本断言查不出语法错误，也查不出「`ORDER BY` 与 `DISTINCT ON` 前缀不匹配」，只有真库会报。
   - 2026-10-21：本轮前端零改动（无 VO 字段、无页面改动），按项目约定不重复运行 `npm --prefix frontend run test/build`；`git diff --check` 通过。
 - 阶段 A 收口说明：
   - 至此「亚盘预测不再停留在 LOCKED」成立：候选查询、结算、收益落库、重算与幂等均有真实库证据。
   - 已知显示缺口（不在阶段 A 范围）：`AdminPredictionStatusQueryServiceImpl` 仍只展示 `HAD`/`HHAD`，亚盘预测结算后后台状态页会显示「HAD 待结算」；`StatisticsCalculator.MarketAccumulator.record` 的 switch 未处理 `PUSH`/`HALF_WIN`/`HALF_LOSS`，亚盘结算会被静默漏计。两项都归阶段 D/E，修复时需同时改 VO 与前端。
+- 阶段 B 收口说明：
+  - 主盘不再是「最后更新的一条快照」，而是跨庄聚合的结果；`asian_odds_snapshots` 的数据契约未变，只改了取数与选择顺序，因此不需要新迁移。
+  - 有意为之的不对称：**方向取自共识概率，置信度按冻结行报价计算**。两者输入不同源，会让「共识方向」与「该行水位偏高」的场次落到低置信——这是正确的，因为计账价就是该行，用公平价算置信度会高估可交易性。
+  - 已知遗留（不在阶段 B 范围）：`bookmaker_count` 未采纳（设计文档 §6 原方案按庄家数加权，实测会让参与家数多但偏离更远的线胜出）；离散度 σ 只计算不入库，阈值过滤归阶段 D。
 
 
 ## 12. 任务记录模板
@@ -2425,6 +2446,7 @@ T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PAR
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
 | 2026-10-21 | T613 | `新增；IN_PROGRESS` | 「亚盘模型 v1 交付」立项并按 T612 改号为 T613（避开 T611 分支已占用的 T612）。分支 `feat/asian-model-v1` 承载阶段 A~E，阶段 A 拆为 A1~A7。依据 `docs/asian-model-design.md` 与 `docs/data-sources-novaapi.md`；项目负责人确认结算采用精度优先方案（新增 `HALF_WIN`/`HALF_LOSS` 与 `settlements.profit`）。 |
+| 2026-10-21 | T613 | `IN_PROGRESS`（阶段 B 收口） | 阶段 B 跨庄聚合与共识主盘完成：逐家去水 → 中位 → 归一，主盘取偏离 50/50 最小的线，线型偏好仅在 ε=0 生效；共识定线 + 真实行冻结解决「只能引用一条快照」的约束；版本升 `t306-asian-baseline-v4`。后端全量 585 项 + PostgreSQL 16 定向集成 9 项通过。已确认代偿：草稿量下降，置信度阈值不改。 |
 | 2026-10-21 | T611 / T612 / `42ece66` | `合并入 master`（维持 `PARTIAL`） | 先前未记录的本地分支 `codex/t611-published-filter`（`d2dd252`、`53d08c8`，16 文件/364 行）经本地实测复核：后端 `mvn test` 472 项、前端 Vitest 75 项全部通过。以 `42ece66` 合并入 `master`，并随 `master` 并入 `feat/asian-model-v1`（冲突仅限本文件头部与编号）。功能代码已完整，唯一缺口是 CI 证据（`gh` 未登录），故不标记 `DONE`。 |
 | 2026-08-13 | T209 / `2822fb2` | `IN_PROGRESS -> DONE` | V22 补齐 V19 对无展示名/无同时间戳 `NAME:`、`SCOPED_NAME:` 遗留记录的清理盲区；仅双向唯一且无引用时删除，歧义和比赛/别名/Provider 映射引用均保留。PR #25 的 Actions #31673553197 PostgreSQL 集成 job 已成功；最终看板提交将触发第二轮 CI，成功后合并。 |
 | 2026-08-12 | T610 | `PARTIAL -> PARTIAL` | 经项目负责人授权实测 V3 生成：候选 3、新增 2、复用 0，批次 `t306-asian-2026-08-12-2424415beb7a8a0f`，1 场因缺已确认完整亚盘跳过。两条均为 DRAFT，未发布。 |

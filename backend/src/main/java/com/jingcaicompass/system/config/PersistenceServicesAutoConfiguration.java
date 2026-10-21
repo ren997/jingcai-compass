@@ -84,6 +84,7 @@ import com.jingcaicompass.match.service.SportteryMatchResultPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.match.service.TeamNormalizationService;
 import com.jingcaicompass.match.service.TeamNormalizationServiceImpl;
+import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.job.AsianOddsSyncJob;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
@@ -412,6 +413,7 @@ public class PersistenceServicesAutoConfiguration {
             PredictionImportService predictionImportService,
             ObjectMapper objectMapper,
             Clock predictionImportClock,
+            AsianOddsAggregationProperties asianOddsAggregationProperties,
             MeterRegistry meterRegistry
     ) {
         return new BaselinePredictionGenerationServiceImpl(
@@ -422,6 +424,7 @@ public class PersistenceServicesAutoConfiguration {
                 predictionImportService,
                 objectMapper,
                 predictionImportClock,
+                asianOddsAggregationProperties,
                 meterRegistry
         );
     }

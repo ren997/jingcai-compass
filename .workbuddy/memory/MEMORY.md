@@ -30,7 +30,7 @@
 ## 已知未收口事项
 
 - `T610` 仍为 `PARTIAL`，剩余 Draft PR + 完整 CI 证据。
-- `T613` 阶段 A 已收口（`e9c2b34`）、阶段 B 已收口（`166e87e`）、阶段 C 已收口（`0bd5450`）、阶段 D 已收口（本次提交），均已推送 `feat/asian-model-v1`；**阶段 E（概率落库与统计）未开始**。
+- `T613` 阶段 A 已收口（`e9c2b34`）、阶段 B 已收口（`166e87e`）、阶段 C 已收口（`0bd5450`）、阶段 D 已收口（`74a5adc`），均已推送 `feat/asian-model-v1`；**阶段 E（概率落库与统计）未开始**。
 - 阶段 E 待办：`StatisticsCalculator.MarketAccumulator.record` 的 switch 未处理 `PUSH`/`HALF_WIN`/`HALF_LOSS`（switch 语句不要求穷尽，会静默漏计）；`AdminPredictionStatusQueryServiceImpl` 硬编码只展示 HAD/HHAD；V24 模型概率列（设计文档 §7 归阶段 E）。
 
 ## 亚盘模型的硬约束（阶段 B、C、D 建立，后续阶段不得违反）

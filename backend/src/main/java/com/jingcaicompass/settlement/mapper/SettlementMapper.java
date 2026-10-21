@@ -10,7 +10,14 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 import org.apache.ibatis.annotations.Update;
 
-/** 版本化结算结果持久化接口。 */
+/**
+ * 版本化结算结果持久化接口。
+ *
+ * <p>候选查询按 {@code prediction_type} 分派到各自的市场集合，市场编码必须与
+ * {@link MarketTypeEnum#marketsFor} 保持同步：只给出单侧方向的亚盘预测仅要求该方向的市场已结算，
+ * 若强制要求两个亚盘市场同时存在，这类预测会被永久判为未结清，在每轮结算任务中空转。
+ * 该约定由 {@code SettlementMapperSqlContractTest} 静态守卫。</p>
+ */
 @Mapper
 public interface SettlementMapper extends BaseMapper<Settlement> {
 
@@ -27,7 +34,7 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
             @Param("marketType") MarketTypeEnum marketType
     );
 
-    /** 查询已锁定、拥有当前确认事实且至少一个市场未结算的预测 ID。 */
+    /** 查询已锁定、拥有当前确认事实且至少一个应结算市场尚未结算的预测 ID。 */
     @Select("""
             SELECT prediction.id
             FROM predictions prediction
@@ -35,20 +42,47 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                 ON fact.match_id = prediction.match_id
                AND fact.is_current = TRUE
             WHERE prediction.prediction_status = 'LOCKED'
-              AND prediction.prediction_type = 'SPORTTERY'
               AND fact.fact_status IN ('FINAL', 'VOID')
               AND (
-                    NOT EXISTS (
-                        SELECT 1 FROM settlements settlement
-                        WHERE settlement.prediction_id = prediction.id
-                          AND settlement.market_type = 'HAD'
-                          AND settlement.is_current = TRUE
+                    (
+                        prediction.prediction_type = 'SPORTTERY'
+                        AND (
+                            NOT EXISTS (
+                                SELECT 1 FROM settlements settlement
+                                WHERE settlement.prediction_id = prediction.id
+                                  AND settlement.market_type = 'HAD'
+                                  AND settlement.is_current = TRUE
+                            )
+                            OR NOT EXISTS (
+                                SELECT 1 FROM settlements settlement
+                                WHERE settlement.prediction_id = prediction.id
+                                  AND settlement.market_type = 'HHAD'
+                                  AND settlement.is_current = TRUE
+                            )
+                        )
                     )
-                    OR NOT EXISTS (
-                        SELECT 1 FROM settlements settlement
-                        WHERE settlement.prediction_id = prediction.id
-                          AND settlement.market_type = 'HHAD'
-                          AND settlement.is_current = TRUE
+                    OR (
+                        prediction.prediction_type = 'ASIAN'
+                        AND (
+                            (
+                                prediction.asian_handicap_pick IS NOT NULL
+                                AND NOT EXISTS (
+                                    SELECT 1 FROM settlements settlement
+                                    WHERE settlement.prediction_id = prediction.id
+                                      AND settlement.market_type = 'ASIAN_HANDICAP'
+                                      AND settlement.is_current = TRUE
+                                )
+                            )
+                            OR (
+                                prediction.total_goals_pick IS NOT NULL
+                                AND NOT EXISTS (
+                                    SELECT 1 FROM settlements settlement
+                                    WHERE settlement.prediction_id = prediction.id
+                                      AND settlement.market_type = 'ASIAN_TOTAL_GOALS'
+                                      AND settlement.is_current = TRUE
+                                )
+                            )
+                        )
                     )
               )
             ORDER BY prediction.id
@@ -56,7 +90,7 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
             """)
     List<Long> selectPendingLockedPredictionIds(@Param("batchSize") int batchSize);
 
-    /** 查询指定比赛已锁定、拥有当前确认事实且至少一个市场未结算的预测 ID。 */
+    /** 查询指定比赛已锁定、拥有当前确认事实且至少一个应结算市场尚未结算的预测 ID。 */
     @Select("""
             SELECT prediction.id
             FROM predictions prediction
@@ -65,20 +99,47 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                AND fact.is_current = TRUE
             WHERE prediction.match_id = #{matchId}
               AND prediction.prediction_status = 'LOCKED'
-              AND prediction.prediction_type = 'SPORTTERY'
               AND fact.fact_status IN ('FINAL', 'VOID')
               AND (
-                    NOT EXISTS (
-                        SELECT 1 FROM settlements settlement
-                        WHERE settlement.prediction_id = prediction.id
-                          AND settlement.market_type = 'HAD'
-                          AND settlement.is_current = TRUE
+                    (
+                        prediction.prediction_type = 'SPORTTERY'
+                        AND (
+                            NOT EXISTS (
+                                SELECT 1 FROM settlements settlement
+                                WHERE settlement.prediction_id = prediction.id
+                                  AND settlement.market_type = 'HAD'
+                                  AND settlement.is_current = TRUE
+                            )
+                            OR NOT EXISTS (
+                                SELECT 1 FROM settlements settlement
+                                WHERE settlement.prediction_id = prediction.id
+                                  AND settlement.market_type = 'HHAD'
+                                  AND settlement.is_current = TRUE
+                            )
+                        )
                     )
-                    OR NOT EXISTS (
-                        SELECT 1 FROM settlements settlement
-                        WHERE settlement.prediction_id = prediction.id
-                          AND settlement.market_type = 'HHAD'
-                          AND settlement.is_current = TRUE
+                    OR (
+                        prediction.prediction_type = 'ASIAN'
+                        AND (
+                            (
+                                prediction.asian_handicap_pick IS NOT NULL
+                                AND NOT EXISTS (
+                                    SELECT 1 FROM settlements settlement
+                                    WHERE settlement.prediction_id = prediction.id
+                                      AND settlement.market_type = 'ASIAN_HANDICAP'
+                                      AND settlement.is_current = TRUE
+                                )
+                            )
+                            OR (
+                                prediction.total_goals_pick IS NOT NULL
+                                AND NOT EXISTS (
+                                    SELECT 1 FROM settlements settlement
+                                    WHERE settlement.prediction_id = prediction.id
+                                      AND settlement.market_type = 'ASIAN_TOTAL_GOALS'
+                                      AND settlement.is_current = TRUE
+                                )
+                            )
+                        )
                     )
               )
             ORDER BY prediction.id
@@ -97,7 +158,7 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                AND settlement.is_current = TRUE
                AND settlement.match_fact_id <> fact.id
             WHERE prediction.prediction_status = 'LOCKED'
-              AND prediction.prediction_type = 'SPORTTERY'
+              AND prediction.prediction_type IN ('SPORTTERY', 'ASIAN')
               AND fact.fact_status IN ('FINAL', 'VOID')
             ORDER BY prediction.id
             LIMIT #{batchSize}
@@ -117,7 +178,7 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                AND settlement.match_fact_id <> fact.id
             WHERE prediction.match_id = #{matchId}
               AND prediction.prediction_status = 'LOCKED'
-              AND prediction.prediction_type = 'SPORTTERY'
+              AND prediction.prediction_type IN ('SPORTTERY', 'ASIAN')
               AND fact.fact_status IN ('FINAL', 'VOID')
             ORDER BY prediction.id
             """)
@@ -138,15 +199,46 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                 ON hhad.prediction_id = prediction.id
                AND hhad.market_type = 'HHAD'
                AND hhad.is_current = TRUE
+            LEFT JOIN settlements asian_handicap
+                ON asian_handicap.prediction_id = prediction.id
+               AND asian_handicap.market_type = 'ASIAN_HANDICAP'
+               AND asian_handicap.is_current = TRUE
+            LEFT JOIN settlements asian_total_goals
+                ON asian_total_goals.prediction_id = prediction.id
+               AND asian_total_goals.market_type = 'ASIAN_TOTAL_GOALS'
+               AND asian_total_goals.is_current = TRUE
             WHERE prediction.prediction_status = 'LOCKED'
-              AND prediction.prediction_type = 'SPORTTERY'
               AND fact.fact_status IN ('FINAL', 'VOID')
               AND fact.created_at <= #{overdueBefore}
               AND (
-                    had.id IS NULL
-                    OR hhad.id IS NULL
-                    OR had.match_fact_id <> fact.id
-                    OR hhad.match_fact_id <> fact.id
+                    (
+                        prediction.prediction_type = 'SPORTTERY'
+                        AND (
+                            had.id IS NULL
+                            OR hhad.id IS NULL
+                            OR had.match_fact_id <> fact.id
+                            OR hhad.match_fact_id <> fact.id
+                        )
+                    )
+                    OR (
+                        prediction.prediction_type = 'ASIAN'
+                        AND (
+                            (
+                                prediction.asian_handicap_pick IS NOT NULL
+                                AND (
+                                    asian_handicap.id IS NULL
+                                    OR asian_handicap.match_fact_id <> fact.id
+                                )
+                            )
+                            OR (
+                                prediction.total_goals_pick IS NOT NULL
+                                AND (
+                                    asian_total_goals.id IS NULL
+                                    OR asian_total_goals.match_fact_id <> fact.id
+                                )
+                            )
+                        )
+                    )
               )
             """)
     long countOverdueSettlementBacklog(@Param("overdueBefore") java.time.Instant overdueBefore);

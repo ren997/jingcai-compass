@@ -746,9 +746,20 @@ prediction_type = ASIAN     → 新路径（ASIAN_HANDICAP / ASIAN_TOTAL_GOALS�
 
 幂等仍由既有机制保证：先按 `(prediction_id, market_type, is_current)` 查已有当前结算，存在即跳过；重跑不产生重复行，`profit` 不变。
 
+**候选查询同样是分派点，且更容易漏。** `SettlementMapper` 的待结算查询原本硬编码
+`prediction_type = 'SPORTTERY'` 且只检查 `HAD`/`HHAD`，只在写入器内部改类型分派是不够的：
+亚盘预测根本不会被任务取到，会永久停在 `LOCKED`，而单测直接调用写入器不会暴露这一点。
+因此五条查询（两条待结算、两条重算、一条积压统计）必须同步按类型分派，亚盘分支只对
+「已给出方向」的市场要求存在当前结算——亚盘允许单侧方向，强制要求两个市场会让这类预测
+每轮空转。市场编码与 `MarketTypeEnum.marketsFor` 的一致性由静态 SQL 契约测试守卫。
+
 ---
 
-## 6. 数据模型增量（V22）
+## 6. 数据模型增量（V24）
+
+> 编号说明：本节原标注为 V22。实际落地时 V22 已被 T209 的 Java 迁移
+> `V22__RepairLegacyNameKeyIdentityCleanup` 占用，V23 被阶段 A 的结算约束迁移
+> `V23__add_asian_settlement_markets_and_profit` 占用，故本节的模型概率列顺延为 **V24**。
 
 `predictions` 表新增列（**不复用竞彩三概率字段**，语义隔离，且不破坏 V21 约束）：
 

@@ -5,9 +5,9 @@
 - 文档版本：v0.6
 - 最后更新：2026-10-21
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A 结算闭环，分支 feat/asian-model-v1）`
-- 下一任务：`T613-A3 新增 V22 迁移（放宽结算市场与状态约束、新增 settlements.profit）`
-- 最近完成增量：`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（代码已合入 master，CI 证据待补）
+- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A 结算闭环已收口，分支 feat/asian-model-v1）`
+- 下一任务：`T613-B 亚盘赔率聚合与主盘选择（逐家去水、中位数聚合、最平衡线）`
+- 最近完成增量：`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）；`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（代码已合入 master，CI 证据待补）
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -2290,11 +2290,13 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - **阶段 A（结算闭环）**
     - [x] A1 扩充 `MarketTypeEnum` 增加 `ASIAN_HANDICAP`、`ASIAN_TOTAL_GOALS`，并同步 `DESC` 与解析。
     - [x] A2 扩充 `SettlementStatusEnum` 增加 `PUSH`、`HALF_WIN`、`HALF_LOSS`（用户已确认取精度优先方案；走盘与作废语义分开，不合并为 `VOID`）。
-    - [ ] A3 新增 V22 迁移：放宽 `ck_settlements_market_type` 与 `ck_settlements_status`，为 `settlements` 增加 `profit NUMERIC(10,4)`，并追加双语 `COMMENT ON`。
+    - [x] A3 新增 V23 迁移（V22 已被 T209 的 Java 迁移 `V22__RepairLegacyNameKeyIdentityCleanup` 占用）：放宽 `ck_settlements_market_type` 与 `ck_settlements_status`，为 `settlements` 增加 `profit NUMERIC(10,4)`，并追加双语 `COMMENT ON`。
     - [x] A4 扩展 `MarketSettlementInputDto` 携带亚盘方向与盘口线；盘口线来源为 `predictions.asian_odds_snapshot_id` 关联的 `asian_odds_snapshots`。
     - [x] A5 实现 `AsianHandicapSettlementCalculator` 与 `AsianTotalGoalsSettlementCalculator`，统一 margin 模型与 `.25`/`.75` 拆盘合并规则。
     - [x] A6 改造 `SettlementWriter`：类型守卫按 `predictionType` 分派；`handicapPick` 非空校验仅对 `SPORTTERY` 生效；`pendingMarkets` 按预测类型取市场集合，避免 `SPORTTERY` 预测误入亚盘市场。
     - [x] A7 结算重算路径 `SettlementRecalculationWriter` 同步支持亚盘市场与 `profit` 版本追加。
+    - [x] A8 结算候选查询按预测类型分派：`SettlementMapper` 五条查询去掉 `prediction_type = 'SPORTTERY'` 独占，亚盘分支只要求「已给出方向的市场」结算完成，并同步逾期积压统计。
+    - [x] A9 真实 PostgreSQL 16 验证：V23 约束与 `profit` 不可变、亚盘预测端到端结算（候选 → 结算 → `profit` → 幂等）。
   - **阶段 B~E**：按 `docs/asian-model-design.md` 第 7 节逐阶段补充，每阶段独立验证后再进入下一阶段。
 - 验证命令（按改动性质分层，不要求每次改动都跑全量集成测试）：
 
@@ -2316,16 +2318,24 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 半球、整数、四分之一盘 × 赢/走/输 的矩阵测试全部通过，半赢半输净收益与 `profit` 落库一致。
   - 亚盘预测不再停留在 `LOCKED`：`ASIAN` 类型可被结算，且重跑幂等不产生重复结算行。
   - `SPORTTERY` 预测的现有结算结果、统计口径与公开页面不因新增市场枚举而改变。
-  - V22 迁移在真实 PostgreSQL 16 空库可正常 apply，且非法 `market_type`/`settlement_status` 仍被约束拒绝。
+  - V23 迁移在真实 PostgreSQL 16 空库可正常 apply，且非法 `market_type`/`settlement_status` 仍被约束拒绝。
 - 执行记录：
   - 2026-10-21：建立交付分支 `feat/asian-model-v1`（由 `codex/t612-asian-settlement` 改名，按项目负责人要求去掉工具名前缀）。范围核实发现三处设计文档未覆盖的阻塞：`settlements.market_type` 的 CHECK 约束需迁移、`SettlementStatusEnum` 无半赢半输、`settlements` 无 `profit` 列；另发现 `pendingMarkets()` 遍历全量枚举会给现有体彩结算带来回归风险。项目负责人确认采用精度优先方案（半赢半输入枚举、收益入列）。
   - 2026-10-21：任务编号由 T612 改为 **T613**。原因：先前未合入 master 的 `codex/t611-published-filter` 分支已占用 T612（公开预测盘口与赔率文案）。该分支经本地实测（后端 472 项、前端 75 项全部通过）确认功能完整，已合并入 `master`（`42ece66`），随后并入本分支；本次冲突仅限本文件头部与编号，代码无冲突。
   - 2026-10-21：完成 A1、A2、A4~A7（纯 Java 部分）。`MarketTypeEnum.marketsFor(predictionType)` 成为「某类预测结算哪些市场」的唯一来源，`SettlementWriter`、`SettlementRecalculationWriter`、`HistoryRecordAssembler` 三处全量遍历改为按类型取集合——这一处若不同步修改，现有竞彩预测会尝试结算亚盘市场并因输入缺失中断。亚盘市场输入由新的 `AsianMarketTermsResolver` 从 `predictions.asian_odds_snapshot_id` 指向的冻结快照解析（含快照归属校验），方向为空的市场跳过而不报错，缺失盘口线或水位转人工复核。`profit` 由 `SettlementMarginSupport.netProfit`（单注本金 1）换算，亚盘结算使用独立规则版本 `t613-v1`，竞彩仍为 `t403-v1`，重算校验改为按允许版本集合判断。`SettlementStatusEnum` 除 `HALF_WIN`/`HALF_LOSS` 外新增 `PUSH`：走盘与比赛作废的净收益虽都为 0，但语义不同，合并会永久丢失信息。
+  - 2026-10-21：完成 A3（迁移编号为 V23：核对 `backend/src/main/java/db/migration` 后发现 V22 已被 T209 的 Java 迁移占用，首次跑集成测试即报 `Found more than one migration with version 22`，故顺延为 V23）。除放宽两个 CHECK、新增 `profit` 外，补了 `ck_settlements_profit_scope`：竞彩市场必须无收益（无冻结水位），亚盘市场必须有收益，把代码中已成立的不变式下沉到库，挡住「半个市场只写了一半字段」。同时 `CREATE OR REPLACE protect_settlement()` 把 `profit` 纳入不可变 `ROW` 比较，否则新列会成为唯一可绕过「只追加」保护的字段。
+  - 2026-10-21：完成 A8，修复本次会话发现的阻塞：`SettlementMapper` 五条查询原本全部硬编码 `prediction_type = 'SPORTTERY'` 且只检查 `HAD`/`HHAD`，**亚盘预测永远不会被结算任务选中**，会永久停在 `LOCKED`。此前单测全绿是因为测试直接调用 `SettlementWriter.settlePrediction(id)`，绕过了候选查询。修法：待结算与积压统计按类型分派，亚盘分支只对「已给出方向」的市场要求存在当前结算（亚盘允许单侧方向，若强制要求两个市场会永久空转）；重算查询改为 `prediction_type IN ('SPORTTERY','ASIAN')`。为避免 SQL 与枚举再次漂移，新增 `SettlementMapperSqlContractTest` 静态断言每个市场编码与方向判定都在查询里。
+  - 2026-10-21：完成 A9，`SettlementApplicationIT` 新增亚盘端到端用例（冻结快照 → 候选 → 结算 → `profit` → 幂等），`SettlementMigrationApplicationIT` 新增亚盘行写入、未知市场/状态与收益组合拒绝、`profit` 不可变三组用例，均在真实 PostgreSQL 16 容器执行。
 - 验证记录：
   - 2026-10-21：`mvn -B -ntp -f backend/pom.xml test` 通过，**525 项**（基线 472 项 + 新增 53 项），0 失败 0 错误。新增 `AsianSettlementCalculatorTest` 47 项覆盖半球/整数/四分之一盘 × 主客方向 × 赢/走/输矩阵、拆盘半赢半输、走盘、非法盘口线与净收益换算；`SettlementServiceTest` 新增 5 项覆盖亚盘两条市场落库与 `profit`、单方向缺失只结算另一侧、无绑定快照转人工复核，以及「竞彩预测不触碰亚盘市场」的回归守卫。
-- 未完成（下一会话继续）：
-  - **A3 未做**：V22 迁移尚未创建。当前代码在真实 PostgreSQL 上写入亚盘结算会被既有 `ck_settlements_market_type`/`ck_settlements_status` 拒绝，因此本分支在 A3 完成前不可用于真实结算；单元测试不触库，故不影响上述验证。
-  - 已知显示缺口（不在阶段 A 范围）：`AdminPredictionStatusQueryServiceImpl` 仍只展示 `HAD`/`HHAD` 两个市场，亚盘预测结算后后台状态页会显示「HAD 待结算」。修复需要同时改 `AdminSettlementMarketVo` 与前端，归入阶段 D/E 一并处理。
+  - 2026-10-21：`-Dtest='*Settlement*Test,*Asian*Test,SettlementMapperSqlContractTest'` 通过 **120 项**，含新增 `SettlementMapperSqlContractTest` 4 项。
+  - 2026-10-21：`mvn -B -ntp -f backend/pom.xml test` 全量 **529 项**通过（525 + 契约 4 项），0 失败 0 错误。
+  - 2026-10-21：`mvn -B -ntp -f backend/pom.xml -Pintegration -Dit.test='SettlementMigrationApplicationIT,SettlementApplicationIT' verify` 在 `postgres:16-alpine` 通过，**共 12 项**（`SettlementMigrationApplicationIT` 8 项 + `SettlementApplicationIT` 4 项），Flyway 日志确认 23 个迁移连续 apply（V22 为 T209 的 Java 迁移，V23 为本轮 SQL 迁移），证明 V23 可在空库 apply、非法市场/状态/收益组合仍被拒绝、`profit` 不可被 UPDATE，且亚盘预测可被任务取到并落库 `profit`。
+  - 2026-10-21：本轮前端零改动（无 VO 字段、无页面改动），按项目约定不重复运行 `npm --prefix frontend run test/build`；`git diff --check` 通过。
+- 阶段 A 收口说明：
+  - 至此「亚盘预测不再停留在 LOCKED」成立：候选查询、结算、收益落库、重算与幂等均有真实库证据。
+  - 已知显示缺口（不在阶段 A 范围）：`AdminPredictionStatusQueryServiceImpl` 仍只展示 `HAD`/`HHAD`，亚盘预测结算后后台状态页会显示「HAD 待结算」；`StatisticsCalculator.MarketAccumulator.record` 的 switch 未处理 `PUSH`/`HALF_WIN`/`HALF_LOSS`，亚盘结算会被静默漏计。两项都归阶段 D/E，修复时需同时改 VO 与前端。
+
 
 ## 12. 任务记录模板
 

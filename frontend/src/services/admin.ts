@@ -230,7 +230,26 @@ export type AdminPredictionPublishResult = {
   publishTime: string;
   lockTime: string;
   predictionHash: string;
-  alreadyPublished: boolean;
+  reused: boolean;
+};
+
+/** 批量发布里单条预测的结果；失败时只有 predictionId 与 errorMessage。 */
+export type AdminBatchPublishItem = {
+  predictionId: number;
+  success: boolean;
+  matchId: number | null;
+  predictionVersion: number | null;
+  predictionStatus: PredictionStatus | null;
+  predictionHash: string | null;
+  reused: boolean;
+  errorMessage: string | null;
+};
+
+export type AdminBatchPublishResult = {
+  requestedCount: number;
+  successCount: number;
+  failureCount: number;
+  results: AdminBatchPublishItem[];
 };
 
 export type AdminResultFact = {
@@ -590,6 +609,18 @@ export function generateAdminBaselinePredictions(lotteryDate: string) {
 export function publishAdminPrediction(predictionId: number) {
   return requestApi<AdminPredictionPublishResult>('/api/admin/predictions/publish', {
     method: 'POST', body: { predictionId }, authenticated: true,
+  });
+}
+
+/**
+ * 一次请求发布多条。
+ *
+ * <p>此前是前端并发逐条调用，同场多条预测会互相争抢 `matches` 行锁；服务端按
+ * (matchId, predictionId) 顺序串行执行，并把逐条结果原样返回。
+ */
+export function publishAdminPredictions(predictionIds: number[]) {
+  return requestApi<AdminBatchPublishResult>('/api/admin/predictions/publish/batch', {
+    method: 'POST', body: { predictionIds }, authenticated: true,
   });
 }
 

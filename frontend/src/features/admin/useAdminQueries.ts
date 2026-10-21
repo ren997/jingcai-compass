@@ -23,7 +23,7 @@ import {
   fetchProviderNormalizationDetail,
   fetchProviderNormalizations,
   recordAdminManualMatchResult,
-  publishAdminPrediction,
+  publishAdminPredictions,
   rejectProviderNormalization,
   reopenProviderNormalization,
   type AdminSyncRunListQuery,
@@ -267,30 +267,50 @@ type DraftPublishOutcome = {
   message: string;
 };
 
-/** 按草稿逐条调用发布接口，并保留每一条成功或失败的结果。 */
+/**
+ * 一次请求发布整批草稿，并保留每一条成功或失败的结果。
+ *
+ * <p>此前是并发逐条调用：同场多条预测会互相争抢 `matches` 行锁。服务端改为按
+ * (matchId, predictionId) 顺序串行执行，因此返回顺序与传入顺序不一致——
+ * 结果必须按 predictionId 回填，按下标对齐会把结果贴到别的比赛上。
+ */
 export function useAdminDraftPredictionPublishAction() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (items: AdminDraftPredictionListItem[]): Promise<DraftPublishOutcome[]> => {
-      const settled = await Promise.allSettled(items.map((item) => publishAdminPrediction(item.predictionId)));
-      return settled.map((result, index) => {
-        const item = items[index];
-        const matchLabel = `${item.match.lotteryMatchNo} · ${item.match.homeTeamName} vs ${item.match.awayTeamName}`;
-        if (result.status === 'fulfilled') {
-          return {
-            predictionId: item.predictionId,
-            matchLabel,
-            success: true,
-            message: result.value.alreadyPublished ? '已按既有发布结果返回。' : `发布成功，当前为第 ${result.value.predictionVersion} 版。`,
-          };
+      const itemsById = new Map(items.map((item) => [item.predictionId, item]));
+      const label = (predictionId: number) => {
+        const item = itemsById.get(predictionId);
+        return item
+          ? `${item.match.lotteryMatchNo} · ${item.match.homeTeamName} vs ${item.match.awayTeamName}`
+          : `预测 #${predictionId}`;
+      };
+      const batch = await publishAdminPredictions(items.map((item) => item.predictionId));
+      const outcomes = batch.results.map((entry) => (entry.success
+        ? {
+          predictionId: entry.predictionId,
+          matchLabel: label(entry.predictionId),
+          success: true,
+          message: entry.reused ? '已按既有发布结果返回。' : `发布成功，当前为第 ${entry.predictionVersion} 版。`,
         }
-        return {
-          predictionId: item.predictionId,
-          matchLabel,
+        : {
+          predictionId: entry.predictionId,
+          matchLabel: label(entry.predictionId),
           success: false,
-          message: result.reason instanceof Error ? result.reason.message : '发布失败，请稍后重试。',
-        };
-      });
+          message: entry.errorMessage ?? '发布失败，请稍后重试。',
+        }));
+
+      // 请求里有、响应里没有的条目按失败处理：静默丢掉会让"全成功"的提示与事实不符
+      const returned = new Set(batch.results.map((entry) => entry.predictionId));
+      items
+        .filter((item) => !returned.has(item.predictionId))
+        .forEach((item) => outcomes.push({
+          predictionId: item.predictionId,
+          matchLabel: label(item.predictionId),
+          success: false,
+          message: '服务端未返回该条结果，请刷新后确认状态。',
+        }));
+      return outcomes;
     },
     onSuccess: async () => {
       await Promise.all([

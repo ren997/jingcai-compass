@@ -98,6 +98,7 @@ import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.job.PredictionLockJob;
 import com.jingcaicompass.prediction.service.BaselinePredictionGenerationService;
 import com.jingcaicompass.prediction.service.BaselinePredictionGenerationServiceImpl;
+import com.jingcaicompass.prediction.service.PredictionBatchPublishService;
 import com.jingcaicompass.prediction.service.PredictionContentHasher;
 import com.jingcaicompass.prediction.service.PredictionImportFileParser;
 import com.jingcaicompass.prediction.service.PredictionImportFileParserImpl;
@@ -454,6 +455,15 @@ public class PersistenceServicesAutoConfiguration {
                 auditLogService,
                 predictionImportClock
         );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    PredictionBatchPublishService predictionBatchPublishService(
+            PredictionMapper predictionMapper,
+            PredictionPublishService predictionPublishService
+    ) {
+        return new PredictionBatchPublishService(predictionMapper, predictionPublishService);
     }
 
     @Bean

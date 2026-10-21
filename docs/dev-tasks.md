@@ -5,9 +5,9 @@
 - 文档版本：v0.6
 - 最后更新：2026-10-21
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A~E 代码全部收口，Draft PR #26 已建，CI 首轮抓出 1 项迁移 IT 回归已修复并重跑）`
+- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A~E 全部完成并 CI 全绿，Draft PR #26 待合并）`
 - 下一任务：`T610 收尾（Draft PR + 完整 CI 证据）`
-- 最近完成增量：`T613 阶段 E 概率落库与统计`（统计口径按产品线隔离 + `PUSH`/`HALF_*` 连续化 + 双 Brier + 前端 tab 与亚盘展示 + 十列进哈希/快照 v4 + 批量发布 + 后台盘口阶梯）；`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）；`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（代码已合入 master，CI 证据待补）
+- 最近完成增量：`T613 收口`（Draft PR #26 CI 全绿：单测 698 项 + 集成 68 项 + 24 个迁移 apply，`BUILD SUCCESS`；顺带修掉 CI 首轮抓出的迁移 IT 版本号硬编码回归）；`T613 阶段 E 概率落库与统计`（统计口径按产品线隔离 + `PUSH`/`HALF_*` 连续化 + 双 Brier + 前端 tab 与亚盘展示 + 十列进哈希/快照 v4 + 批量发布 + 后台盘口阶梯）；`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）；`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（代码已合入 master，CI 证据待补）
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -2275,7 +2275,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T613 亚盘模型 v1 交付（结算闭环到概率统计）
 
-- 状态：`PARTIAL`（阶段 A~E 代码全部完成并通过本地验证；缺 GitHub Actions 与 Draft PR 证据）
+- 状态：`DONE`（阶段 A~E 全部完成；本地 699 项单测 + 前端 85 项通过，Draft PR #26 的 CI 单测 698 项 + 集成 68 项 + 24 个迁移全部通过）
 - 优先级：P0
 - 分支：`feat/asian-model-v1`（一个交付分支承载本任务全部阶段，不按阶段拆分支）
 - 依赖：T206、T306、T401、T403、T404、T610
@@ -2434,6 +2434,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-10-21（阶段 E）：`npm --prefix frontend run test` **16 个测试文件 85 项**通过，`npx tsc -b` 与 `npx vite build` 通过。新增用例覆盖：亚盘方向换算（押客队受让取 `1 − p`）、走盘/半赢半输进统计分母、产品线切换时市场与状态同步重置、`market=ASIAN_TOTAL_GOALS` 无 `type` 的老链接反推、批量发布结果按 ID 回填（服务端故意倒序返回）、盘口阶梯抽屉按需加载与冻结行标注。
   - 2026-10-21（阶段 E）：**集成测试未在本机执行。** `docker` 命令缺失、`//./pipe/docker_engine` 不存在、WSL 被安全策略拦截、无原生 PostgreSQL 监听，Testcontainers 无法启动。`AdminPredictionStatusApplicationIT`（3 项）与 `PredictionImportApplicationIT` 的亚盘用例已写好但未运行；SQL 渲染由 `AdminPredictionStatusMapperSqlContractTest` 静态兜住。这是本阶段唯一缺失的本地证据，需由 CI 补齐。
   - 2026-10-21（阶段 E，Draft PR #26 首个 CI run `39609921647`）：**失败 1 项**，`LegacyNameKeyIdentityCleanupMigrationIT.migrateV22` 断言 `expect: 1 but was: 3`；整次运行 68 项集成测试、67 项通过，失败仅此一项。根因不是「亚盘代码写错」，而是该 IT 用**无 target 的全量迁移**（`flyway(null).migrate()`）并断言「从 V21 迁到 V22 只执行了 1 个迁移」，等于把「V22 之后不再有迁移」写死；阶段 A 加 V23、阶段 E 加 V24 后必然变成 3 个。这是**本分支引入的回归**，但开发机无 Docker 使该 IT 从未被执行，CI 首次运行即抓出——印证「涉及 Flyway 迁移必须真库验证一次」这条约束的必要性。修法：`migrateV22()` 改用 `flyway("22")` 显式限定 target，与同文件 `migrateV19ThroughV21()` 的 `flyway("21")` 用法一致，从此不再耦合未来版本号。同批排查其余三处版本断言：`ProviderNormalizationMigrationApplicationIT`（16/17/19 全程 target 固定，不受影响）、`PostgresApplicationIT:120`（全量迁移用例，本意即验末版本，属「加迁移必须同步改」的既有约定，已在阶段 E 同步为 `"24"`）、`PostgresApplicationIT:122`（二次 migrate 幂等，应为 0）。
+  - 2026-10-21（阶段 E，Draft PR #26 第二轮 CI run `39610773844`）：**全部通过**，`BUILD SUCCESS`。单测 **698 项**、集成测试 **68 项**（含 `AdminPredictionStatusApplicationIT` 3 项与 `PredictionImportApplicationIT` 亚盘用例）全部 0 失败 0 错误；Flyway 日志确认 **24 个迁移**在空库连续 apply 成功。单测数比本地少 1 项（本地 699）——差额即未入库的一次性脚手架 `tools/NovaAsianRunTest`，与功能无关。
 - 阶段 E 收口说明：
   - **本阶段的核心不是「把亚盘加进统计」，而是承认两种产品线的指标不可混算。** 竞彩是三向 Brier + 命中/未中两态，亚盘是二选一 + 走盘 + 半赢半输；混在一个 `had`/`hhad` 结构里，两边的分母、样本和概率含义都不同。因此响应形状从具名字段改为 `markets` 数组，首页固定亚盘，统计页 tab 切换——把「混算」从计算层的问题变成展示层不可能发生的事。
   - **走盘进 Brier 样本、不进命中率分母。** 连续化 outcome 用 `HIT=1 / HALF_WIN=0.75 / PUSH=0.5 / HALF_LOSS=0.25 / MISS=0`，与结算侧 0.25 刻度的 margin 判定同源；`hitRate` 的分母是 `hit+miss+halfWin+halfLoss`（不含 PUSH），另给 `weightedHitRate` 按 0.75/0.25 计分。两个口径都摆出来，是因为任何单一数字都会在走盘比例高时骗人。
@@ -2528,6 +2529,7 @@ T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PAR
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-10-21 | T613 | `PARTIAL -> DONE`（交付收口） | Draft PR **#26** 创建后 CI 首轮（`39609921647`）失败 1 项：`LegacyNameKeyIdentityCleanupMigrationIT.migrateV22` 断言 `expect: 1 but was: 3`。根因是用无 target 的全量迁移并断言「V21→V22 只执行 1 个」，把「V22 之后不再有迁移」写死；V23、V24 落地后必然变 3 个。属本分支引入的回归，但开发机 Docker/WSL/原生 PostgreSQL 均不可用使该 IT 从未被执行，CI 首次运行即抓出。改为 `flyway("22")` 显式限定 target（`4fa12bf`）后第二轮 CI（`39610773844`）**全绿**：单测 698 项 + 集成 68 项 0 失败 0 错误，24 个迁移在空库连续 apply，`BUILD SUCCESS`。至此「代码、测试、文档、完成标准」四类证据齐备，置 `DONE`；合并 Draft PR 属交付动作，按约定不改变任务状态。 |
 | 2026-10-21 | T613 | `IN_PROGRESS -> PARTIAL`（阶段 E 收口） | 阶段 E 概率落库与统计完成（E1~E17）：统计口径按产品线隔离（`markets` 数组替代 `had`/`hhad` 具名字段，首页固定亚盘，统计页 tab 切换）；`PUSH`/`HALF_WIN`/`HALF_LOSS` 进连续化 outcome 与双 Brier，`hitRate` 与 `weightedHitRate` 并列；后台状态页四个市场各自 JOIN、诊断码收缩为 3 个通用码；公开 VO 透出十列；`CanonicalPredictionV4` 与 manifest v4 把十列纳入公开可复算范围（存量 v3 行回落兼容）；批量发布按 `(matchId, predictionId)` 串行防死锁；后台新增盘口阶梯只读接口与抽屉。分支 `feat/asian-model-v1` 领先本地 9 个提交。后端全量 699 项、前端 16 文件 85 项、tsc 与生产构建通过；**集成测试未在本机执行**（Docker/WSL 均不可用），CI 与 Draft PR 为唯一缺失证据，故置 `PARTIAL`。 |
 | 2026-10-21 | T613 | `新增；IN_PROGRESS` | 「亚盘模型 v1 交付」立项并按 T612 改号为 T613（避开 T611 分支已占用的 T612）。分支 `feat/asian-model-v1` 承载阶段 A~E，阶段 A 拆为 A1~A7。依据 `docs/asian-model-design.md` 与 `docs/data-sources-novaapi.md`；项目负责人确认结算采用精度优先方案（新增 `HALF_WIN`/`HALF_LOSS` 与 `settlements.profit`）。 |
 | 2026-10-21 | T613 | `IN_PROGRESS`（阶段 D 收口） | 阶段 D 选择性发布完成：σ（跨庄去水概率总体标准差）阈值 `0.0200` 分市场独立硬否决，两边都超限整场跳过；edge 计算为 `model − market`，按冻结行真实报价算盈亏余量，实测确认**让球主盘 edge 结构性恒为 0**（λ 由该主盘反解，投影回同线残差 `1e-16`），任何正边际都会拒发 100% 让球方向，故改为**影子门槛**——照算、进摘要与指标、不改变生成结果。版本升 `t306-asian-baseline-v6`。新增 5 个指标与跳过原因 `MARKET_DISPERSION_TOO_HIGH`，`toPrediction` 改返回 `Evaluation(dto, skipReason)` 以区分低置信与分歧超限。后端全量 640 项 + PostgreSQL 16 定向集成 5 项通过。 |

@@ -5,10 +5,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.jingcaicompass.history.dto.HistoryListQueryDto;
 import com.jingcaicompass.history.service.HistoryQueryService;
 import com.jingcaicompass.history.service.HistoryQueryServiceImpl;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
+import com.jingcaicompass.settlement.enums.MarketTypeEnum;
 import com.jingcaicompass.settlement.enums.SettlementStatusEnum;
 import com.jingcaicompass.statistics.dto.StatisticsSummaryQueryDto;
+import com.jingcaicompass.statistics.enums.ProbabilityScoringModeEnum;
 import com.jingcaicompass.statistics.service.StatisticsQueryService;
 import com.jingcaicompass.statistics.service.StatisticsQueryServiceImpl;
+import com.jingcaicompass.statistics.vo.MarketHitRateVo;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
@@ -144,15 +148,88 @@ class HistoryStatisticsApplicationIT {
         assertThat(metrics.finalFactCount()).isOne();
         assertThat(metrics.pendingFactCount()).isOne();
         assertThat(metrics.voidFactCount()).isOne();
+        assertThat(metrics.probabilityMetrics().scoringMode())
+                .isEqualTo(ProbabilityScoringModeEnum.THREE_WAY);
         assertThat(metrics.probabilityMetrics().sampleSize()).isOne();
         assertThat(metrics.probabilityMetrics().brierScore()).isEqualByComparingTo("0.875000");
         assertThat(metrics.probabilityMetrics().logLoss()).isEqualByComparingTo("1.386294");
-        assertThat(metrics.had().hitCount()).isZero();
-        assertThat(metrics.had().missCount()).isOne();
-        assertThat(metrics.had().pendingCount()).isOne();
-        assertThat(metrics.had().voidCount()).isOne();
-        assertThat(metrics.hhad().hitCount()).isOne();
+        // 体彩请求只返回 HAD/HHAD 两个市场，顺序固定。
+        assertThat(metrics.markets()).extracting(MarketHitRateVo::marketType)
+                .containsExactly(MarketTypeEnum.HAD, MarketTypeEnum.HHAD);
+        assertThat(metrics.markets().get(0).hitCount()).isZero();
+        assertThat(metrics.markets().get(0).missCount()).isOne();
+        assertThat(metrics.markets().get(0).pendingCount()).isOne();
+        assertThat(metrics.markets().get(0).voidCount()).isOne();
+        assertThat(metrics.markets().get(1).hitCount()).isOne();
         assertThat(summary.byLeague()).hasSize(2);
+    }
+
+    /**
+     * 亚盘锁定预测进入统计时既不 500，也不与体彩混算。
+     *
+     * <p>这是阶段 E 的核心回归：此前 {@code recordMarket} 对每条记录无条件要求 HAD/HHAD，
+     * 亚盘记录必抛 {@code missing HAD history}，统计页与首页同时 500。
+     */
+    @Test
+    void settlesAsianPredictionsIntoPairedBrierAndRoiWithoutMixingSportteryDenominators() {
+        long leagueId = insertLeague("T613 亚盘联赛");
+        insertSportteryLockedFixture(leagueId);
+        long asianPredictionId = insertAsianFixture(leagueId);
+
+        var sporttery = statisticsQueryService.summary(new StatisticsSummaryQueryDto(
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 31),
+                null,
+                null,
+                PredictionTypeEnum.SPORTTERY
+        ));
+        var asian = statisticsQueryService.summary(new StatisticsSummaryQueryDto(
+                LocalDate.of(2026, 7, 1),
+                LocalDate.of(2026, 7, 31),
+                null,
+                null,
+                PredictionTypeEnum.ASIAN
+        ));
+
+        // 隔离：两条产品线各看各的，互不进入对方分母。
+        assertThat(sporttery.appliedFilter().predictionType()).isEqualTo(PredictionTypeEnum.SPORTTERY);
+        assertThat(sporttery.requestedWindow().metrics().markets())
+                .extracting(MarketHitRateVo::marketType)
+                .containsExactly(MarketTypeEnum.HAD, MarketTypeEnum.HHAD);
+        assertThat(asian.appliedFilter().predictionType()).isEqualTo(PredictionTypeEnum.ASIAN);
+        assertThat(asian.requestedWindow().metrics().lockedPredictionCount()).isOne();
+        assertThat(asian.requestedWindow().metrics().markets())
+                .extracting(MarketHitRateVo::marketType)
+                .containsExactly(MarketTypeEnum.ASIAN_HANDICAP, MarketTypeEnum.ASIAN_TOTAL_GOALS);
+
+        var metrics = asian.requestedWindow().metrics();
+        // 让球 HOME_COVER/HIT 与大小球 UNDER/PUSH（推小球即取 1 − 大球概率）各一个样本：
+        // 模型 ((0.60−1)² + (0.60−0.5)²)/2 = 0.085000，市场 0.102500。
+        assertThat(metrics.probabilityMetrics().scoringMode())
+                .isEqualTo(ProbabilityScoringModeEnum.ASIAN_DIRECTION);
+        assertThat(metrics.probabilityMetrics().sampleSize()).isEqualTo(2);
+        assertThat(metrics.probabilityMetrics().brierScore()).isEqualByComparingTo("0.085000");
+        assertThat(metrics.probabilityMetrics().marketBrierScore()).isEqualByComparingTo("0.102500");
+        assertThat(metrics.probabilityMetrics().brierAdvantage()).isEqualByComparingTo("0.017500");
+        assertThat(metrics.probabilityMetrics().modelOutperformsMarket()).isTrue();
+
+        // 收益：HIT +0.92，PUSH 0，两注本金 → roi 0.46；yield 剔除走盘（1 注承担风险）→ 0.92。
+        assertThat(metrics.roi().available()).isTrue();
+        assertThat(metrics.roi().sampleSize()).isEqualTo(2);
+        assertThat(metrics.roi().roi()).isEqualByComparingTo("0.460000");
+        assertThat(metrics.roi().yield()).isEqualByComparingTo("0.920000");
+        assertThat(metrics.roi().unavailableReasons()).isEmpty();
+
+        // 走盘不进命中率分母，半盘状态单独计数。
+        var handicap = metrics.markets().get(0);
+        assertThat(handicap.hitCount()).isOne();
+        assertThat(handicap.settledSampleSize()).isOne();
+        assertThat(handicap.hitRate()).isEqualByComparingTo("1.000000");
+        var totals = metrics.markets().get(1);
+        assertThat(totals.pushCount()).isOne();
+        assertThat(totals.settledSampleSize()).isZero();
+        assertThat(totals.hitRate()).isNull();
+        assertThat(asianPredictionId).isPositive();
     }
 
     @Test
@@ -263,6 +340,103 @@ class HistoryStatisticsApplicationIT {
     private void insertPublishedFixture(long leagueId) {
         long matchId = insertMatch(leagueId, LocalDate.of(2026, 7, 21), "published");
         insertPrediction(matchId, "t507-published", "PUBLISHED", "published");
+    }
+
+    /** 一条已结算的体彩锁定预测，用于验证亚盘统计不会把它算进分母。 */
+    private void insertSportteryLockedFixture(long leagueId) {
+        long matchId = insertMatch(leagueId, LocalDate.of(2026, 7, 25), "sporttery-locked");
+        long factId = insertFact(matchId, 1, null, "FINAL", 1, 0, true);
+        long predictionId = insertPrediction(matchId, "t507-model", "LOCKED", "sporttery-locked");
+        insertSettlement(predictionId, "HAD", 1, null, "HIT", factId, true);
+        insertSettlement(predictionId, "HHAD", 1, null, "MISS", factId, true);
+    }
+
+    /**
+     * 一条带 V24 十列概率的亚盘锁定预测：让球 HIT、大小球 PUSH。
+     *
+     * <p>十列必须成对出现（V24 的 {@code ck_predictions_asian_model_output_pairs}），
+     * 且六个体彩核心列必须为 NULL（V21 的 {@code ck_predictions_sporttery_core_by_type}）。
+     */
+    private long insertAsianFixture(long leagueId) {
+        long matchId = insertMatch(leagueId, LocalDate.of(2026, 7, 26), "asian");
+        long factId = insertFact(matchId, 1, null, "FINAL", 2, 1, true);
+        long snapshotId = insertAsianSnapshot(matchId);
+        long key = nextKey();
+        Instant publishTime = Instant.parse("2026-07-20T10:00:00Z");
+        long predictionId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO predictions (
+                    match_id, model_version, feature_version, generation_batch_id, generation_batch_hash,
+                    prediction_version, analysis_summary, generated_at, prediction_status,
+                    publish_time, lock_time, prediction_hash,
+                    prediction_type, asian_odds_snapshot_id,
+                    asian_handicap_pick, asian_handicap_confidence_level,
+                    total_goals_pick, total_goals_confidence_level,
+                    lambda_home, lambda_away, model_cover_prob, market_cover_prob, edge_cover,
+                    model_over_prob, market_over_prob, edge_over, handicap_dispersion, totals_dispersion
+                )
+                VALUES (?, 't306-asian-baseline-v6', 't306-asian-mainline-v6', ?, ?, 1,
+                        'T613 亚盘统计测试预测', ?, 'LOCKED', ?, ?, ?,
+                        'ASIAN', ?,
+                        'HOME_COVER', 'MEDIUM', 'UNDER', 'MEDIUM',
+                        1.500000, 1.200000, 0.600000, 0.550000, 0.050000,
+                        0.400000, 0.450000, -0.050000, 0.012000, 0.009000)
+                RETURNING id
+                """,
+                Long.class,
+                matchId,
+                "T613-batch-" + key,
+                "a".repeat(64),
+                Timestamp.from(publishTime.minusSeconds(60)),
+                Timestamp.from(publishTime),
+                Timestamp.from(publishTime.plusSeconds(60)),
+                "b".repeat(64),
+                snapshotId
+        );
+        insertAsianSettlement(predictionId, "ASIAN_HANDICAP", "HIT", factId, new BigDecimal("0.9200"));
+        insertAsianSettlement(predictionId, "ASIAN_TOTAL_GOALS", "PUSH", factId, BigDecimal.ZERO);
+        return predictionId;
+    }
+
+    private long insertAsianSnapshot(long matchId) {
+        return jdbcTemplate.queryForObject(
+                """
+                INSERT INTO asian_odds_snapshots (
+                    match_id, provider_code, bookmaker_code, handicap_line, home_odds, away_odds,
+                    total_line, over_odds, under_odds, snapshot_type, captured_at,
+                    provider_updated_at, raw_payload_hash
+                )
+                VALUES (?, 'T613_IT', 'pinnacle', -0.25, 1.9200, 1.9600,
+                        2.75, 1.9500, 1.9500, 'PRE_KICKOFF', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?)
+                RETURNING id
+                """,
+                Long.class,
+                matchId,
+                "c".repeat(64)
+        );
+    }
+
+    private void insertAsianSettlement(
+            long predictionId,
+            String marketType,
+            String status,
+            long factId,
+            BigDecimal profit
+    ) {
+        jdbcTemplate.update(
+                """
+                INSERT INTO settlements (
+                    prediction_id, market_type, settlement_version, settlement_status,
+                    match_fact_id, rule_version, is_current, profit
+                )
+                VALUES (?, ?, 1, ?, ?, 't613-v1', TRUE, ?)
+                """,
+                predictionId,
+                marketType,
+                status,
+                factId,
+                profit
+        );
     }
 
     private long insertLeague(String name) {

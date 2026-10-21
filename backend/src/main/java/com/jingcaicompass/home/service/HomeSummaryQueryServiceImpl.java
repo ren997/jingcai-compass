@@ -4,6 +4,8 @@ import com.jingcaicompass.home.mapper.HomeSummaryMapper;
 import com.jingcaicompass.home.vo.HomeDataFreshnessVo;
 import com.jingcaicompass.home.vo.HomeSummaryVo;
 import com.jingcaicompass.home.vo.HomeTodayOverviewVo;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
+import com.jingcaicompass.statistics.dto.StatisticsSummaryQueryDto;
 import com.jingcaicompass.statistics.service.StatisticsQueryService;
 import com.jingcaicompass.statistics.vo.StatisticsSummaryVo;
 import java.time.Clock;
@@ -50,7 +52,9 @@ public class HomeSummaryQueryServiceImpl implements HomeSummaryQueryService {
         );
 
         // 3) 复用 T507 当前事实与当前结算口径，避免首页另行计算表现指标。
-        StatisticsSummaryVo statistics = statisticsQueryService.summary(null);
+        //    首页固定展示亚盘：竞彩与亚盘的命中/Brier/ROI 口径不可混算，混算会让两组指标都失真。
+        StatisticsSummaryVo statistics = statisticsQueryService.summary(
+                new StatisticsSummaryQueryDto(null, null, null, null, PredictionTypeEnum.ASIAN));
         return new HomeSummaryVo(
                 asOfDate,
                 today,

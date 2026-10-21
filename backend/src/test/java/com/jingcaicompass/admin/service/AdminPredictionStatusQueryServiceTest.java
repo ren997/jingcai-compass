@@ -21,12 +21,16 @@ import com.jingcaicompass.history.vo.MatchResultFactHistoryVo;
 import com.jingcaicompass.history.vo.SettlementVersionVo;
 import com.jingcaicompass.match.enums.MatchResultFactStatusEnum;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.settlement.enums.MarketTypeEnum;
 import com.jingcaicompass.settlement.enums.SettlementStatusEnum;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -100,11 +104,82 @@ class AdminPredictionStatusQueryServiceTest {
 
         assertThat(result.manualAttentionCount()).isEqualTo(1);
         assertThat(result.records()).singleElement().satisfies(item -> {
-            assertThat(item.hadSettlement().stale()).isTrue();
-            assertThat(item.hhadSettlement().currentStatus()).isEqualTo(SettlementStatusEnum.PENDING);
+            assertThat(item.predictionType()).isEqualTo(PredictionTypeEnum.SPORTTERY);
+            assertThat(item.settlementMarkets()).extracting(market -> market.marketType())
+                    .containsExactly(MarketTypeEnum.HAD, MarketTypeEnum.HHAD);
+            assertThat(item.settlementMarkets().get(0).stale()).isTrue();
+            assertThat(item.settlementMarkets().get(1).currentStatus()).isEqualTo(SettlementStatusEnum.PENDING);
             assertThat(item.settlementDiagnostics()).extracting(diagnostic -> diagnostic.code())
-                    .containsExactly("SETTLEMENT_STALE_HAD", "SETTLEMENT_MISSING_HHAD");
+                    .containsExactly("SETTLEMENT_STALE", "SETTLEMENT_MISSING");
+            // 诊断码不再按市场硬编码，市场由 marketType 承载。
+            assertThat(item.settlementDiagnostics()).extracting(diagnostic -> diagnostic.marketType())
+                    .containsExactly(MarketTypeEnum.HAD, MarketTypeEnum.HHAD);
         });
+    }
+
+    /**
+     * 亚盘预测必须按自己的市场集合展示，不能被判成「HAD 待结算」。
+     *
+     * <p>这是本次修复的核心回归：此前 {@code toItem} 固定 {@code markets.get(HAD)}/{@code get(HHAD)}，
+     * 亚盘预测两次都取到 null，已落库的结算退化为 PENDING 并报两条缺失诊断。
+     */
+    @Test
+    void asianPredictionsExposeTheirOwnMarketsAndNeverReportMissingHad() {
+        MatchResultFactHistoryVo currentFact = fact(102L, 2, true, MatchResultFactStatusEnum.FINAL);
+        MarketSettlementHistoryVo settledHandicap = new MarketSettlementHistoryVo(
+                MarketTypeEnum.ASIAN_HANDICAP, SettlementStatusEnum.HIT, true, false,
+                List.of(new SettlementVersionVo(
+                        401L, 1, null, SettlementStatusEnum.HIT, 102L, "t613-v1", true, NOW, new BigDecimal("0.9200"))));
+        when(statusMapper.selectSettlementPredictionIds(any())).thenReturn(List.of(8L));
+        when(statusMapper.countSettlementPredictions(any())).thenReturn(1L);
+        when(statusMapper.countManualSettlementAttention(any())).thenReturn(1L);
+        when(historyRecordAssembler.assemble(List.of(8L))).thenReturn(List.of(asianItem(
+                currentFact, List.of(settledHandicap, pendingMarket(MarketTypeEnum.ASIAN_TOTAL_GOALS))
+        )));
+
+        var result = service.settlements(new AdminSettlementStatusListQueryDto(null, null, null, 1, 20));
+
+        assertThat(result.records()).singleElement().satisfies(item -> {
+            assertThat(item.predictionType()).isEqualTo(PredictionTypeEnum.ASIAN);
+            assertThat(item.settlementMarkets()).extracting(market -> market.marketType())
+                    .containsExactly(MarketTypeEnum.ASIAN_HANDICAP, MarketTypeEnum.ASIAN_TOTAL_GOALS);
+            assertThat(item.settlementMarkets().get(0).currentStatus()).isEqualTo(SettlementStatusEnum.HIT);
+            assertThat(item.settlementMarkets().get(0).currentSettlementPersisted()).isTrue();
+            assertThat(item.settlementMarkets().get(0).profit()).isEqualByComparingTo("0.9200");
+            assertThat(item.settlementMarkets().get(1).currentStatus()).isEqualTo(SettlementStatusEnum.PENDING);
+            // 只报真正缺失的那一个市场，且不能出现任何 HAD 相关诊断。
+            assertThat(item.settlementDiagnostics()).extracting(diagnostic -> diagnostic.code())
+                    .containsExactly("SETTLEMENT_MISSING");
+            assertThat(item.settlementDiagnostics()).extracting(diagnostic -> diagnostic.marketType())
+                    .containsExactly(MarketTypeEnum.ASIAN_TOTAL_GOALS);
+        });
+    }
+
+    @Test
+    void asianWalkOverStatusAndHalfSettlementAreCarriedThroughAsIs() {
+        MatchResultFactHistoryVo currentFact = fact(102L, 2, true, MatchResultFactStatusEnum.FINAL);
+        when(statusMapper.selectOperationalPredictionId(8L)).thenReturn(8L);
+        when(historyRecordAssembler.assemble(List.of(8L))).thenReturn(List.of(asianItem(
+                currentFact,
+                List.of(
+                        new MarketSettlementHistoryVo(MarketTypeEnum.ASIAN_HANDICAP, SettlementStatusEnum.PUSH, true, false,
+                                List.of(new SettlementVersionVo(
+                                        401L, 1, null, SettlementStatusEnum.PUSH, 102L, "t613-v1", true, NOW, BigDecimal.ZERO))),
+                        new MarketSettlementHistoryVo(MarketTypeEnum.ASIAN_TOTAL_GOALS, SettlementStatusEnum.HALF_WIN, true, false,
+                                List.of(new SettlementVersionVo(
+                                        402L, 1, null, SettlementStatusEnum.HALF_WIN, 102L, "t613-v1", true, NOW,
+                                        new BigDecimal("0.4100"))))
+                )
+        )));
+
+        var detail = service.detail(new AdminPredictionStatusDetailQueryDto(8L));
+
+        assertThat(detail.prediction().settlementMarkets()).extracting(market -> market.currentStatus())
+                .containsExactly(SettlementStatusEnum.PUSH, SettlementStatusEnum.HALF_WIN);
+        // 走盘与半赢都是终态，不应产生任何缺失或过期诊断。
+        assertThat(detail.prediction().settlementDiagnostics()).isEmpty();
+        assertThat(detail.settlementMarkets()).extracting(market -> market.currentProfit())
+                .containsExactly(BigDecimal.ZERO, new BigDecimal("0.4100"));
     }
 
     @Test
@@ -150,6 +225,25 @@ class AdminPredictionStatusQueryServiceTest {
 
     private List<MarketSettlementHistoryVo> pendingMarkets() {
         return List.of(pendingMarket(MarketTypeEnum.HAD), pendingMarket(MarketTypeEnum.HHAD));
+    }
+
+    /** 亚盘记录：市场集合只有亚盘两个，且不携带竞彩三概率。 */
+    private HistoryListItemVo asianItem(
+            MatchResultFactHistoryVo currentFact,
+            List<MarketSettlementHistoryVo> markets
+    ) {
+        return new HistoryListItemVo(
+                8L, 2, "t306-asian-baseline-v6", "t306-asian-mainline-v6", PredictionStatusEnum.LOCKED,
+                null, null, null, null, null, null, null, "c".repeat(64),
+                NOW.minusSeconds(3600), NOW.minusSeconds(1800), NOW.minusSeconds(10),
+                new HistoryMatchVo(43L, LocalDate.of(2026, 7, 29), "周三043", 1L,
+                        "英超", "主队", "客队", NOW.plusSeconds(3600)),
+                List.of(currentFact), markets, false,
+                PredictionTypeEnum.ASIAN,
+                AsianHandicapPickEnum.HOME_COVER,
+                TotalGoalsPickEnum.OVER,
+                null
+        );
     }
 
     private MarketSettlementHistoryVo pendingMarket(MarketTypeEnum marketType) {

@@ -22,7 +22,7 @@ class AdminPredictionStatusMapperTest {
         AdminPredictionStatusCriteria criteria = new AdminPredictionStatusCriteria(
                 LocalDate.of(2026, 7, 29), "model-v1", List.of(PredictionStatusEnum.PUBLISHED),
                 List.of(AdminPredictionLockDiagnosticEnum.OVERDUE),
-                List.of(AdminSettlementDiagnosticEnum.SETTLEMENT_STALE_HAD), 20, 20,
+                List.of(AdminSettlementDiagnosticEnum.SETTLEMENT_STALE), 20, 20,
                 Instant.parse("2026-07-29T01:00:00Z")
         );
 

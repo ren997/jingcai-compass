@@ -49,10 +49,8 @@ public class AdminPredictionStatusQueryServiceImpl implements AdminPredictionSta
     );
     private static final List<AdminSettlementDiagnosticEnum> DEFAULT_SETTLEMENT_DIAGNOSTICS = List.of(
             AdminSettlementDiagnosticEnum.AWAITING_RESULT,
-            AdminSettlementDiagnosticEnum.SETTLEMENT_MISSING_HAD,
-            AdminSettlementDiagnosticEnum.SETTLEMENT_MISSING_HHAD,
-            AdminSettlementDiagnosticEnum.SETTLEMENT_STALE_HAD,
-            AdminSettlementDiagnosticEnum.SETTLEMENT_STALE_HHAD
+            AdminSettlementDiagnosticEnum.SETTLEMENT_MISSING,
+            AdminSettlementDiagnosticEnum.SETTLEMENT_STALE
     );
 
     private final AdminPredictionStatusMapper statusMapper;
@@ -138,16 +136,23 @@ public class AdminPredictionStatusQueryServiceImpl implements AdminPredictionSta
     private AdminPredictionStatusItemVo toItem(HistoryListItemVo item, Instant referenceTime) {
         MatchResultFactHistoryVo currentFact = currentFact(item);
         Map<MarketTypeEnum, MarketSettlementHistoryVo> markets = marketsByType(item.settlementMarkets());
-        AdminSettlementMarketVo had = toMarket(markets.get(MarketTypeEnum.HAD), MarketTypeEnum.HAD, currentFact);
-        AdminSettlementMarketVo hhad = toMarket(markets.get(MarketTypeEnum.HHAD), MarketTypeEnum.HHAD, currentFact);
+        // 市场集合按预测类型取，而不是固定 HAD/HHAD：亚盘预测的 `markets` Map 里只有亚盘两个市场，
+        // 按固定 key 取会两次 get 到 null，把已落库的结算显示成 PENDING。
+        List<MarketTypeEnum> expectedMarkets = MarketTypeEnum.marketsFor(item.predictionType());
+        List<AdminSettlementMarketVo> settlementMarkets = new java.util.ArrayList<>(expectedMarkets.size());
+        for (MarketTypeEnum marketType : expectedMarkets) {
+            settlementMarkets.add(toMarket(markets.get(marketType), marketType, currentFact));
+        }
         return new AdminPredictionStatusItemVo(
-                item.predictionId(), item.modelVersion(), item.featureVersion(), item.predictionVersion(), item.predictionStatus(),
+                item.predictionId(), item.predictionType(), item.modelVersion(), item.featureVersion(),
+                item.predictionVersion(), item.predictionStatus(),
                 item.publishTime(), item.lockTime(), item.predictionHash(),
                 new AdminPredictionMatchVo(item.match().matchId(), item.match().lotteryDate(), item.match().lotteryMatchNo(),
                         item.match().leagueName(), item.match().homeTeamName(), item.match().awayTeamName(), item.match().kickoffTime(),
                         null),
-                lockDiagnostics(item, referenceTime), currentFact == null ? null : toFact(currentFact), had, hhad,
-                settlementDiagnostics(currentFact, had, hhad)
+                lockDiagnostics(item, referenceTime), currentFact == null ? null : toFact(currentFact),
+                settlementMarkets,
+                settlementDiagnostics(currentFact, settlementMarkets)
         );
     }
 
@@ -162,33 +167,41 @@ public class AdminPredictionStatusQueryServiceImpl implements AdminPredictionSta
 
     private List<AdminStatusDiagnosticVo> settlementDiagnostics(
             MatchResultFactHistoryVo currentFact,
-            AdminSettlementMarketVo had,
-            AdminSettlementMarketVo hhad
+            List<AdminSettlementMarketVo> markets
     ) {
         if (!isConfirmed(currentFact)) {
             return List.of(diagnostic(
                     AdminSettlementDiagnosticEnum.AWAITING_RESULT.getCode(),
-                    AdminSettlementDiagnosticEnum.AWAITING_RESULT.getDesc()
+                    AdminSettlementDiagnosticEnum.AWAITING_RESULT.getDesc(),
+                    null
             ));
         }
         java.util.ArrayList<AdminStatusDiagnosticVo> result = new java.util.ArrayList<>();
-        addMarketDiagnostics(result, had, AdminSettlementDiagnosticEnum.SETTLEMENT_MISSING_HAD,
-                AdminSettlementDiagnosticEnum.SETTLEMENT_STALE_HAD);
-        addMarketDiagnostics(result, hhad, AdminSettlementDiagnosticEnum.SETTLEMENT_MISSING_HHAD,
-                AdminSettlementDiagnosticEnum.SETTLEMENT_STALE_HHAD);
+        for (AdminSettlementMarketVo market : markets) {
+            addMarketDiagnostics(result, market);
+        }
         return List.copyOf(result);
     }
 
-    private void addMarketDiagnostics(
-            Collection<AdminStatusDiagnosticVo> target,
-            AdminSettlementMarketVo market,
-            AdminSettlementDiagnosticEnum missing,
-            AdminSettlementDiagnosticEnum stale
-    ) {
+    /**
+     * 每个市场各自产出一条诊断，市场类型由 {@code marketType} 承载而不进诊断码。
+     *
+     * <p>只有「该市场存在应有结算」才报缺失：亚盘允许只给出单侧方向，
+     * 未给出方向的市场本就不该有结算，报缺失会让运营永远看到一条无法消除的角标。
+     */
+    private void addMarketDiagnostics(Collection<AdminStatusDiagnosticVo> target, AdminSettlementMarketVo market) {
         if (!market.currentSettlementPersisted()) {
-            target.add(diagnostic(missing.getCode(), missing.getDesc()));
+            target.add(diagnostic(
+                    AdminSettlementDiagnosticEnum.SETTLEMENT_MISSING.getCode(),
+                    market.marketType().getDesc() + " " + AdminSettlementDiagnosticEnum.SETTLEMENT_MISSING.getDesc(),
+                    market.marketType()
+            ));
         } else if (market.stale()) {
-            target.add(diagnostic(stale.getCode(), stale.getDesc()));
+            target.add(diagnostic(
+                    AdminSettlementDiagnosticEnum.SETTLEMENT_STALE.getCode(),
+                    market.marketType().getDesc() + " " + AdminSettlementDiagnosticEnum.SETTLEMENT_STALE.getDesc(),
+                    market.marketType()
+            ));
         }
     }
 
@@ -200,14 +213,15 @@ public class AdminPredictionStatusQueryServiceImpl implements AdminPredictionSta
         if (market == null || !market.currentSettlementPersisted()) {
             return new AdminSettlementMarketVo(
                     market == null ? fallbackMarketType : market.marketType(), SettlementStatusEnum.PENDING,
-                    false, null, null, null, null, false
+                    false, null, null, null, null, false, null
             );
         }
         SettlementVersionVo current = market.versions().stream().filter(SettlementVersionVo::current).findFirst()
                 .orElseThrow(() -> new IllegalStateException("current settlement flag has no version"));
         boolean stale = isConfirmed(currentFact) && !Objects.equals(current.matchFactId(), currentFact.factId());
         return new AdminSettlementMarketVo(market.marketType(), current.settlementStatus(), true,
-                current.settlementId(), current.settlementVersion(), current.matchFactId(), current.ruleVersion(), stale);
+                current.settlementId(), current.settlementVersion(), current.matchFactId(), current.ruleVersion(),
+                stale, current.profit());
     }
 
     private AdminSettlementMarketHistoryVo toMarketHistory(
@@ -217,6 +231,7 @@ public class AdminPredictionStatusQueryServiceImpl implements AdminPredictionSta
         AdminSettlementMarketVo current = toMarket(market, market.marketType(), currentFact);
         return new AdminSettlementMarketHistoryVo(
                 market.marketType(), current.currentStatus(), current.currentSettlementPersisted(), current.stale(),
+                current.profit(),
                 market.versions().stream().map(this::toSettlementVersion).toList()
         );
     }
@@ -224,7 +239,8 @@ public class AdminPredictionStatusQueryServiceImpl implements AdminPredictionSta
     private AdminSettlementVersionVo toSettlementVersion(SettlementVersionVo settlement) {
         return new AdminSettlementVersionVo(
                 settlement.settlementId(), settlement.settlementVersion(), settlement.supersedesSettlementVersion(),
-                settlement.settlementStatus(), settlement.matchFactId(), settlement.ruleVersion(), settlement.current(), settlement.createdAt()
+                settlement.settlementStatus(), settlement.matchFactId(), settlement.ruleVersion(),
+                settlement.current(), settlement.createdAt(), settlement.profit()
         );
     }
 
@@ -255,6 +271,10 @@ public class AdminPredictionStatusQueryServiceImpl implements AdminPredictionSta
 
     private AdminStatusDiagnosticVo diagnostic(String code, String description) {
         return new AdminStatusDiagnosticVo(code, description);
+    }
+
+    private AdminStatusDiagnosticVo diagnostic(String code, String description, MarketTypeEnum marketType) {
+        return new AdminStatusDiagnosticVo(code, description, marketType);
     }
 
     private List<PredictionStatusEnum> operationalStatuses(List<PredictionStatusEnum> requested) {

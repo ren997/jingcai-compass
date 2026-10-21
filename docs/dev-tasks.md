@@ -3,10 +3,10 @@
 ## 0. 文档状态
 
 - 文档版本：v0.6
-- 最后更新：2026-08-12
+- 最后更新：2026-10-21
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无（T610 等待完整 CI / PR 交付）`
-- 下一任务：`T610 亚盘方向预测与标签澄清（完成本轮本地验证后补齐完整 CI / PR 交付）`
+- 当前活动任务：`T612 亚盘模型 v1 交付（阶段 A 结算闭环，分支 feat/asian-model-v1）`
+- 下一任务：`T612-A1 扩充 MarketTypeEnum`；另需处理 `T610` 剩余 CI/PR 收口与未记录的本地分支 `t611-published-filter`（2 个提交未合入 master）
 - 最近完成增量：`T609 公共比赛卡片市场与预测摘要`
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
@@ -77,13 +77,17 @@ gh auth status
 
 - 以当前工作区、Git 提交、任务看板、PR 和 CI 记录恢复“已完成、当前任务、下一步和阻塞”；不要凭旧聊天内容推断。
 - 工作区有未提交改动时先确认其归属并保留，不得用 reset、checkout 或覆盖文件的方式清理。
-- 当前已经位于 `codex/*` 任务分支时继续该分支，不重复建分支；已有 PR 时先用 `gh pr view` 恢复 PR 和检查状态。
+- 当前已经位于 `feat/*` 交付分支时继续该分支，不重复建分支；一个交付分支可承载同一目标下的多个连续任务，同一时刻只允许一个任务为 `IN_PROGRESS`；已有 PR 时先用 `gh pr view` 恢复 PR 和检查状态。
 - 本文件与 Git 不一致时先核对提交和 PR，再修正文档；不得为让状态看起来一致而丢弃代码。
 - `gh` 不存在时先安装 GitHub CLI；`gh auth status` 已成功时复用现有授权，不重复要求登录。只有状态失败时才运行 `gh auth login`，且不得把 Token 写入仓库、配置样例、命令日志或任务记录。
 
-按验收手段决定交付方式：
+按改动性质决定验证强度与交付方式：
 
-- 任务依赖 Testcontainers、PostgreSQL 专有约束/并发、托管 Runner 或任务明确要求 `-Pintegration verify` 时，必须使用独立 `codex/<task>-<topic>` 分支、Draft PR 和 GitHub Actions。
+- 不要求每次改动都跑全量集成测试，按改动性质选择验证强度：
+  - 纯计算、纯映射、纯校验等无数据库依赖的逻辑，用普通单测（`mvn -Dtest=<相关类> test`）验证，秒级完成，不启动容器。
+  - 涉及 Flyway 迁移、PostgreSQL 专有约束或触发器时，必须至少在本机真实 PostgreSQL 16 容器中验证一次该迁移可正常 apply 且约束按预期生效；这是唯一不能用“项目能启动”替代的环节。
+  - 交付分支收尾时执行一次全量 `-Pintegration verify`，并由 GitHub Actions 复验。
+- 任务依赖 PostgreSQL 专有约束/并发、托管 Runner 或任务明确要求 `-Pintegration verify` 时，必须使用 `feat/<topic>` 交付分支、Draft PR 和 GitHub Actions。
 - 全部完成标准可由本机测试满足，且项目负责人未要求发布时，可以只在本地开发，不自动推送或创建 PR。
 - 本机没有 Docker 时只运行普通测试；禁止把共享开发库或云数据库作为 Testcontainers/CI 的替代品。
 
@@ -92,7 +96,7 @@ gh auth status
 ```bash
 git switch master
 git pull --ff-only origin master
-git switch -c codex/tNNN-short-topic
+git switch -c feat/short-topic
 ```
 
 如果本地 `master` 已领先、落后或分叉，先核对提交归属；不得强制重置。实现完成后执行任务专项测试、普通测试和 `git diff --check`，只显式暂存本任务文件，然后提交、推送并创建 Draft PR：
@@ -100,8 +104,8 @@ git switch -c codex/tNNN-short-topic
 ```bash
 git add <本任务文件>
 git commit -m "<type>(<module>): <中文主题>"
-git push -u origin codex/tNNN-short-topic
-gh pr create --draft --base master --head codex/tNNN-short-topic --fill
+git push -u origin feat/short-topic
+gh pr create --draft --base master --head feat/short-topic --fill
 ```
 
 `.github/workflows/backend-integration.yml` 会在相关 PR、`master` push 或手动触发时使用 Java 21、Maven、Docker/Testcontainers 和 PostgreSQL 16 执行：
@@ -114,7 +118,7 @@ mvn -B -ntp -f backend/pom.xml -Pintegration verify
 
 ```bash
 gh pr checks <PR编号> --watch --interval 10
-gh workflow run backend-integration.yml --ref codex/tNNN-short-topic
+gh workflow run backend-integration.yml --ref feat/short-topic
 gh run view <运行编号> --log-failed
 gh run download <运行编号> -n backend-test-reports
 ```
@@ -2206,6 +2210,53 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 连续运行期间无静默丢数。
   - 数据库备份恢复演练通过。
   - 风险提示、免责声明和隐私说明存在。
+
+### T612 亚盘模型 v1 交付（结算闭环到概率统计）
+
+- 状态：`IN_PROGRESS`
+- 优先级：P0
+- 分支：`feat/asian-model-v1`（一个交付分支承载本任务全部阶段，不按阶段拆分支）
+- 依赖：T206、T306、T401、T403、T404、T610
+- 依据文档：`docs/asian-model-design.md`、`docs/data-sources-novaapi.md`
+- 交付物：
+  - **阶段 A 结算闭环**：亚盘让球/大小球两个结算市场、拆盘与半赢半输语义、`SettlementWriter` 按预测类型分派
+  - **阶段 B 聚合与主盘**：逐家去水、中位数聚合、最平衡线选主盘
+  - **阶段 C λ 反解**：以让球与大小球两个市场概率联合反解 `λ_home`/`λ_away`，并回投校验
+  - **阶段 D 选择性发布**：edge 与离散度阈值过滤
+  - **阶段 E 概率落库与统计**：模型概率列、模型/市场双 Brier 并列展示
+- 执行步骤：
+  - **阶段 A（结算闭环）**
+    - [ ] A1 扩充 `MarketTypeEnum` 增加 `ASIAN_HANDICAP`、`ASIAN_TOTAL_GOALS`，并同步 `DESC` 与解析。
+    - [ ] A2 扩充 `SettlementStatusEnum` 增加 `HALF_WIN`、`HALF_LOSS`（用户已确认取精度优先方案）。
+    - [ ] A3 新增 V22 迁移：放宽 `ck_settlements_market_type` 与 `ck_settlements_status`，为 `settlements` 增加 `profit NUMERIC(10,4)`，并追加双语 `COMMENT ON`。
+    - [ ] A4 扩展 `MarketSettlementInputDto` 携带亚盘方向与盘口线；盘口线来源为 `predictions.asian_odds_snapshot_id` 关联的 `asian_odds_snapshots`。
+    - [ ] A5 实现 `AsianHandicapSettlementCalculator` 与 `AsianTotalGoalsSettlementCalculator`，统一 margin 模型与 `.25`/`.75` 拆盘合并规则。
+    - [ ] A6 改造 `SettlementWriter`：类型守卫按 `predictionType` 分派；`handicapPick` 非空校验仅对 `SPORTTERY` 生效；`pendingMarkets` 按预测类型取市场集合，避免 `SPORTTERY` 预测误入亚盘市场。
+    - [ ] A7 结算重算路径 `SettlementRecalculationWriter` 同步支持亚盘市场与 `profit` 版本追加。
+  - **阶段 B~E**：按 `docs/asian-model-design.md` 第 7 节逐阶段补充，每阶段独立验证后再进入下一阶段。
+- 验证命令（按改动性质分层，不要求每次改动都跑全量集成测试）：
+
+  ```bash
+  # 层 1：纯计算与纯校验，秒级，不启动容器（每次改动都跑）
+  mvn -f backend/pom.xml -Dtest='*Settlement*Test,*Asian*Test' test
+
+  # 层 2：涉及迁移或 PostgreSQL 约束时，定向跑相关集成测试
+  mvn -f backend/pom.xml -Pintegration -Dit.test=PostgresApplicationIT verify
+
+  # 层 3：交付分支收尾，全量
+  mvn -B -ntp -f backend/pom.xml -Pintegration verify
+  npm --prefix frontend run test
+  npm --prefix frontend run build
+  git diff --check
+  ```
+
+- 完成标准：
+  - 半球、整数、四分之一盘 × 赢/走/输 的矩阵测试全部通过，半赢半输净收益与 `profit` 落库一致。
+  - 亚盘预测不再停留在 `LOCKED`：`ASIAN` 类型可被结算，且重跑幂等不产生重复结算行。
+  - `SPORTTERY` 预测的现有结算结果、统计口径与公开页面不因新增市场枚举而改变。
+  - V22 迁移在真实 PostgreSQL 16 空库可正常 apply，且非法 `market_type`/`settlement_status` 仍被约束拒绝。
+- 执行记录：
+  - 2026-10-21：建立交付分支 `feat/asian-model-v1`（由 `codex/t612-asian-settlement` 改名，按项目负责人要求去掉工具名前缀）。范围核实发现三处设计文档未覆盖的阻塞：`settlements.market_type` 的 CHECK 约束需迁移、`SettlementStatusEnum` 无半赢半输、`settlements` 无 `profit` 列；另发现 `pendingMarkets()` 遍历全量枚举会给现有体彩结算带来回归风险。项目负责人确认采用精度优先方案（半赢半输入枚举、收益入列）。
 
 ## 12. 任务记录模板
 

@@ -99,6 +99,10 @@ app:
     neighbor-tolerance: ${ASIAN_MODEL_NEIGHBOR_TOLERANCE:0.0400}
     residual-tolerance: ${ASIAN_MODEL_RESIDUAL_TOLERANCE:0.0010}
     max-goals: ${ASIAN_MODEL_MAX_GOALS:24}
+    # 跨庄分歧上限：超过则只砍该市场的方向，两个市场都超限才整场跳过。
+    dispersion-tolerance: ${ASIAN_MODEL_DISPERSION_TOLERANCE:0.0200}
+    # 影子门槛的安全边际：required = 1/冻结报价 + 本值。本阶段只记录不拦截。
+    safety-margin: ${ASIAN_MODEL_SAFETY_MARGIN:0.0100}
   tasks:
     enabled: ${SYNC_TASKS_ENABLED:false}
     sporttery-pool:

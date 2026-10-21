@@ -24,7 +24,10 @@ public enum BaselinePredictionSkipReasonEnum {
             "反解 λ 后主盘残差或邻线偏差超限，两个市场定价不自洽"),
     NO_ASIAN_SNAPSHOT_ON_CONSENSUS_LINE("NO_ASIAN_SNAPSHOT_ON_CONSENSUS_LINE",
             "共识主盘线上没有让球与大小球完整可冻结的真实快照"),
-    LOW_CONFIDENCE_ASIAN_MARKETS("LOW_CONFIDENCE_ASIAN_MARKETS", "亚盘让球和大小球均为低置信度，不生成草稿");
+    MARKET_DISPERSION_TOO_HIGH("MARKET_DISPERSION_TOO_HIGH",
+            "让球与大小球的共识离散度均超上限，不生成草稿"),
+    LOW_CONFIDENCE_ASIAN_MARKETS("LOW_CONFIDENCE_ASIAN_MARKETS",
+            "亚盘让球和大小球均无可发布方向（低置信度，或仅一边因跨庄分歧被否决）");
 
     public static final String DESC =
             "预测基线跳过原因：NOT_SCHEDULED-非未开赛，KICKOFF_PASSED-已开赛，"
@@ -34,7 +37,8 @@ public enum BaselinePredictionSkipReasonEnum {
                     + "INSUFFICIENT_ASIAN_CONSTRAINTS-缺大小球主盘（λ 反解只够一个约束），"
                     + "INCONSISTENT_ASIAN_MARKETS-两个市场定价不自洽，"
                     + "NO_ASIAN_SNAPSHOT_ON_CONSENSUS_LINE-共识线上无完整快照，"
-                    + "LOW_CONFIDENCE_ASIAN_MARKETS-两项亚盘预测均低置信度";
+                    + "MARKET_DISPERSION_TOO_HIGH-两市场跨庄分歧均超限，"
+                    + "LOW_CONFIDENCE_ASIAN_MARKETS-两项亚盘预测均无可发布方向";
 
     private static final Map<String, BaselinePredictionSkipReasonEnum> CODE_MAP = Stream.of(values())
             .collect(Collectors.toMap(BaselinePredictionSkipReasonEnum::getCode, Function.identity()));

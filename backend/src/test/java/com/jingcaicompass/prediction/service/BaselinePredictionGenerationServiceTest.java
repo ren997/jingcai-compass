@@ -59,14 +59,20 @@ class BaselinePredictionGenerationServiceTest {
     @Mock
     private PredictionImportService predictionImportService;
 
+    private final SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
     private PredictionImportFileParser parser;
     private BaselinePredictionGenerationService service;
 
     @BeforeEach
     void setUp() {
+        parser = new PredictionImportFileParserImpl(new ObjectMapper().findAndRegisterModules());
+        service = serviceWith(AsianModelProperties.defaults());
+    }
+
+    /** 复用同一批 mock，只换模型阈值；断言 meter 需要固定注册表，故不在 setUp 里 new。 */
+    private BaselinePredictionGenerationService serviceWith(AsianModelProperties properties) {
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
-        parser = new PredictionImportFileParserImpl(objectMapper);
-        service = new BaselinePredictionGenerationServiceImpl(
+        return new BaselinePredictionGenerationServiceImpl(
                 matchMapper,
                 sportteryPoolSnapshotMapper,
                 asianOddsSnapshotMapper,
@@ -75,8 +81,8 @@ class BaselinePredictionGenerationServiceTest {
                 objectMapper,
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 AsianOddsAggregationProperties.defaults(),
-                AsianModelProperties.defaults(),
-                new SimpleMeterRegistry()
+                properties,
+                meterRegistry
         );
     }
 
@@ -99,7 +105,7 @@ class BaselinePredictionGenerationServiceTest {
             assertThat(prediction.matchId()).isEqualTo(101L);
             assertThat(prediction.modelVersion()).isEqualTo(BaselinePredictionGenerationServiceImpl.MODEL_VERSION);
             assertThat(prediction.featureVersion()).isEqualTo(BaselinePredictionGenerationServiceImpl.FEATURE_VERSION);
-            assertThat(prediction.modelVersion()).isEqualTo("t306-asian-baseline-v5");
+            assertThat(prediction.modelVersion()).isEqualTo("t306-asian-baseline-v6");
             assertThat(prediction.homeWinProb()).isNull();
             assertThat(prediction.drawProb()).isNull();
             assertThat(prediction.awayWinProb()).isNull();
@@ -113,7 +119,7 @@ class BaselinePredictionGenerationServiceTest {
             assertThat(prediction.totalGoalsConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.MEDIUM);
             assertThat(prediction.confidenceLevel()).isNull();
             assertThat(prediction.analysisSummary())
-                    .contains("亚盘 λ 反解 v5", "让球主盘 -0.50", "回退全量 2 家", "冻结报价 1.90/1.90",
+                    .contains("亚盘 λ 反解 v6", "让球主盘 -0.50", "回退全量 2 家", "冻结报价 1.90/1.90",
                             "反解 λ 主", "模型概率", "不构成独立校准概率");
             assertThat(prediction.analysisSummary().length()).isLessThan(1000);
             assertThat(prediction.generatedAt()).isEqualTo(LATEST_CAPTURE);
@@ -146,27 +152,30 @@ class BaselinePredictionGenerationServiceTest {
     @Test
     void derivesDirectionFromModelProjectionWhileConfidenceStillUsesFrozenRow() {
         MatchEntity match = scheduledMatch(103L);
-        List<AsianOddsSnapshot> rows = List.of(
-                // 可冻结的两家都偏向客队（去水概率 < 0.5），但只有 LOW 置信度才不出方向。
-                row(701L, 103L, "BOOK_A", "-0.25", "1.98", "1.82", "2.50", "1.95", "1.95", LATEST_CAPTURE),
-                row(702L, 103L, "BOOK_B", "-0.25", "1.98", "1.82", "2.50", "1.95", "1.95", EARLIER_CAPTURE),
-                // 大小球残缺的行不参与冻结，但参与让球共识，把中位数拉到主队一侧。
-                row(703L, 103L, "BOOK_C", "-0.25", "1.55", "2.40", null, null, null, EARLIER_CAPTURE),
-                row(704L, 103L, "BOOK_D", "-0.25", "1.50", "2.45", null, null, null, EARLIER_CAPTURE));
-        stubMarkets(match, rows, rows);
+        // 共识 0.515 偏向主队（三家去水 0.485 / 0.515 / 0.525，σ≈0.017 未超限），
+        // 但唯一可冻结的 BOOK_A 自身水位 0.485 偏向客队 —— 方向必须跟模型走，置信度看这一行的报价。
+        List<AsianOddsSnapshot> handicapRows = List.of(
+                row(701L, 103L, "BOOK_A", "-0.25", "2.06", "1.94", "2.50", "1.94", "1.94", LATEST_CAPTURE),
+                // 没有大小球的两个水位，因此不参与冻结，只把让球中位数拉到主队一侧。
+                row(702L, 103L, "BOOK_B", "-0.25", "1.94", "2.06", null, null, null, EARLIER_CAPTURE),
+                row(703L, 103L, "BOOK_C", "-0.25", "1.90", "2.10", null, null, null, EARLIER_CAPTURE));
+        List<AsianOddsSnapshot> totalsRows = List.of(
+                row(704L, 103L, "BOOK_A", "-0.25", "2.06", "1.94", "2.50", "1.94", "1.94", LATEST_CAPTURE),
+                row(705L, 103L, "BOOK_B", "-0.25", "1.94", "2.06", "2.50", "1.94", "1.94", EARLIER_CAPTURE));
+        stubMarkets(match, handicapRows, totalsRows);
         stubImport();
 
         service.generateAndImport(LOTTERY_DATE, "admin");
 
         PredictionImportDto prediction = capturedPrediction();
-        // 共识 0.5433 偏向主队；冻结行自身却偏向客队 —— 方向必须跟模型概率走。
         assertThat(prediction.asianHandicapPick()).isEqualTo(AsianHandicapPickEnum.HOME_COVER);
         assertThat(prediction.asianHandicapConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.MEDIUM);
+        // 1.94/1.94 完全对称 → 大小球信号为 0 → 低置信度不出方向。
         assertThat(prediction.totalGoalsPick()).isNull();
         assertThat(prediction.analysisSummary())
-                .contains("共识概率 主 0.5433")
+                .contains("共识概率 主 0.5150")
                 // λ 是在主盘上反解出来的，回投必然复现共识，因此模型概率与共识概率在小数点后四位一致。
-                .contains("模型概率 0.5433");
+                .contains("模型概率 0.5150");
     }
 
     @Test
@@ -232,11 +241,12 @@ class BaselinePredictionGenerationServiceTest {
 
         PredictionImportDto prediction = capturedPrediction();
         assertThat(prediction.analysisSummary())
-                .contains("亚盘 λ 反解 v5", "反解 λ 主", "模型概率")
+                .contains("亚盘 λ 反解 v6", "反解 λ 主", "模型概率", "影子门槛")
                 .contains("大小球主盘 2.50，该行未报主盘线")
                 .contains("邻线最大偏差");
         // predictions.analysis_summary 是 varchar(1000)，超长会在导入时抛 SQL 异常并整批回滚。
-        assertThat(prediction.analysisSummary().length()).isLessThan(1000);
+        // 收紧到 900 是为了让阶段 E 再往摘要里加字段时在这里撞墙，而不是在集成测试里整批回滚。
+        assertThat(prediction.analysisSummary().length()).isLessThan(900);
     }
 
     @Test
@@ -304,6 +314,215 @@ class BaselinePredictionGenerationServiceTest {
         assertThat(result.skippedByReason())
                 .containsEntry(BaselinePredictionSkipReasonEnum.NOT_SCHEDULED, 1)
                 .containsEntry(BaselinePredictionSkipReasonEnum.KICKOFF_PASSED, 1);
+    }
+
+    @Test
+    void keepsDirectionWhenDispersionEqualsTolerance() {
+        MatchEntity match = scheduledMatch(112L);
+        // 四家让球 -0.50：两家去水 0.50、两家 0.54 → 均值 0.52，总体标准差恰为 0.020000。
+        // 阈值判定必须用「严格大于」，等于上限时放行。
+        List<AsianOddsSnapshot> handicapRows = List.of(
+                row(1401L, 112L, "BOOK_A", "-0.50", "1.90", "1.90", null, null, null, LATEST_CAPTURE),
+                row(1402L, 112L, "BOOK_B", "-0.50", "1.90", "1.90", null, null, null, EARLIER_CAPTURE),
+                row(1403L, 112L, "BOOK_C", "-0.50", "1.7250", "2.0250", "2.50", "1.80", "2.00", LATEST_CAPTURE),
+                row(1404L, 112L, "BOOK_D", "-0.50", "1.7250", "2.0250", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
+        List<AsianOddsSnapshot> totalsRows = List.of(handicapRows.get(2), handicapRows.get(3));
+        stubMarkets(match, handicapRows, totalsRows);
+        stubImport();
+
+        service.generateAndImport(LOTTERY_DATE, "admin");
+
+        PredictionImportDto prediction = capturedPrediction();
+        assertThat(prediction.asianHandicapPick()).isEqualTo(AsianHandicapPickEnum.HOME_COVER);
+        assertThat(prediction.asianHandicapConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.HIGH);
+        assertThat(prediction.analysisSummary())
+                .contains("σ 0.0200")
+                .doesNotContain("跨庄分歧过大");
+        assertThat(meterCount("jingcai.prediction.asian.dispersion",
+                "market", "handicap", "outcome", "within", "source", "fallback")).isEqualTo(1d);
+    }
+
+    @Test
+    void dropsOnlyHandicapWhenDispersionSlightlyExceedsTolerance() {
+        MatchEntity match = scheduledMatch(113L);
+        // 把 0.540000 换成 0.540541（1.70/2.00）→ σ 0.020271，刚过上限。分市场独立判定：
+        // 只砍让球方向，大小球照常输出，且方向与置信度必须成对置空。
+        List<AsianOddsSnapshot> handicapRows = List.of(
+                row(1501L, 113L, "BOOK_A", "-0.50", "1.90", "1.90", null, null, null, LATEST_CAPTURE),
+                row(1502L, 113L, "BOOK_B", "-0.50", "1.90", "1.90", null, null, null, EARLIER_CAPTURE),
+                row(1503L, 113L, "BOOK_C", "-0.50", "1.70", "2.00", "2.50", "1.80", "2.00", LATEST_CAPTURE),
+                row(1504L, 113L, "BOOK_D", "-0.50", "1.70", "2.00", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
+        List<AsianOddsSnapshot> totalsRows = List.of(handicapRows.get(2), handicapRows.get(3));
+        stubMarkets(match, handicapRows, totalsRows);
+        stubImport();
+
+        service.generateAndImport(LOTTERY_DATE, "admin");
+
+        PredictionImportDto prediction = capturedPrediction();
+        assertThat(prediction.asianHandicapPick()).isNull();
+        assertThat(prediction.asianHandicapConfidenceLevel()).isNull();
+        assertThat(prediction.totalGoalsPick()).isEqualTo(TotalGoalsPickEnum.OVER);
+        assertThat(prediction.totalGoalsConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.MEDIUM);
+        assertThat(prediction.analysisSummary()).contains("方向因跨庄分歧过大不发布");
+        assertThat(meterCount("jingcai.prediction.asian.dispersion",
+                "market", "handicap", "outcome", "exceeded", "source", "fallback")).isEqualTo(1d);
+    }
+
+    @Test
+    void rejectsOnlyTotalsWhenHandicapDispersionIsWithinTolerance() {
+        MatchEntity match = scheduledMatch(114L);
+        // 让球四家完全同价（σ=0，HIGH 置信）；大小球 2.50 档两家 1.80/2.20、两家 2.20/1.80（σ=0.05）。
+        // 反向验证分市场独立：这一场是大小球被砍、让球保留。
+        List<AsianOddsSnapshot> rows = List.of(
+                row(1601L, 114L, "BOOK_A", "-0.50", "1.7250", "2.0250", "2.50", "1.80", "2.20", LATEST_CAPTURE),
+                row(1602L, 114L, "BOOK_B", "-0.50", "1.7250", "2.0250", "2.50", "1.80", "2.20", EARLIER_CAPTURE),
+                row(1603L, 114L, "BOOK_C", "-0.50", "1.7250", "2.0250", "2.50", "2.20", "1.80", EARLIER_CAPTURE),
+                row(1604L, 114L, "BOOK_D", "-0.50", "1.7250", "2.0250", "2.50", "2.20", "1.80", EARLIER_CAPTURE));
+        stubMarkets(match, rows, rows);
+        stubImport();
+
+        service.generateAndImport(LOTTERY_DATE, "admin");
+
+        PredictionImportDto prediction = capturedPrediction();
+        assertThat(prediction.asianHandicapPick()).isEqualTo(AsianHandicapPickEnum.HOME_COVER);
+        assertThat(prediction.asianHandicapConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.HIGH);
+        assertThat(prediction.totalGoalsPick()).isNull();
+        assertThat(prediction.totalGoalsConfidenceLevel()).isNull();
+    }
+
+    @Test
+    void skipsWholeMatchWhenBothMarketsExceedDispersion() {
+        MatchEntity match = scheduledMatch(115L);
+        // 两个市场都是 0.55 / 0.45 各半 → σ 均为 0.05，两个方向都没了。
+        List<AsianOddsSnapshot> rows = List.of(
+                row(1701L, 115L, "BOOK_A", "-0.50", "1.80", "2.20", "2.50", "1.80", "2.20", LATEST_CAPTURE),
+                row(1702L, 115L, "BOOK_B", "-0.50", "1.80", "2.20", "2.50", "1.80", "2.20", EARLIER_CAPTURE),
+                row(1703L, 115L, "BOOK_C", "-0.50", "2.20", "1.80", "2.50", "2.20", "1.80", EARLIER_CAPTURE),
+                row(1704L, 115L, "BOOK_D", "-0.50", "2.20", "1.80", "2.50", "2.20", "1.80", EARLIER_CAPTURE));
+        stubMarkets(match, rows, rows);
+
+        BaselinePredictionGenerationVo result = service.generateAndImport(LOTTERY_DATE, "admin");
+
+        verify(predictionImportService, never()).importFile(any());
+        assertThat(result.generatedCount()).isZero();
+        assertThat(result.skippedByReason()).containsEntry(
+                BaselinePredictionSkipReasonEnum.MARKET_DISPERSION_TOO_HIGH, 1);
+    }
+
+    @Test
+    void skipsWholeMatchWhenTotalsJudgmentLineIsMissingAndHandicapDispersionExceeds() {
+        MatchEntity match = scheduledMatch(118L);
+        // 让球 σ 超限；冻结行报的大小球线 3.00 在全场没有任何共识（大小球主盘在 2.50），
+        // 因此两个市场都没有可发布方向。此时必须归因于分歧，而不能漏成 LOW_CONFIDENCE。
+        List<AsianOddsSnapshot> handicapRows = List.of(
+                row(2001L, 118L, "BOOK_A", "-0.50", "1.80", "2.20", "3.00", "2.50", "1.55", LATEST_CAPTURE),
+                row(2002L, 118L, "BOOK_B", "-0.50", "1.80", "2.20", "3.00", "2.50", "1.55", EARLIER_CAPTURE),
+                row(2003L, 118L, "BOOK_C", "-0.50", "2.20", "1.80", "3.00", "2.55", "1.52", EARLIER_CAPTURE),
+                row(2004L, 118L, "BOOK_D", "-0.50", "2.20", "1.80", "3.00", "2.55", "1.52", EARLIER_CAPTURE));
+        List<AsianOddsSnapshot> totalsRows = List.of(
+                row(2101L, 118L, "BOOK_A", "-0.50", "1.80", "2.20", "2.50", "1.85", "1.95", LATEST_CAPTURE),
+                row(2102L, 118L, "BOOK_B", "-0.50", "1.80", "2.20", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
+        stubMarkets(match, handicapRows, totalsRows);
+
+        BaselinePredictionGenerationVo result = service.generateAndImport(LOTTERY_DATE, "admin");
+
+        verify(predictionImportService, never()).importFile(any());
+        assertThat(result.skippedByReason()).containsEntry(
+                BaselinePredictionSkipReasonEnum.MARKET_DISPERSION_TOO_HIGH, 1);
+    }
+
+    @Test
+    void prefersConfidenceReasonWhenOnlyOneMarketIsRejectedByDispersion() {
+        MatchEntity match = scheduledMatch(117L);
+        // 让球对称 1.90/1.90 → 置信度 LOW（没有方向，但不是分歧问题）；大小球 σ=0.05 超限。
+        // 两个方向都没了，但归因必须是低置信度，否则阈值调参会把低置信场次算进分歧率。
+        List<AsianOddsSnapshot> rows = List.of(
+                row(1901L, 117L, "BOOK_A", "-0.50", "1.90", "1.90", "2.50", "1.80", "2.20", LATEST_CAPTURE),
+                row(1902L, 117L, "BOOK_B", "-0.50", "1.90", "1.90", "2.50", "1.80", "2.20", EARLIER_CAPTURE),
+                row(1903L, 117L, "BOOK_C", "-0.50", "1.90", "1.90", "2.50", "2.20", "1.80", EARLIER_CAPTURE),
+                row(1904L, 117L, "BOOK_D", "-0.50", "1.90", "1.90", "2.50", "2.20", "1.80", EARLIER_CAPTURE));
+        stubMarkets(match, rows, rows);
+
+        BaselinePredictionGenerationVo result = service.generateAndImport(LOTTERY_DATE, "admin");
+
+        verify(predictionImportService, never()).importFile(any());
+        assertThat(result.skippedByReason())
+                .containsEntry(BaselinePredictionSkipReasonEnum.LOW_CONFIDENCE_ASIAN_MARKETS, 1)
+                .doesNotContainKey(BaselinePredictionSkipReasonEnum.MARKET_DISPERSION_TOO_HIGH);
+    }
+
+    @Test
+    void shadowGateRecordsFailureWithoutBlockingGeneration() {
+        MatchEntity match = scheduledMatch(116L);
+        // 1.85/1.95 去水 0.513158 → MEDIUM，两个市场都有方向；门槛必然不通过但仍要生成草稿。
+        List<AsianOddsSnapshot> rows = List.of(
+                row(1801L, 116L, "BOOK_A", "-0.50", "1.85", "1.95", "2.50", "1.80", "2.00", LATEST_CAPTURE),
+                row(1802L, 116L, "BOOK_B", "-0.50", "1.85", "1.95", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
+        stubMarkets(match, rows, rows);
+        stubImport();
+
+        BaselinePredictionGenerationVo result = service.generateAndImport(LOTTERY_DATE, "admin");
+
+        assertThat(result.generatedCount()).isEqualTo(1);
+        assertThat(gateCount("handicap", "fail")).isEqualTo(1d);
+        assertThat(gateCount("totals", "fail")).isEqualTo(1d);
+        assertThat(gateCount("handicap", "pass")).isZero();
+        // 让球的 edge 结构性恒为 0：λ 由该主盘反解，再投影回同一条线必然相等。
+        assertThat(meterRegistry.get("jingcai.prediction.asian.gate.edge")
+                .tag("market", "handicap").summary().totalAmount()).isZero();
+    }
+
+    @Test
+    void shadowGateEdgeIsNonZeroOnlyWhenFrozenTotalsLineDiffersFromMain() {
+        MatchEntity match = scheduledMatch(119L);
+        // 冻结行的让球在 -0.50，但它报的大小球线是 3.00，而大小球主盘在更平衡的 2.50。
+        // 这是 edge 唯一能非零的情形：λ 是在 2.50 上反解的，投影到 3.00 与市场共识不再相等。
+        List<AsianOddsSnapshot> handicapRows = List.of(
+                row(2201L, 119L, "BOOK_A", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", LATEST_CAPTURE),
+                row(2202L, 119L, "BOOK_B", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", EARLIER_CAPTURE),
+                row(2203L, 119L, "BOOK_C", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE),
+                row(2204L, 119L, "BOOK_D", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
+        stubMarkets(match, handicapRows, handicapRows);
+        stubImport();
+
+        service.generateAndImport(LOTTERY_DATE, "admin");
+
+        // 让球在主盘线上没有方向（对称报价 → LOW），因此只有大小球记了 edge。
+        // 0.78% 的偏差来自独立泊松尾部更薄，不是 alpha，摘要里也只写「仅记录」。
+        double totalsEdge = meterRegistry.get("jingcai.prediction.asian.gate.edge")
+                .tag("market", "totals").summary().totalAmount();
+        assertThat(totalsEdge).isNotZero();
+        assertThat(totalsEdge).isGreaterThan(1e-3d);
+    }
+
+    @Test
+    void summaryContainsShadowGateWordingWithoutPromiseLanguage() {
+        MatchEntity match = scheduledMatch(120L);
+        List<AsianOddsSnapshot> rows = List.of(
+                row(2301L, 120L, "BOOK_A", "-0.50", "1.85", "1.95", "2.50", "1.80", "2.00", LATEST_CAPTURE),
+                row(2302L, 120L, "BOOK_B", "-0.50", "1.85", "1.95", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
+        stubMarkets(match, rows, rows);
+        stubImport();
+
+        service.generateAndImport(LOTTERY_DATE, "admin");
+
+        assertThat(capturedPrediction().analysisSummary())
+                .contains("edge ", "盈亏余量", "影子门槛", "本版本不据其筛选")
+                // 导入侧的禁词表命中即整批回滚，这里做回归守卫。
+                .doesNotContain("稳赚", "无风险", "保本", "包赢", "必赚");
+    }
+
+    private double gateCount(String market, String outcome) {
+        // 用 find 而不是 get：某个 outcome 没有样本时 get 会抛 MeterNotFoundException，
+        // 而「通过数为 0」本身就是本阶段要断言的事实。
+        var counter = meterRegistry.find("jingcai.prediction.asian.gate")
+                .tags("market", market, "outcome", outcome).counter();
+        return counter == null ? 0d : counter.count();
+    }
+
+    private double meterCount(String name, String... tags) {
+        var counter = meterRegistry.find(name).tags(tags).counter();
+        return counter == null ? 0d : counter.count();
     }
 
     private void stubMarkets(

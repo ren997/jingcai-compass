@@ -54,6 +54,8 @@ class ApplicationConfigurationPropertiesTest {
                     "app.asian-model.neighbor-tolerance=0.0350",
                     "app.asian-model.residual-tolerance=0.0005",
                     "app.asian-model.max-goals=28",
+                    "app.asian-model.dispersion-tolerance=0.0250",
+                    "app.asian-model.safety-margin=0.0050",
                     "app.pagination.max-page-size=100",
                     "app.snapshot.storage.type=local",
                     "app.snapshot.storage.path=./runtime/test-snapshots",
@@ -116,6 +118,8 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(asianModel.neighborTolerance()).isEqualByComparingTo("0.0350");
             assertThat(asianModel.residualTolerance()).isEqualByComparingTo("0.0005");
             assertThat(asianModel.maxGoals()).isEqualTo(28);
+            assertThat(asianModel.dispersionTolerance()).isEqualByComparingTo("0.0250");
+            assertThat(asianModel.safetyMargin()).isEqualByComparingTo("0.0050");
 
             SyncTaskProperties tasks = context.getBean(SyncTaskProperties.class);
             assertThat(tasks.enabled()).isFalse();
@@ -347,13 +351,40 @@ class ApplicationConfigurationPropertiesTest {
     }
 
     @Test
+    void rejectsAsianModelDispersionToleranceNotPositive() {
+        // 0 会让「σ > 阈值」永远成立，等于整场拒发，必须当成配置错误而不是合法取值。
+        contextRunner
+                .withPropertyValues("app.asian-model.dispersion-tolerance=0")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.asian-model.dispersion-tolerance");
+                });
+    }
+
+    @Test
+    void rejectsAsianModelSafetyMarginAboveOne() {
+        contextRunner
+                .withPropertyValues("app.asian-model.safety-margin=1.5")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.asian-model.safety-margin");
+                });
+    }
+
+    @Test
     void appliesAsianModelDefaultsWhenSectionIsAbsent() {
         // 未配置 app.asian-model 时构造绑定会以 null 实例化 record，须回落到实测标定的默认值。
-        AsianModelProperties defaults = new AsianModelProperties(null, null, null);
+        AsianModelProperties defaults = new AsianModelProperties(null, null, null, null, null);
 
         assertThat(defaults.neighborTolerance()).isEqualByComparingTo("0.0400");
         assertThat(defaults.residualTolerance()).isEqualByComparingTo("0.0010");
         assertThat(defaults.maxGoals()).isEqualTo(24);
+        assertThat(defaults.dispersionTolerance()).isEqualByComparingTo("0.0200");
+        assertThat(defaults.safetyMargin()).isEqualByComparingTo("0.0100");
     }
 
     @Configuration(proxyBeanMethods = false)

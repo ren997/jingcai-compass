@@ -5,9 +5,9 @@
 - 文档版本：v0.6
 - 最后更新：2026-10-21
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A、B、C 均已收口，分支 feat/asian-model-v1）`
-- 下一任务：`T613-D 选择性发布（edge 阈值 + 离散度过滤）`
-- 最近完成增量：`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）；`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（代码已合入 master，CI 证据待补）
+- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A、B、C、D 均已收口，分支 feat/asian-model-v1）`
+- 下一任务：`T613-E 概率落库与统计（V24 + 发布侧门槛 + 双 Brier）`
+- 最近完成增量：`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）；`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（代码已合入 master，CI 证据待补）
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -2315,7 +2315,16 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
     - [x] C6 单测：`ImpliedPoissonModelTest` 18 项 + `ImpliedPoissonFixtureTest` 9 项（3 场真实抓包 λ 与邻线基线）+ 生成服务测试补齐缺约束/不自洽/摘要长度三项。
     - [x] C7 文档收口：设计文档 §4.2 重写（新增 §4.2.1 概率口径、§4.2.2 二分求解、§4.2.3 邻线校验）、§4.3 改写、§7 补阶段 C 实测、§8.1/§8.3 收口 ρ = 0。
     - [x] C8 分层验证与提交推送。
-  - **阶段 D~E**：按 `docs/asian-model-design.md` 第 7 节逐阶段补充，每阶段独立验证后再进入下一阶段。
+  - **阶段 D（选择性发布：离散度硬过滤 + edge 影子门槛）**
+    - [x] D1 `AsianModelProperties` 追加 `dispersion-tolerance`（0.0200）与 `safety-margin`（0.0100），三份 yml 与该段结构同步（只追加键，不动相邻段）。
+    - [x] D2 新增 `AsianPublishGate`：`exceedsDispersion`（严格大于才否决）+ `evaluate`（返回 edge / 盈亏平衡 / 门槛 / 盈亏余量 / wouldPublish），全 BigDecimal，按所选方向换算概率与价格。
+    - [x] D3 接入生成服务：`toPrediction` 改返回 `Evaluation(dto, skipReason)`，σ 分市场独立否决且方向与置信度成对置空，影子门槛只对有方向的市场求值，版本升 v6。
+    - [x] D4 摘要改写：新增 `directionText` 区分「跨庄分歧过大」与「低置信度」，每个有方向的市场追加 edge 与盈亏余量（只写「仅记录」），末句免责补「本版本不据其筛选」；长度断言收紧到 900。
+    - [x] D5 指标：`dispersion{market,outcome,source}`、`dispersion.sigma{market,source}`、`gate{market,outcome}`、`gate.edge{market}`、`gate.margin{market}`；新增跳过原因 `MARKET_DISPERSION_TOO_HIGH`。
+    - [x] D6 单测：`AsianPublishGateTest` 13 项 + 生成服务新增 9 项 + 配置绑定与校验 2 项。
+    - [x] D7 文档收口：设计文档 §2 现状、§4.6、§4.7（重写为 4.7.1~4.7.3）、§7 阶段 D 验收与实测、§8.1、§8.3 第 4/5 条。
+    - [x] D8 分层验证与提交推送。
+  - **阶段 E**：概率落库与统计（V24、发布侧门槛、双 Brier、`PUSH`/`HALF_*` 统计口径、后台状态页亚盘展示）。
 - 验证命令（按改动性质分层，不要求每次改动都跑全量集成测试）：
 
   ```bash
@@ -2354,6 +2363,10 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-10-21：方向改由模型概率在冻结行上的投影决定（`favorsFirstSide`），不再直接读共识概率。原因：阶段 D 的 edge 由模型概率算，若方向取共识而 edge 取模型，会出现「方向说主队、edge 说客队」的自相矛盾记录。两者在主盘上必然一致（残差 `1e-16`），因此这次切换不改变既有行为，只统一来源。置信度阈值一行未改。
   - 2026-10-21：邻线校验加 `outcome=no-neighbor` 独立标签。`lineCount == 0` 表示「没有邻线可校验」，**不等于校验通过**；若与 `solved` 混为一谈，邻线校验静默失效时监控上看不出任何异常，摘要也会把「无合格邻线」读成「完美自洽」。
   - 2026-10-21：已确认的模型局限（写入设计文档 §4.2.3）：独立泊松在 `±2.5` 以上让球与 `5.5` 以上大小球系统性低估尾部，模型概率比市场低 2~4 个百分点。这是真实分布形状差异（真实比分分布比独立泊松更厚尾），不是数值误差；主盘（`−0.25`、`2.75~3.25`）不受影响，故邻线阈值按主盘周围档位标定。
+  - 2026-10-21：完成阶段 D。开工前用 3 场真实抓包复算，发现设计文档原方案的 edge 硬门槛**不可行**：让球方向的模型概率是 λ 投影回同一条主盘线的结果，而 λ 正是由该线的去水概率反解，故 `edge ≡ 0`（实测残差 `1e-16`）；通过 `edge >= 2.68%` 的场次为 **0/3**。大小球 62 个档位中只有 1 档（`1.75` 低线，`+3.51%`）能过 `3.27%` 的门槛，且低线偏差三场一致为正、高线一致为负——这是独立泊松分布比市场更窄的系统偏差，不是信息。**结论：照文档做硬门槛会让公开页几乎永久空白，且漏过的注恰好押在模型偏差最大的档位。** 经确认改为「σ 硬过滤 + edge 影子门槛」。
+  - 2026-10-21：σ 判定独立于置信度、按市场粒度否决。两者输入不同源（σ 来自跨庄共识样本，置信度来自冻结行单行报价），做成覆盖会让 `ConfidenceLevelEnum` 语义被污染，并丧失「HIGH 置信但各家打架」这一关键时刻的归因能力。否决时方向与置信度必须**成对置空**：导入校验强制「无方向 ⇒ 无置信度」，只清方向会让整批 `importFile` 抛错回滚。
+  - 2026-10-21：`toPrediction` 改为返回 `Evaluation(dto, skipReason)`。跳过原因从 v6 起不止一种，调用方原先硬编码 `LOW_CONFIDENCE_ASIAN_MARKETS`，不改就会让新原因永远记录不到。混合情形（一边低置信、一边 σ 超限）仍归因低置信度——只有两个市场都输在分歧上才记 `MARKET_DISPERSION_TOO_HIGH`，否则阈值调参会把低置信场次算进分歧率。
+  - 2026-10-21：`PersistenceServicesAutoConfiguration` 未改。新阈值从已透传的 `AsianModelProperties` 派生，不新增构造器参数；顺手记下来，避免下一个人按「新增配置必须改装配」的经验误改。
 - 验证记录：
   - 2026-10-21：`mvn -B -ntp -f backend/pom.xml test` 通过，**525 项**（基线 472 项 + 新增 53 项），0 失败 0 错误。新增 `AsianSettlementCalculatorTest` 47 项覆盖半球/整数/四分之一盘 × 主客方向 × 赢/走/输矩阵、拆盘半赢半输、走盘、非法盘口线与净收益换算；`SettlementServiceTest` 新增 5 项覆盖亚盘两条市场落库与 `profit`、单方向缺失只结算另一侧、无绑定快照转人工复核，以及「竞彩预测不触碰亚盘市场」的回归守卫。
   - 2026-10-21：`-Dtest='*Settlement*Test,*Asian*Test,SettlementMapperSqlContractTest'` 通过 **120 项**，含新增 `SettlementMapperSqlContractTest` 4 项。
@@ -2369,6 +2382,11 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-10-21（阶段 C）：本轮前端零改动（无 VO 字段、无页面改动），按项目约定不重复运行 `npm --prefix frontend run test/build`；`git diff --check` 通过。
   - 2026-10-21（阶段 C 排查记录）：全量首跑 `ProductionConfigurationTest` 报 `mapping values are not allowed here`（`application-prod.yml` 第 73 行）。原因是 `app.asian-model` 段被插在 `asian-odds.the-odds` 与 `quota-budget` 之间，把 `quota-budget` 顶成了 `max-goals` 的子键，整份 prod 配置无法解析。定向单测抓不到：`ApplicationConfigurationPropertiesTest` 走 `withPropertyValues`、不读 yml。**结论：动过 yml 就必须跑一次全量，定向单测对 yml 语法是盲的。**
   - 2026-10-21：本轮前端零改动（无 VO 字段、无页面改动），按项目约定不重复运行 `npm --prefix frontend run test/build`；`git diff --check` 通过。
+  - 2026-10-21（阶段 D）：层 1 定向 `-Dtest='AsianPublishGateTest,BaselinePredictionGenerationServiceTest,ImpliedPoissonModelTest,ImpliedPoissonFixtureTest,ApplicationConfigurationPropertiesTest,PersistenceServicesAutoConfigurationTest'` 通过 **85 项**（门槛 13 + 生成服务 19 + 模型 18 + 抓包基线 9 + 配置属性 21 + 装配 5）。
+  - 2026-10-21（阶段 D）：`mvn -B -ntp -f backend/pom.xml test` 全量 **640 项**通过（基线 616 + 阶段 D 新增 24：门槛 13 + 生成服务 9 + 配置属性 2），0 失败 0 错误。本轮动过三份 yml，全量是必须的——`ApplicationConfigurationPropertiesTest` 走 `withPropertyValues`、不读 yml，只有全量里的 `ProductionConfigurationTest` 才会解析配置结构。
+  - 2026-10-21（阶段 D 夹具修正）：`derivesDirectionFromModelProjectionWhileConfidenceStillUsesFrozenRow` 原夹具用「两家 0.479 + 两家 0.61」把中位数拉到 0.5433，其 σ 高达 `0.068`，在 v6 下**本就该被 σ 否决**——这不是测试写错，而是新规则推翻了该场景的合法性（共识与冻结行方向相左必然意味着跨庄分歧很大）。改为三家 `0.485 / 0.515 / 0.525`（σ `0.017` 未超限、中位数 0.515 仍偏向主队、可冻结的 `0.485` 那家仍偏向客队），保住原用例意图的同时让输入在真实可达范围内。
+  - 2026-10-21（阶段 D）：`mvn -B -ntp -f backend/pom.xml -Pintegration -Dit.test=PredictionImportApplicationIT verify` 在 `postgres:16-alpine` 通过 **5 项**，23 个迁移连续 apply，`BUILD SUCCESS`。这一步覆盖单测查不出的三件事：v6 摘要在真实 `varchar(1000)` 下不溢出（否则整批回滚）、新增的 `edge`/`盈亏余量` 文本不含导入侧禁词、v6 版本号与批次哈希能在真实外键与 CHECK 下完整落库。
+  - 2026-10-21（阶段 D）：本轮前端零改动（无 VO 字段、新增跳过原因由 `skippedByReason: Record<string, number>` 承载，类型无需变更），按项目约定不重复运行 `npm --prefix frontend run test/build`；`git diff --check` 通过。
 - 阶段 A 收口说明：
   - 至此「亚盘预测不再停留在 LOCKED」成立：候选查询、结算、收益落库、重算与幂等均有真实库证据。
   - 已知显示缺口（不在阶段 A 范围）：`AdminPredictionStatusQueryServiceImpl` 仍只展示 `HAD`/`HHAD`，亚盘预测结算后后台状态页会显示「HAD 待结算」；`StatisticsCalculator.MarketAccumulator.record` 的 switch 未处理 `PUSH`/`HALF_WIN`/`HALF_LOSS`，亚盘结算会被静默漏计。两项都归阶段 D/E，修复时需同时改 VO 与前端。
@@ -2381,6 +2399,11 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - **主盘残差不再是验收指标。** 两方程两未知数是恰定方程组，残差只会收敛到浮点极限；把它当成「市场自洽性」来用等于承认一道不存在的防线。自洽性由邻线回投校验承担，这是本轮对设计文档的唯一实质性推翻。
   - 缺大小球主盘的场次由「降级为单侧方向」改为「整场跳过」。代价是草稿量进一步下降，但换来的是「同一批草稿里每一行都有 λ」这条不变量——阶段 D 的 edge 阈值建立在这条不变量上。
   - 已知遗留（不在阶段 C 范围）：V24 概率列按设计文档 §7 归阶段 E，本轮模型概率只进 `analysis_summary` 与指标，不落库；ρ 固定为 0（Dixon-Coles 修正见 §8.3）；邻线校验在两条主盘都没有邻线时退化为「未校验」，覆盖率取决于抓包档位密度，故 `no-neighbor` 单列指标而不是算作通过。
+- 阶段 D 收口说明：
+  - **本阶段最重要的产出是「证明门槛不该生效」，而不是门槛本身。** 让球方向的 `edge` 在数学上恒为 0（λ 由该主盘反解、再投影回同一条线），任何正的安全边际都会拒发 100% 的让球方向。把 `safety-margin` 从 `0.0100` 调到 `0.0001` 不会改善任何东西——下一个人若想靠调参提升发布量，先读这里。
+  - 因此 edge 采用**影子模式**：照算、写摘要、打指标，但不改变生成结果；σ 是**真拦**，因为它衡量的是「各家庄是否互相矛盾」，与 λ 的求解方式无关，是真实的可用信号。两者的差别不是保守程度，而是有无独立信息。
+  - 度量口径有意分两个分母：σ 统计「所有成功反解并选到冻结行的市场」，gate 统计「仍有方向、当前真的会发布的市场」。混用会把「低置信」与「分歧超限」算成同一件事。要判断能否开闸，看 `gate.margin` 的分布而不是发布量。
+  - 已知遗留（不在阶段 D 范围）：edge/σ 未落库（V24 归阶段 E）；发布侧仍无批量门槛动作，`DRAFT → PUBLISHED` 仍是逐条人工；σ 阈值上线后需按 `source=whitelist|fallback` 分组复核。
 
 
 ## 12. 任务记录模板
@@ -2471,6 +2494,7 @@ T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PAR
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
 | 2026-10-21 | T613 | `新增；IN_PROGRESS` | 「亚盘模型 v1 交付」立项并按 T612 改号为 T613（避开 T611 分支已占用的 T612）。分支 `feat/asian-model-v1` 承载阶段 A~E，阶段 A 拆为 A1~A7。依据 `docs/asian-model-design.md` 与 `docs/data-sources-novaapi.md`；项目负责人确认结算采用精度优先方案（新增 `HALF_WIN`/`HALF_LOSS` 与 `settlements.profit`）。 |
+| 2026-10-21 | T613 | `IN_PROGRESS`（阶段 D 收口） | 阶段 D 选择性发布完成：σ（跨庄去水概率总体标准差）阈值 `0.0200` 分市场独立硬否决，两边都超限整场跳过；edge 计算为 `model − market`，按冻结行真实报价算盈亏余量，实测确认**让球主盘 edge 结构性恒为 0**（λ 由该主盘反解，投影回同线残差 `1e-16`），任何正边际都会拒发 100% 让球方向，故改为**影子门槛**——照算、进摘要与指标、不改变生成结果。版本升 `t306-asian-baseline-v6`。新增 5 个指标与跳过原因 `MARKET_DISPERSION_TOO_HIGH`，`toPrediction` 改返回 `Evaluation(dto, skipReason)` 以区分低置信与分歧超限。后端全量 640 项 + PostgreSQL 16 定向集成 5 项通过。 |
 | 2026-10-21 | T613 | `IN_PROGRESS`（阶段 C 收口） | 阶段 C λ 反解模型完成：概率口径合并为 `p_eff = (W + 0.5·HW) / (W + 0.5·HW + 0.5·HL + L)`（半盘/整盘/四分之一盘共用，两侧和为 1）；求解由二维网格改两段一维二分（和是泊松恒等，根唯一，残差 `1e-16`）；自洽性判据由「主盘残差」改为「邻线回投」（恰定方程组下残差恒为 0，原判据无效）；缺大小球主盘改为整场跳过；版本升 `t306-asian-baseline-v5`。后端全量 616 项 + PostgreSQL 16 定向集成 5 项通过。已知局限：独立泊松在极端档位低估尾部 2~4 个百分点，主盘不受影响。 |
 | 2026-10-21 | T613 | `IN_PROGRESS`（阶段 B 收口） | 阶段 B 跨庄聚合与共识主盘完成：逐家去水 → 中位 → 归一，主盘取偏离 50/50 最小的线，线型偏好仅在 ε=0 生效；共识定线 + 真实行冻结解决「只能引用一条快照」的约束；版本升 `t306-asian-baseline-v4`。后端全量 585 项 + PostgreSQL 16 定向集成 9 项通过。已确认代偿：草稿量下降，置信度阈值不改。 |
 | 2026-10-21 | T611 / T612 / `42ece66` | `合并入 master`（维持 `PARTIAL`） | 先前未记录的本地分支 `codex/t611-published-filter`（`d2dd252`、`53d08c8`，16 文件/364 行）经本地实测复核：后端 `mvn test` 472 项、前端 Vitest 75 项全部通过。以 `42ece66` 合并入 `master`，并随 `master` 并入 `feat/asian-model-v1`（冲突仅限本文件头部与编号）。功能代码已完整，唯一缺口是 CI 证据（`gh` 未登录），故不标记 `DONE`。 |

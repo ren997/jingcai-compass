@@ -66,6 +66,10 @@ app:
     neighbor-tolerance: 0.0400
     residual-tolerance: 0.0010
     max-goals: 24
+    # 跨庄分歧上限：实测让球主盘 σ 为 0.002~0.012，全部档位最大 0.0325。
+    dispersion-tolerance: 0.0200
+    # 影子门槛的安全边际：本阶段只记录不拦截，故不影响发布量。
+    safety-margin: 0.0100
   tasks:
     enabled: false
     sporttery-pool:

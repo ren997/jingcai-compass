@@ -230,10 +230,10 @@ class PredictionImportApplicationIT {
                 .eq(Prediction::getGenerationBatchId, first.generationBatchId()));
         assertThat(saved.getMatchId()).isEqualTo(FIRST_MATCH_ID);
         assertThat(saved.getPredictionStatus()).isEqualTo(PredictionStatusEnum.DRAFT);
-        assertThat(saved.getModelVersion()).isEqualTo("t306-asian-baseline-v5");
-        assertThat(saved.getFeatureVersion()).isEqualTo("t306-asian-mainline-v5");
+        assertThat(saved.getModelVersion()).isEqualTo("t306-asian-baseline-v6");
+        assertThat(saved.getFeatureVersion()).isEqualTo("t306-asian-mainline-v6");
         // 摘要里有 λ 与模型概率，必须落在 varchar(1000) 之内，否则整批导入回滚。
-        assertThat(saved.getAnalysisSummary()).contains("亚盘 λ 反解 v5", "反解 λ 主", "模型概率");
+        assertThat(saved.getAnalysisSummary()).contains("亚盘 λ 反解 v6", "反解 λ 主", "模型概率", "影子门槛");
         assertThat(saved.getPredictionType()).isEqualTo(PredictionTypeEnum.ASIAN);
         assertThat(saved.getAsianOddsSnapshotId()).isNotNull();
         assertThat(saved.getAsianHandicapPick()).isNull();

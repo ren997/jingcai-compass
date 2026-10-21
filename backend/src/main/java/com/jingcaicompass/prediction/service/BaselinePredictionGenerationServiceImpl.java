@@ -14,6 +14,7 @@ import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.odds.service.AsianFreezeSnapshotSelector;
 import com.jingcaicompass.odds.service.AsianMarketConsensusAggregator;
 import com.jingcaicompass.odds.service.AsianMarketMath;
+import com.jingcaicompass.odds.service.AsianPublishGate;
 import com.jingcaicompass.odds.service.ImpliedPoissonModel;
 import com.jingcaicompass.prediction.dto.PredictionImportDto;
 import com.jingcaicompass.prediction.dto.PredictionImportFileDto;
@@ -66,15 +67,21 @@ import org.springframework.util.StringUtils;
  * <p>方向改由模型概率给出而不是直接读共识概率：阶段 D 的 edge 由模型概率算，若方向取其一共识而
  * edge 取模型，会出现「方向说主队、edge 说客队」的自相矛盾记录。两者在主盘上几乎必然一致
  * （残差在 1e-16 量级），因此这次切换不改变既有行为，只统一了来源。</p>
+ *
+ * <p>阶段 D 起有两道判定：跨庄分歧（{@link AsianPublishGate#exceedsDispersion}）**真拦**，
+ * 按市场独立否决；edge（{@link AsianPublishGate#evaluate}）是**影子门槛**，只写进摘要与指标，
+ * 不改变生成结果——它在让球主盘上结构性恒为 0，原因见 {@link AsianPublishGate} 的类注释。</p>
  */
 @Service
 @ConditionalOnBean(DataSource.class)
 public class BaselinePredictionGenerationServiceImpl implements BaselinePredictionGenerationService {
 
-    static final String MODEL_VERSION = "t306-asian-baseline-v5";
-    static final String FEATURE_VERSION = "t306-asian-mainline-v5";
+    static final String MODEL_VERSION = "t306-asian-baseline-v6";
+    static final String FEATURE_VERSION = "t306-asian-mainline-v6";
     static final String CONSENSUS_METRIC = "jingcai.prediction.asian.consensus";
     static final String MODEL_METRIC = "jingcai.prediction.asian.model";
+    static final String DISPERSION_METRIC = "jingcai.prediction.asian.dispersion";
+    static final String GATE_METRIC = "jingcai.prediction.asian.gate";
 
     private static final Logger LOG = LoggerFactory.getLogger(BaselinePredictionGenerationServiceImpl.class);
     private static final BigDecimal MEDIUM_DIRECTION_SIGNAL = new BigDecimal("0.0250");
@@ -94,6 +101,7 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
     private final ImpliedPoissonModel poissonModel;
     private final BigDecimal neighborTolerance;
     private final BigDecimal residualTolerance;
+    private final AsianPublishGate publishGate;
     private final MeterRegistry meterRegistry;
 
     public BaselinePredictionGenerationServiceImpl(
@@ -123,6 +131,7 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
         this.poissonModel = new ImpliedPoissonModel(effectiveModelProperties);
         this.neighborTolerance = effectiveModelProperties.neighborTolerance();
         this.residualTolerance = effectiveModelProperties.residualTolerance();
+        this.publishGate = new AsianPublishGate(effectiveModelProperties);
         this.meterRegistry = meterRegistry;
     }
 
@@ -152,15 +161,15 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
             }
         }
 
-        // 3) 为两个市场分别判定置信度；两项均低时不生成任何可发布草稿。
+        // 3) 为两个市场分别判定方向，再做跨庄分歧否决与 edge 影子门槛。
         featureSets.sort(Comparator.comparing(FeatureSet::matchId));
         List<PredictionImportDto> predictions = new ArrayList<>();
         for (FeatureSet featureSet : featureSets) {
-            PredictionImportDto prediction = toPrediction(featureSet, featureSet.featureAsOf());
-            if (prediction == null) {
-                skip(skipped, BaselinePredictionSkipReasonEnum.LOW_CONFIDENCE_ASIAN_MARKETS);
+            Evaluation evaluation = toPrediction(featureSet, featureSet.featureAsOf());
+            if (evaluation.prediction() == null) {
+                skip(skipped, evaluation.skipReason());
             } else {
-                predictions.add(prediction);
+                predictions.add(evaluation.prediction());
             }
         }
         if (predictions.isEmpty()) {
@@ -354,9 +363,11 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
         );
     }
 
-    private PredictionImportDto toPrediction(FeatureSet featureSet, Instant generatedAt) {
+    private Evaluation toPrediction(FeatureSet featureSet, Instant generatedAt) {
         AsianOddsSnapshot frozen = featureSet.frozen();
         ImpliedPoissonModel.Solution solution = featureSet.solution();
+        AsianMarketConsensusAggregator.LineConsensus handicapConsensus = featureSet.handicapConsensus();
+
         double coverProbability = project(
                 solution, frozen.getHandicapLine(), ImpliedPoissonModel.Market.HANDICAP);
         ConfidenceLevelEnum handicapConfidence = confidence(frozen.getHomeOdds(), frozen.getAwayOdds());
@@ -365,31 +376,83 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 : (favorsFirstSide(coverProbability, frozen.getHomeOdds(), frozen.getAwayOdds())
                         ? AsianHandicapPickEnum.HOME_COVER
                         : AsianHandicapPickEnum.AWAY_COVER);
+        boolean handicapDispersionExceeded = publishGate.exceedsDispersion(handicapConsensus.dispersion());
+        recordDispersion("handicap", handicapConsensus, handicapDispersionExceeded);
+        if (handicapDispersionExceeded) {
+            // 方向与置信度必须成对置空：导入校验要求「无方向 ⇒ 无置信度」，只清方向会让整批回滚。
+            handicapPick = null;
+            handicapConfidence = null;
+        }
 
         ConfidenceLevelEnum totalsConfidence = null;
         TotalGoalsPickEnum totalsPick = null;
+        double overProbability = 0d;
+        boolean totalsDispersionExceeded = false;
         if (featureSet.totalsAtFrozenLine() != null) {
             totalsConfidence = confidence(frozen.getOverOdds(), frozen.getUnderOdds());
             if (totalsConfidence != ConfidenceLevelEnum.LOW) {
-                double overProbability = project(
+                overProbability = project(
                         solution, frozen.getTotalLine(), ImpliedPoissonModel.Market.TOTALS);
                 totalsPick = favorsFirstSide(overProbability, frozen.getOverOdds(), frozen.getUnderOdds())
                         ? TotalGoalsPickEnum.OVER
                         : TotalGoalsPickEnum.UNDER;
             }
+            totalsDispersionExceeded =
+                    publishGate.exceedsDispersion(featureSet.totalsAtFrozenLine().dispersion());
+            recordDispersion("totals", featureSet.totalsAtFrozenLine(), totalsDispersionExceeded);
+            if (totalsDispersionExceeded) {
+                totalsPick = null;
+                totalsConfidence = null;
+            }
         }
+
+        // 影子门槛：只对仍然存在的方向求值，且只记录不拦截。让球方向恒不通过的原因见 AsianPublishGate。
+        AsianPublishGate.Verdict handicapGate = null;
+        if (handicapPick != null) {
+            handicapGate = publishGate.evaluate(
+                    ImpliedPoissonModel.Market.HANDICAP,
+                    handicapPick == AsianHandicapPickEnum.HOME_COVER
+                            ? ImpliedPoissonModel.Side.FIRST
+                            : ImpliedPoissonModel.Side.SECOND,
+                    coverProbability,
+                    handicapConsensus.firstProbability(),
+                    frozen.getHomeOdds(),
+                    frozen.getAwayOdds());
+            recordGate("handicap", handicapGate);
+        }
+        AsianPublishGate.Verdict totalsGate = null;
+        if (totalsPick != null) {
+            totalsGate = publishGate.evaluate(
+                    ImpliedPoissonModel.Market.TOTALS,
+                    totalsPick == TotalGoalsPickEnum.OVER
+                            ? ImpliedPoissonModel.Side.FIRST
+                            : ImpliedPoissonModel.Side.SECOND,
+                    overProbability,
+                    featureSet.totalsAtFrozenLine().firstProbability(),
+                    frozen.getOverOdds(),
+                    frozen.getUnderOdds());
+            recordGate("totals", totalsGate);
+        }
+
         if (handicapPick == null && totalsPick == null) {
-            return null;
+            // 只有两个市场都输在分歧上才归因于 σ；混合情形（一边低置信、一边分歧超限）仍记低置信，
+            // 否则低置信场次会被误算成阈值问题，调参失去依据。
+            boolean allRejectedByDispersion = handicapDispersionExceeded
+                    && (featureSet.totalsAtFrozenLine() == null || totalsDispersionExceeded);
+            return Evaluation.skipped(allRejectedByDispersion
+                    ? BaselinePredictionSkipReasonEnum.MARKET_DISPERSION_TOO_HIGH
+                    : BaselinePredictionSkipReasonEnum.LOW_CONFIDENCE_ASIAN_MARKETS);
         }
-        return new PredictionImportDto(
+        return Evaluation.draft(new PredictionImportDto(
                 featureSet.matchId(), MODEL_VERSION, FEATURE_VERSION,
                 null, null, null, null, null, null,
-                summary(featureSet, handicapPick, handicapConfidence, totalsPick, totalsConfidence), generatedAt,
+                summary(featureSet, handicapPick, handicapConfidence, totalsPick, totalsConfidence,
+                        handicapGate, totalsGate),
+                generatedAt,
                 frozen.getId(), handicapPick, totalsPick,
                 handicapPick == null ? null : handicapConfidence,
                 totalsPick == null ? null : totalsConfidence,
-                PredictionTypeEnum.ASIAN
-        );
+                PredictionTypeEnum.ASIAN));
     }
 
     private double project(
@@ -437,14 +500,20 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
             AsianHandicapPickEnum handicapPick,
             ConfidenceLevelEnum handicapConfidence,
             TotalGoalsPickEnum totalsPick,
-            ConfidenceLevelEnum totalsConfidence
+            ConfidenceLevelEnum totalsConfidence,
+            AsianPublishGate.Verdict handicapGate,
+            AsianPublishGate.Verdict totalsGate
     ) {
         AsianOddsSnapshot frozen = featureSet.frozen();
         AsianMarketConsensusAggregator.LineConsensus handicap = featureSet.handicapConsensus();
         ImpliedPoissonModel.Solution solution = featureSet.solution();
         ImpliedPoissonModel.NeighborCheck neighborCheck = featureSet.neighborCheck();
+        // 与 toPrediction 同源的纯函数重算：宁可重算一次，也不为了这个词再塞两个布尔参数进签名。
+        boolean handicapDispersionExceeded = publishGate.exceedsDispersion(handicap.dispersion());
+        boolean totalsDispersionExceeded = featureSet.totalsAtFrozenLine() != null
+                && publishGate.exceedsDispersion(featureSet.totalsAtFrozenLine().dispersion());
         StringBuilder text = new StringBuilder(560);
-        text.append("亚盘 λ 反解 v5：快照 #").append(frozen.getId())
+        text.append("亚盘 λ 反解 v6：快照 #").append(frozen.getId())
                 .append("（").append(frozen.getBookmakerCode()).append(" / ").append(frozen.getProviderCode())
                 .append("），让球主盘 ").append(handicap.line().toPlainString())
                 .append(" 由").append(handicap.sampleSource()).append("去水共识选出")
@@ -459,11 +528,13 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 .append(" / ").append(scientific(solution.overResidual()))
                 .append("，").append(neighborCheckText(neighborCheck)).append("）；")
                 .append("让球 ").append(frozen.getHandicapLine().toPlainString()).append(" ")
-                .append(handicapPick == null
-                        ? "方向因低置信度不发布"
-                        : "为 " + handicapPick.getDesc() + "（" + handicapConfidence.getDesc() + "）")
+                .append(directionText(
+                        handicapPick == null ? null : handicapPick.getDesc(),
+                        handicapConfidence,
+                        handicapDispersionExceeded))
                 .append("，模型概率 ").append(decimal(project(
                         solution, frozen.getHandicapLine(), ImpliedPoissonModel.Market.HANDICAP)))
+                .append(gateText(handicapGate))
                 .append("；");
 
         if (featureSet.totalsAtFrozenLine() == null) {
@@ -476,19 +547,65 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 text.append("（大小球主盘 ").append(featureSet.totalsBest().line().toPlainString())
                         .append("，该行未报主盘线）");
             }
-            text.append(" ").append(totalsPick == null
-                            ? "方向因低置信度不发布"
-                            : "为 " + totalsPick.getDesc() + "（" + totalsConfidence.getDesc() + "）")
+            text.append(" ").append(directionText(
+                            totalsPick == null ? null : totalsPick.getDesc(),
+                            totalsConfidence,
+                            totalsDispersionExceeded))
                     .append("，共识概率 大 ").append(probability(totals.firstProbability()))
                     .append(" / 小 ").append(probability(totals.secondProbability()))
                     .append("，σ ").append(probability(totals.dispersion()))
                     .append("，冻结报价 ").append(frozen.getOverOdds()).append("/").append(frozen.getUnderOdds())
                     .append("，模型概率 ").append(decimal(project(
                             solution, frozen.getTotalLine(), ImpliedPoissonModel.Market.TOTALS)))
+                    .append(gateText(totalsGate))
                     .append("；");
         }
-        text.append("模型概率由两个市场主盘反解 λ 后投影得到，仍源自市场定价，不构成独立校准概率或正期望。");
+        text.append("模型概率由两个市场主盘反解 λ 后投影得到，仍源自市场定价，不构成独立校准概率或正期望；")
+                .append("edge 与盈亏余量仅记录，本版本不据其筛选。");
         return text.toString();
+    }
+
+    /**
+     * 方向措辞。
+     *
+     * <p>σ 否决与低置信度是两种互斥原因：前者说明各家定价打架、数据不可信，后者说明该家报价的
+     * 水位结构不支持发布方向。混成一句会让排障无法归因。</p>
+     */
+    private String directionText(
+            String pickDescription,
+            ConfidenceLevelEnum confidence,
+            boolean dispersionExceeded
+    ) {
+        if (pickDescription != null) {
+            return "为 " + pickDescription + "（" + confidence.getDesc() + "）";
+        }
+        return dispersionExceeded ? "方向因跨庄分歧过大不发布" : "方向因低置信度不发布";
+    }
+
+    /**
+     * 影子门槛的措辞；没有方向时返回空串。
+     *
+     * <p>刻意不写「优势 / 价值」，只写「仅记录」：非零 edge 只来自独立泊松在邻线上的形状偏差，
+     * 不代表预测能力。同时避开导入侧的禁词表（保本 / 无风险 / 稳赚 等，命中即整批回滚）。</p>
+     */
+    private String gateText(AsianPublishGate.Verdict verdict) {
+        if (verdict == null) {
+            return "";
+        }
+        return "，edge " + signed(verdict.edge())
+                + "、盈亏余量 " + signed(verdict.margin())
+                + (verdict.wouldPublish()
+                        ? "（影子门槛通过，仅记录）"
+                        : "（影子门槛未通过）");
+    }
+
+    /** 带符号的 4 位小数；恰好为 0 时不带符号，避免出现 {@code +0.0000} 与 {@code -0.0000}。 */
+    private String signed(BigDecimal value) {
+        BigDecimal scaled = value.setScale(SUMMARY_PROBABILITY_SCALE, RoundingMode.HALF_UP);
+        if (scaled.signum() == 0) {
+            return scaled.toPlainString();
+        }
+        return scaled.signum() > 0 ? "+" + scaled.toPlainString() : scaled.toPlainString();
     }
 
     /**
@@ -618,6 +735,54 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 .tag("side", side).register(meterRegistry).record(lambda);
     }
 
+    /**
+     * 记录跨庄分歧与它的判定结果。
+     *
+     * <p>{@code source} 必须带上：白名单子集的 σ 与全量回退的 σ 量纲不同源（样本常从十几家掉到两三家，
+     * σ 会系统性偏小），合并统计会把阈值调到两边都不合适。</p>
+     *
+     * <p>分母是「成功反解并选到冻结行」的全部市场，与是否低置信无关——低置信也要看到它的分歧水平。</p>
+     */
+    private void recordDispersion(
+            String market,
+            AsianMarketConsensusAggregator.LineConsensus consensus,
+            boolean exceeded
+    ) {
+        if (consensus == null || consensus.dispersion() == null) {
+            return;
+        }
+        String source = consensus.whitelistApplied() ? "whitelist" : "fallback";
+        Counter.builder(DISPERSION_METRIC)
+                .tags("market", market, "outcome", exceeded ? "exceeded" : "within", "source", source)
+                .register(meterRegistry)
+                .increment();
+        DistributionSummary.builder(DISPERSION_METRIC + ".sigma")
+                .tags("market", market, "source", source)
+                .register(meterRegistry)
+                .record(consensus.dispersion().doubleValue());
+    }
+
+    /**
+     * 记录影子门槛的结果。
+     *
+     * <p>分母与 σ 不同：只统计「仍有方向、当前会真的发布出去」的市场，只有这样才能回答
+     * 「若把影子门槛切成真门槛，会砍掉现在发布的多少」。</p>
+     *
+     * <p>{@code margin}（模型概率减盈亏平衡概率）是唯一能反推「安全边际降到多少才会有通过样本」的
+     * 量：{@code wouldPublish} 等价于 {@code margin >= safetyMargin}，而 {@code edge} 不含抽水项，
+     * 无法直接与边际比较。</p>
+     */
+    private void recordGate(String market, AsianPublishGate.Verdict verdict) {
+        Counter.builder(GATE_METRIC)
+                .tags("market", market, "outcome", verdict.wouldPublish() ? "pass" : "fail")
+                .register(meterRegistry)
+                .increment();
+        DistributionSummary.builder(GATE_METRIC + ".edge")
+                .tag("market", market).register(meterRegistry).record(verdict.edge().doubleValue());
+        DistributionSummary.builder(GATE_METRIC + ".margin")
+                .tag("market", market).register(meterRegistry).record(verdict.margin().doubleValue());
+    }
+
     private void logResult(
             LocalDate lotteryDate, String operatorUsername, int candidateCount, int generatedCount,
             String batchId, Map<BaselinePredictionSkipReasonEnum, Integer> skipped, String status
@@ -656,6 +821,25 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
     ) {
         Long matchId() {
             return match.getId();
+        }
+    }
+
+    /**
+     * 单场比赛的判定结果：要么产出草稿，要么带明确原因跳过。
+     *
+     * <p>存在这个类型是因为跳过原因从 v6 起不止一种（低置信度 / 跨庄分歧），
+     * 调用方不能再把「没有草稿」硬编码成同一个原因，否则新原因永远记录不到。</p>
+     *
+     * <p>不变式：{@code prediction()} 为 null 时 {@code skipReason()} 必非 null，反之亦然。</p>
+     */
+    private record Evaluation(PredictionImportDto prediction, BaselinePredictionSkipReasonEnum skipReason) {
+
+        static Evaluation draft(PredictionImportDto prediction) {
+            return new Evaluation(Objects.requireNonNull(prediction), null);
+        }
+
+        static Evaluation skipped(BaselinePredictionSkipReasonEnum reason) {
+            return new Evaluation(null, Objects.requireNonNull(reason));
         }
     }
 }

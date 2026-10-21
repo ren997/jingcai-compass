@@ -12,6 +12,7 @@ import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.settlement.dto.MarketSettlementInputDto;
 import com.jingcaicompass.settlement.entity.Settlement;
@@ -22,6 +23,7 @@ import com.jingcaicompass.settlement.mapper.SettlementMapper;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -43,6 +45,7 @@ public class SettlementRecalculationWriter {
     private final SportteryPoolSnapshotMapper poolSnapshotMapper;
     private final SettlementMapper settlementMapper;
     private final MarketSettlementCalculatorRouter calculatorRouter;
+    private final AsianMarketTermsResolver asianMarketTermsResolver;
     private final AuditLogService auditLogService;
 
     public SettlementRecalculationWriter(
@@ -52,6 +55,7 @@ public class SettlementRecalculationWriter {
             SportteryPoolSnapshotMapper poolSnapshotMapper,
             SettlementMapper settlementMapper,
             MarketSettlementCalculatorRouter calculatorRouter,
+            AsianMarketTermsResolver asianMarketTermsResolver,
             AuditLogService auditLogService
     ) {
         this.predictionMapper = predictionMapper;
@@ -60,6 +64,7 @@ public class SettlementRecalculationWriter {
         this.poolSnapshotMapper = poolSnapshotMapper;
         this.settlementMapper = settlementMapper;
         this.calculatorRouter = calculatorRouter;
+        this.asianMarketTermsResolver = asianMarketTermsResolver;
         this.auditLogService = auditLogService;
     }
 
@@ -90,16 +95,29 @@ public class SettlementRecalculationWriter {
         }
 
         // 2) 锁后再次识别过期市场，并在写入前完整验证规则和锁定时刻的让球输入。
-        List<Settlement> staleSettlements = staleSettlements(prediction.getId(), currentFact.getId());
+        PredictionTypeEnum predictionType = prediction.getPredictionType() == null
+                ? PredictionTypeEnum.SPORTTERY
+                : prediction.getPredictionType();
+        List<Settlement> staleSettlements = staleSettlements(prediction.getId(), currentFact.getId(), predictionType);
         if (staleSettlements.isEmpty()) {
             return SettlementRecalculationWriteResult.skipped();
         }
-        if (prediction.getHandicapPick() == null) {
+        if (predictionType == PredictionTypeEnum.SPORTTERY && prediction.getHandicapPick() == null) {
             throw new SettlementManualReviewException("prediction has no explicit three-way selection: " + predictionId);
         }
         validateRuleVersions(staleSettlements, predictionId);
         BigDecimal officialHandicap = officialHandicapFor(prediction, currentFact, staleSettlements);
-        List<RecalculationPlan> plans = calculatePlans(staleSettlements, currentFact, prediction, officialHandicap);
+        Map<MarketTypeEnum, AsianMarketTermsResolver.Terms> asianTerms =
+                predictionType == PredictionTypeEnum.ASIAN
+                        ? asianMarketTermsResolver.resolve(prediction)
+                        : Map.of();
+        List<RecalculationPlan> plans = calculatePlans(
+                staleSettlements,
+                currentFact,
+                prediction,
+                officialHandicap,
+                asianTerms
+        );
 
         // 3) 在一个事务中降级全部旧 current、插入替代版本并追加前后快照审计。
         for (RecalculationPlan plan : plans) {
@@ -115,6 +133,7 @@ public class SettlementRecalculationWriter {
             replacement.setSettlementStatus(plan.status());
             replacement.setMatchFactId(currentFact.getId());
             replacement.setRuleVersion(plan.oldSettlement().getRuleVersion());
+            replacement.setProfit(plan.profit());
             replacement.setIsCurrent(true);
             settlementMapper.insert(replacement);
 
@@ -140,9 +159,9 @@ public class SettlementRecalculationWriter {
                 || fact.getFactStatus() == MatchResultFactStatusEnum.VOID);
     }
 
-    private List<Settlement> staleSettlements(Long predictionId, Long currentFactId) {
+    private List<Settlement> staleSettlements(Long predictionId, Long currentFactId, PredictionTypeEnum predictionType) {
         List<Settlement> result = new ArrayList<>();
-        for (MarketTypeEnum marketType : MarketTypeEnum.values()) {
+        for (MarketTypeEnum marketType : MarketTypeEnum.marketsFor(predictionType)) {
             Settlement settlement = settlementMapper.selectCurrentByPredictionIdAndMarket(predictionId, marketType);
             if (settlement != null && !Objects.equals(settlement.getMatchFactId(), currentFactId)) {
                 result.add(settlement);
@@ -153,7 +172,7 @@ public class SettlementRecalculationWriter {
 
     private void validateRuleVersions(List<Settlement> staleSettlements, Long predictionId) {
         for (Settlement settlement : staleSettlements) {
-            if (!SettlementWriter.RULE_VERSION.equals(settlement.getRuleVersion())) {
+            if (!SettlementWriter.SUPPORTED_RULE_VERSIONS.contains(settlement.getRuleVersion())) {
                 throw new SettlementManualReviewException(
                         "unsupported settlement ruleVersion for prediction " + predictionId + ": "
                                 + settlement.getRuleVersion()
@@ -191,20 +210,43 @@ public class SettlementRecalculationWriter {
             List<Settlement> staleSettlements,
             MatchResultFact currentFact,
             Prediction prediction,
-            BigDecimal officialHandicap
+            BigDecimal officialHandicap,
+            Map<MarketTypeEnum, AsianMarketTermsResolver.Terms> asianTerms
     ) {
         List<RecalculationPlan> plans = new ArrayList<>();
         for (Settlement oldSettlement : staleSettlements) {
-            SettlementStatusEnum status = calculatorRouter.calculate(new MarketSettlementInputDto(
-                    oldSettlement.getMarketType(),
-                    prediction.getHandicapPick(),
-                    currentFact,
-                    oldSettlement.getMarketType() == MarketTypeEnum.HHAD ? officialHandicap : null
-            ));
+            BigDecimal marketLine = null;
+            BigDecimal price = null;
+            MarketSettlementInputDto input;
+            AsianMarketTermsResolver.Terms terms = asianTerms.get(oldSettlement.getMarketType());
+            if (terms != null) {
+                // 亚盘市场只重算当时已结算的同一方向与同一盘口，不因行情变化改变口径。
+                marketLine = terms.line();
+                price = terms.price();
+                input = new MarketSettlementInputDto(
+                        oldSettlement.getMarketType(),
+                        null,
+                        currentFact,
+                        null,
+                        terms.asianHandicapPick(),
+                        terms.totalGoalsPick(),
+                        marketLine
+                );
+            } else {
+                input = new MarketSettlementInputDto(
+                        oldSettlement.getMarketType(),
+                        prediction.getHandicapPick(),
+                        currentFact,
+                        oldSettlement.getMarketType() == MarketTypeEnum.HHAD ? officialHandicap : null
+                );
+            }
+
+            SettlementStatusEnum status = calculatorRouter.calculate(input);
             if (status == SettlementStatusEnum.PENDING) {
                 throw new IllegalStateException("confirmed fact produced pending settlement: " + currentFact.getId());
             }
-            plans.add(new RecalculationPlan(oldSettlement, status));
+            BigDecimal profit = price == null ? null : SettlementMarginSupport.netProfit(status, price);
+            plans.add(new RecalculationPlan(oldSettlement, status, profit, marketLine));
         }
         return plans;
     }
@@ -216,11 +258,17 @@ public class SettlementRecalculationWriter {
                 + ";supersedesSettlementVersion=" + settlement.getSupersedesSettlementVersion()
                 + ";marketType=" + settlement.getMarketType()
                 + ";status=" + settlement.getSettlementStatus()
+                + ";profit=" + settlement.getProfit()
                 + ";matchFactId=" + settlement.getMatchFactId()
                 + ";factVersion=" + fact.getFactVersion()
                 + ";ruleVersion=" + settlement.getRuleVersion();
     }
 
-    private record RecalculationPlan(Settlement oldSettlement, SettlementStatusEnum status) {
+    private record RecalculationPlan(
+            Settlement oldSettlement,
+            SettlementStatusEnum status,
+            BigDecimal profit,
+            BigDecimal marketLine
+    ) {
     }
 }

@@ -11,6 +11,7 @@ import com.jingcaicompass.match.entity.MatchResultFact;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.prediction.entity.Prediction;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.settlement.entity.Settlement;
 import com.jingcaicompass.settlement.enums.MarketTypeEnum;
@@ -90,7 +91,8 @@ public class HistoryRecordAssembler {
             }
             List<MarketSettlementHistoryVo> markets = marketHistories(
                     settlementsByPrediction.getOrDefault(predictionId, List.of()),
-                    supersededSettlementIds
+                    supersededSettlementIds,
+                    prediction.getPredictionType()
             );
             result.add(new HistoryListItemVo(
                     prediction.getId(),
@@ -139,10 +141,13 @@ public class HistoryRecordAssembler {
 
     private List<MarketSettlementHistoryVo> marketHistories(
             List<Settlement> settlements,
-            Set<Long> supersededSettlementIds
+            Set<Long> supersededSettlementIds,
+            PredictionTypeEnum predictionType
     ) {
-        List<MarketSettlementHistoryVo> result = new ArrayList<>(MarketTypeEnum.values().length);
-        for (MarketTypeEnum marketType : MarketTypeEnum.values()) {
+        // 只暴露该类预测实际使用的市场，避免体彩记录凭空多出两个亚盘待结算项。
+        List<MarketTypeEnum> markets = MarketTypeEnum.marketsFor(predictionType);
+        List<MarketSettlementHistoryVo> result = new ArrayList<>(markets.size());
+        for (MarketTypeEnum marketType : markets) {
             List<Settlement> marketSettlements = settlements.stream()
                     .filter(settlement -> settlement.getMarketType() == marketType)
                     .sorted(Comparator.comparing(Settlement::getSettlementVersion))

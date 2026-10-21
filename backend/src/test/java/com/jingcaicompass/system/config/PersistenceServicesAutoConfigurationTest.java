@@ -63,6 +63,8 @@ import com.jingcaicompass.snapshot.mapper.PredictionSnapshotMapper;
 import com.jingcaicompass.snapshot.service.PredictionSnapshotService;
 import com.jingcaicompass.snapshot.storage.SnapshotStorage;
 import com.jingcaicompass.settlement.mapper.SettlementMapper;
+import com.jingcaicompass.settlement.service.AsianHandicapSettlementCalculator;
+import com.jingcaicompass.settlement.service.AsianTotalGoalsSettlementCalculator;
 import com.jingcaicompass.settlement.service.MarketSettlementCalculatorRouter;
 import com.jingcaicompass.settlement.service.SettlementRecalculationService;
 import com.jingcaicompass.settlement.service.SettlementService;
@@ -131,7 +133,9 @@ class PersistenceServicesAutoConfigurationTest {
                     MarketSettlementCalculatorRouter.class,
                     () -> new MarketSettlementCalculatorRouter(List.of(
                             new WinDrawLossSettlementCalculator(),
-                            new SportteryHandicapSettlementCalculator()
+                            new SportteryHandicapSettlementCalculator(),
+                            new AsianHandicapSettlementCalculator(),
+                            new AsianTotalGoalsSettlementCalculator()
                     ))
             )
             .withBean(SnapshotStorage.class, () -> mock(SnapshotStorage.class))

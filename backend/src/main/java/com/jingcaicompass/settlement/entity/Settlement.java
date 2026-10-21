@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import com.jingcaicompass.settlement.enums.MarketTypeEnum;
 import com.jingcaicompass.settlement.enums.SettlementStatusEnum;
+import java.math.BigDecimal;
 import java.time.Instant;
 import lombok.Data;
 
@@ -38,6 +39,13 @@ public class Settlement {
 
     /** 确定性结算器规则版本。 */
     private String ruleVersion;
+
+    /**
+     * 以单注本金 1 计算的净收益。
+     *
+     * <p>竞彩市场没有在预测上冻结水位，因此保持为空；亚盘市场按预测绑定快照的所选方向水位换算。</p>
+     */
+    private BigDecimal profit;
 
     /** 是否为当前有效结算；数据库只允许 true 降为 false。 */
     private Boolean isCurrent;

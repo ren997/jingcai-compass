@@ -3,10 +3,12 @@ package com.jingcaicompass.settlement.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -21,12 +23,18 @@ import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
+import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
+import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.prediction.entity.Prediction;
+import com.jingcaicompass.prediction.enums.AsianHandicapPickEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
+import com.jingcaicompass.prediction.enums.TotalGoalsPickEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.settlement.entity.Settlement;
 import com.jingcaicompass.settlement.enums.MarketTypeEnum;
+import com.jingcaicompass.settlement.enums.SettlementStatusEnum;
 import com.jingcaicompass.settlement.exception.SettlementManualReviewException;
 import com.jingcaicompass.settlement.mapper.SettlementMapper;
 import com.jingcaicompass.system.observability.PredictionLifecycleMetrics;
@@ -67,6 +75,9 @@ class SettlementServiceTest {
     private SportteryPoolSnapshotMapper poolSnapshotMapper;
 
     @Mock
+    private AsianOddsSnapshotMapper asianOddsSnapshotMapper;
+
+    @Mock
     private AuditLogService auditLogService;
 
     private SettlementService service;
@@ -85,8 +96,11 @@ class SettlementServiceTest {
                 settlementMapper,
                 new MarketSettlementCalculatorRouter(List.of(
                         new WinDrawLossSettlementCalculator(),
-                        new SportteryHandicapSettlementCalculator()
+                        new SportteryHandicapSettlementCalculator(),
+                        new AsianHandicapSettlementCalculator(),
+                        new AsianTotalGoalsSettlementCalculator()
                 )),
+                new AsianMarketTermsResolver(asianOddsSnapshotMapper),
                 auditLogService
         );
 
@@ -215,5 +229,96 @@ class SettlementServiceTest {
 
         assertThat(result.outcome()).isEqualTo(SettlementWriteResult.Outcome.SKIPPED);
         verify(settlementMapper, never()).insert(any(Settlement.class));
+    }
+
+    @Test
+    void settlesAsianPredictionWithoutThreeWaySelectionAndPersistsProfit() {
+        Prediction asianPrediction = asianPrediction();
+        when(predictionMapper.selectByIdForUpdate(11L)).thenReturn(asianPrediction);
+        when(asianOddsSnapshotMapper.selectById(71L)).thenReturn(asianSnapshot());
+        lenient().when(settlementMapper.selectCurrentByPredictionIdAndMarket(11L, MarketTypeEnum.ASIAN_HANDICAP))
+                .thenReturn(null);
+        lenient().when(settlementMapper.selectCurrentByPredictionIdAndMarket(11L, MarketTypeEnum.ASIAN_TOTAL_GOALS))
+                .thenReturn(null);
+
+        SettlementWriteResult result = writer.settlePrediction(11L);
+
+        ArgumentCaptor<Settlement> settlements = ArgumentCaptor.forClass(Settlement.class);
+        verify(settlementMapper, times(2)).insert(settlements.capture());
+        assertThat(result.outcome()).isEqualTo(SettlementWriteResult.Outcome.SETTLED);
+        assertThat(result.settledMarketCount()).isEqualTo(2);
+        assertThat(settlements.getAllValues())
+                .extracting(Settlement::getMarketType, Settlement::getSettlementStatus,
+                        Settlement::getProfit, Settlement::getRuleVersion)
+                .containsExactly(
+                        tuple(MarketTypeEnum.ASIAN_HANDICAP, SettlementStatusEnum.HIT,
+                                new BigDecimal("0.8500"), SettlementWriter.ASIAN_RULE_VERSION),
+                        tuple(MarketTypeEnum.ASIAN_TOTAL_GOALS, SettlementStatusEnum.MISS,
+                                new BigDecimal("-1.0000"), SettlementWriter.ASIAN_RULE_VERSION)
+                );
+    }
+
+    @Test
+    void settlesOnlyTheAsianMarketWithAnExplicitDirection() {
+        Prediction asianPrediction = asianPrediction();
+        asianPrediction.setTotalGoalsPick(null);
+        when(predictionMapper.selectByIdForUpdate(11L)).thenReturn(asianPrediction);
+        when(asianOddsSnapshotMapper.selectById(71L)).thenReturn(asianSnapshot());
+
+        SettlementWriteResult result = writer.settlePrediction(11L);
+
+        ArgumentCaptor<Settlement> settlements = ArgumentCaptor.forClass(Settlement.class);
+        verify(settlementMapper, times(1)).insert(settlements.capture());
+        assertThat(result.settledMarketCount()).isEqualTo(1);
+        assertThat(settlements.getValue().getMarketType()).isEqualTo(MarketTypeEnum.ASIAN_HANDICAP);
+    }
+
+    @Test
+    void requiresManualReviewWhenAsianPredictionLacksABoundSnapshot() {
+        Prediction asianPrediction = asianPrediction();
+        asianPrediction.setAsianOddsSnapshotId(null);
+        when(predictionMapper.selectByIdForUpdate(11L)).thenReturn(asianPrediction);
+
+        assertThatThrownBy(() -> writer.settlePrediction(11L))
+                .isInstanceOf(SettlementManualReviewException.class)
+                .hasMessageContaining("has no asian odds snapshot");
+        verify(settlementMapper, never()).insert(any(Settlement.class));
+    }
+
+    @Test
+    void keepsSportterySettlementOutOfAsianMarkets() {
+        writer.settlePrediction(11L);
+
+        verify(settlementMapper, never())
+                .selectCurrentByPredictionIdAndMarket(11L, MarketTypeEnum.ASIAN_HANDICAP);
+        verify(settlementMapper, never())
+                .selectCurrentByPredictionIdAndMarket(11L, MarketTypeEnum.ASIAN_TOTAL_GOALS);
+        verify(asianOddsSnapshotMapper, never()).selectById(any());
+    }
+
+    private Prediction asianPrediction() {
+        Prediction asianPrediction = new Prediction();
+        asianPrediction.setId(11L);
+        asianPrediction.setMatchId(41L);
+        asianPrediction.setPredictionStatus(PredictionStatusEnum.LOCKED);
+        asianPrediction.setPredictionType(PredictionTypeEnum.ASIAN);
+        asianPrediction.setAsianOddsSnapshotId(71L);
+        asianPrediction.setAsianHandicapPick(AsianHandicapPickEnum.HOME_COVER);
+        asianPrediction.setTotalGoalsPick(TotalGoalsPickEnum.UNDER);
+        asianPrediction.setLockTime(Instant.parse("2026-07-27T10:00:00Z"));
+        return asianPrediction;
+    }
+
+    private AsianOddsSnapshot asianSnapshot() {
+        AsianOddsSnapshot snapshot = new AsianOddsSnapshot();
+        snapshot.setId(71L);
+        snapshot.setMatchId(41L);
+        snapshot.setHandicapLine(new BigDecimal("-0.5"));
+        snapshot.setHomeOdds(new BigDecimal("1.85"));
+        snapshot.setAwayOdds(new BigDecimal("2.05"));
+        snapshot.setTotalLine(new BigDecimal("2.5"));
+        snapshot.setOverOdds(new BigDecimal("1.90"));
+        snapshot.setUnderOdds(new BigDecimal("1.95"));
+        return snapshot;
     }
 }

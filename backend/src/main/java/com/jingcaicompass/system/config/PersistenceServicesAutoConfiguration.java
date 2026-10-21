@@ -112,6 +112,7 @@ import com.jingcaicompass.prediction.service.PublicPredictionQueryService;
 import com.jingcaicompass.prediction.service.PublicPredictionQueryServiceImpl;
 import com.jingcaicompass.settlement.job.SettlementJob;
 import com.jingcaicompass.settlement.mapper.SettlementMapper;
+import com.jingcaicompass.settlement.service.AsianMarketTermsResolver;
 import com.jingcaicompass.settlement.service.MarketSettlementCalculatorRouter;
 import com.jingcaicompass.settlement.service.SettlementService;
 import com.jingcaicompass.settlement.service.SettlementServiceImpl;
@@ -671,6 +672,12 @@ public class PersistenceServicesAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    AsianMarketTermsResolver asianMarketTermsResolver(AsianOddsSnapshotMapper asianOddsSnapshotMapper) {
+        return new AsianMarketTermsResolver(asianOddsSnapshotMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     SettlementWriter settlementWriter(
             PredictionMapper predictionMapper,
             MatchMapper matchMapper,
@@ -678,6 +685,7 @@ public class PersistenceServicesAutoConfiguration {
             SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
             SettlementMapper settlementMapper,
             MarketSettlementCalculatorRouter calculatorRouter,
+            AsianMarketTermsResolver asianMarketTermsResolver,
             AuditLogService auditLogService
     ) {
         return new SettlementWriter(
@@ -687,6 +695,7 @@ public class PersistenceServicesAutoConfiguration {
                 sportteryPoolSnapshotMapper,
                 settlementMapper,
                 calculatorRouter,
+                asianMarketTermsResolver,
                 auditLogService
         );
     }
@@ -710,6 +719,7 @@ public class PersistenceServicesAutoConfiguration {
             SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
             SettlementMapper settlementMapper,
             MarketSettlementCalculatorRouter calculatorRouter,
+            AsianMarketTermsResolver asianMarketTermsResolver,
             AuditLogService auditLogService
     ) {
         return new SettlementRecalculationWriter(
@@ -719,6 +729,7 @@ public class PersistenceServicesAutoConfiguration {
                 sportteryPoolSnapshotMapper,
                 settlementMapper,
                 calculatorRouter,
+                asianMarketTermsResolver,
                 auditLogService
         );
     }

@@ -30,9 +30,13 @@
 ## 已知未收口事项
 
 - `T610` 仍为 `PARTIAL`，剩余 Draft PR + 完整 CI 证据。
-- `T613` 阶段 A 已收口（`e9c2b34`）、阶段 B 已收口（`166e87e`）、阶段 C 已收口（`0bd5450`）、阶段 D 已收口（`74a5adc`），均已推送 `feat/asian-model-v1`。
-- 阶段 E 分两批：**E1~E6（V24 概率落库）已收口（`7b29b91`）**；E7~E14（统计重构、批量发布、后台亚盘展示、前端）未开始，计划文件在 `C:\Users\Admin\.workbuddy\plans\cosmic-aurora-curie-ZBnmGq5O.md`。
-- E7 起的 P0 前置（**不是潜伏，是必然引爆**）：`StatisticsCalculator.recordMarket`（`:82-90`）对每条记录无条件 `orElseThrow` 要求存在 HAD/HHAD，而 ASIAN 预测的 `settlementMarkets` 只有 `ASIAN_HANDICAP`/`ASIAN_TOTAL_GOALS` → 必抛 `missing HAD history`。`StatisticsQueryServiceImpl` 无 catch，`HomeSummaryQueryServiceImpl:53` 又复用同一个 summary → **首页和统计页同时 500**。触发条件是「发布任意一条亚盘预测 + 到开赛时间」，因为 `PredictionLockJob` 自动锁定且同样不过滤 `prediction_type` —— 不需要等批量发布上线。另有 `MarketAccumulator.record` 的 switch 未处理 `PUSH`/`HALF_WIN`/`HALF_LOSS`（静默漏计）、`AdminPredictionStatusQueryServiceImpl` 硬编码只展示 HAD/HHAD。
+- `T613` 阶段 A 已收口（`e9c2b34`）、阶段 B（`166e87e`）、阶段 C（`0bd5450`）、阶段 D（`74a5adc`）、**阶段 E 全部收口（E1~E6 `7b29b91`；E7~E17 `96001cd`→`c0718e0` 共 6 个提交）**，均已推送 `feat/asian-model-v1`。任务板状态置 `PARTIAL`，唯一缺口是 GitHub Actions + Draft PR（本机 Docker/WSL/原生 PG 全不可用，Testcontainers 跑不了）。
+- 邻线校验口径（整条阶梯取最大值 vs 主盘 ±0.75）**本轮确认不改代码**，结论只写进 `docs/asian-model-design.md`，待下一阶段连同 `neighbor-tolerance` 取窗口逻辑一起处理。
+- `backend/src/test/java/com/jingcaicompass/tools/NovaAsianRunTest.java` 保持未跟踪（一次性实跑脚手架，不入库）。
+
+## 已完成的历史 P0（留档，避免重复排查）
+
+`StatisticsCalculator.recordMarket` 曾对每条记录无条件 `orElseThrow` 要求 HAD/HHAD，亚盘预测必抛 `missing HAD history` → `HomeSummaryQueryServiceImpl` 复用同一 summary ⇒ 首页与统计页同时 500。E7 已重写为按 `predictionType` 隔离样本 + `marketsFor()` 生成市场集合；`MarketAccumulator` 的箭头 switch 已补 `default` 抛错（该 switch 是**语句**，不要求穷尽且编译不报错，新增枚举值会被静默丢弃）。
 
 ## 亚盘模型的硬约束（阶段 B、C、D 建立，后续阶段不得违反）
 
@@ -46,6 +50,15 @@
 - **落库口径是首边，不是所选方向**：`model_cover_prob` / `market_cover_prob` / `edge_cover` 一律按主队（让球）与**大球**（大小球）记，而 `AsianPublishGate.Verdict` 里的概率**已按方向做过 `1 − p` 换算**。混用会让方向字段与概率字段互相矛盾，且统计侧无法再按首边归一。
 - **新增落库列必须同时改三处**：V 版本迁移的列定义 + `protect_published_prediction()` 两处 ROW 列表（漏改等于允许事后重写已发布预测背后的概率）+ `PredictionImportDto` 的模型输出校验。列精度统一 `numeric(9,6)`，不用 5 位（生成侧 `PROBABILITY_SCALE = 6`，5 位会静默四舍五入）。
 - **「值只在某个分支才算」是落库陷阱**：`overProbability` 原先只在置信度非 LOW 的分支里投影，直接落库会写入 0 而非真实概率。给任何市场新增落库列前，先确认该值在**所有分支**都被计算。
+
+## 统计与公开验证的硬约束（阶段 E 建立）
+
+- **两种产品线的统计不可混算**：响应形状用 `markets` 数组而**不是** `had`/`hhad` 具名字段——具名字段把「HAD/HHAD 必然存在」写进响应形状，混算风险从计算层转移到展示层。竞彩与亚盘分别请求（`predictionType`），首页固定亚盘。
+- **走盘进 Brier 样本、不进命中率分母**：`outcome = HIT 1 / HALF_WIN .75 / PUSH .5 / HALF_LOSS .25 / MISS 0`；`settled = hit+miss+halfWin+halfLoss`（不含 PUSH），另给 `weightedHitRate`。只给一个命中率会在走盘比例高时骗人。
+- **哈希结构只能追加不能修改**：`CanonicalPredictionV4` = V3 字段序 + 十列（6 位定标）。选版本只看事实：十列全非空 → v4、全空 → v3、部分为空抛错。`verifyStoredHash` 必须回落认「十列已填但哈希按 v3 算」的存量行，否则快照生成整批失败。manifest `schemaVersion` 取批次**最大值**，十列 `NON_NULL` 省略（纯 v3 批次字节不变）。
+- **批量写操作按 `(matchId, predictionId)` 升序串行 + 逐条独立事务**：同场多条都要更新 `matches` 行，并发批次反向拿锁会死锁；一条坏数据不能回滚已成功的。结果逐条返回，且前端必须按 ID 回填（服务端会重排顺序）。
+- **`switch` 语句必须补 `default` 抛错**：Java 箭头 `switch` **语句**不要求穷尽、编译不报错，新增枚举值被静默丢弃。
+- **后台盘口阶梯必须复用生成侧的查询与聚合器**：自己取「最新一条快照」再算，看到的就不是模型当时用的数据，而这个页面的唯一用途就是核对它们。冻结行未必在主盘线上（只有一家报到的档位达不到最少家数）。
 
 ## 跑真实预测的前置条件（2026-10-21 实操确认）
 

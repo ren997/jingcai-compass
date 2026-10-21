@@ -5,9 +5,9 @@
 - 文档版本：v0.6
 - 最后更新：2026-10-21
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A、B、C、D 均已收口，分支 feat/asian-model-v1）`
-- 下一任务：`T613-E 概率落库与统计（V24 + 发布侧门槛 + 双 Brier）`
-- 最近完成增量：`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）；`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（代码已合入 master，CI 证据待补）
+- 当前活动任务：`T613 亚盘模型 v1 交付（阶段 A~E 代码全部收口，分支 feat/asian-model-v1，待 CI 与 Draft PR）`
+- 下一任务：`T610 收尾（Draft PR + 完整 CI 证据）`
+- 最近完成增量：`T613 阶段 E 概率落库与统计`（统计口径按产品线隔离 + `PUSH`/`HALF_*` 连续化 + 双 Brier + 前端 tab 与亚盘展示 + 十列进哈希/快照 v4 + 批量发布 + 后台盘口阶梯）；`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）；`T611 公开比赛已发布预测筛选`、`T612 公开预测盘口与赔率文案`（代码已合入 master，CI 证据待补）
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -2275,7 +2275,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T613 亚盘模型 v1 交付（结算闭环到概率统计）
 
-- 状态：`IN_PROGRESS`
+- 状态：`PARTIAL`（阶段 A~E 代码全部完成并通过本地验证；缺 GitHub Actions 与 Draft PR 证据）
 - 优先级：P0
 - 分支：`feat/asian-model-v1`（一个交付分支承载本任务全部阶段，不按阶段拆分支）
 - 依赖：T206、T306、T401、T403、T404、T610
@@ -2324,7 +2324,24 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
     - [x] D6 单测：`AsianPublishGateTest` 13 项 + 生成服务新增 9 项 + 配置绑定与校验 2 项。
     - [x] D7 文档收口：设计文档 §2 现状、§4.6、§4.7（重写为 4.7.1~4.7.3）、§7 阶段 D 验收与实测、§8.1、§8.3 第 4/5 条。
     - [x] D8 分层验证与提交推送。
-  - **阶段 E**：概率落库与统计（V24、发布侧门槛、双 Brier、`PUSH`/`HALF_*` 统计口径、后台状态页亚盘展示）。
+  - **阶段 E（概率落库与统计）**
+    - [x] E1 新增 V24 迁移：十列统一 `numeric(9,6)`，三组 CHECK（λ 同生同灭、概率三元组与离散度同生同灭、范围约束），`protect_published_prediction()` 两处 ROW 列表各追加 10 字段。
+    - [x] E2 `Prediction` 实体与 `PredictionImportDto` 接 `AsianModelOutputDto` 嵌套 record，避免主 DTO 27 平铺参数。
+    - [x] E3 导入解析器补嵌套数值守卫：`asian` 对象不在 `NUMERIC_FIELDS` 扫描范围，不补会让字符串概率被静默转换。
+    - [x] E4 导入侧校验：λ 成对、概率三元组与离散度成对、概率区间、6 位定标；同批次重放判定纳入模型输出。
+    - [x] E5 生成侧修正 `overProbability` 门控缺陷：原逻辑在低置信度下不投影，会落库 0 而非真实概率；改为与方向解耦、恒按冻结线投影。落库口径统一为首边。
+    - [x] E6 分层验证：`PostgresApplicationIT` 9 项在 `postgres:16-alpine` 通过（24 迁移连续 apply），定向 78 项、全量 658 项全绿。
+    - [x] E7 `StatisticsCalculator` 完全重写：市场集合由 `MarketTypeEnum.marketsFor(predictionType)` 生成，`PUSH`/`HALF_WIN`/`HALF_LOSS` 进连续化 outcome（1 / 0.75 / 0.5 / 0.25 / 0），「命中率」给两口径（`hitRate` 与 `weightedHitRate`），`settled` 不含走盘。
+    - [x] E8 首页待结算口径按产品线分派；`HomeSummaryMapper.countPendingSettlementMatches()` 亚盘分支的终态集合必须含 `PUSH`/`HALF_*`（漏掉会让走盘场次永久「待结算」）；首页固定展示亚盘。
+    - [x] E9 统计页与历史页前端：`markets` 数组渲染、产品线 tab 切换、切换时同步重置市场与状态筛选、旧链接按市场双向反推产品线。
+    - [x] E10 后台状态页后端：四个市场各自 LEFT JOIN、诊断码由 5 个按市场硬编码收缩为 3 个通用码、`settlementMarkets` 列表替代 `had`/`hhad` 双槽位、列表/总数/角标共用同一段谓词。
+    - [x] E11 后台状态页前端：遍历 `settlementMarkets`、`PUSH`/`HALF_*` 补中文标签、展示 `profit`。
+    - [x] E12 公开 VO 透出十列（`PredictionAsianModelVo`，十列全空返回 `null`）；历史列表筛选增加 `predictionType`，市场缺省取该产品线首个市场，跨产品线组合直接拒绝。
+    - [x] E13 比赛卡片与详情页展示概率：卡片「模型 x% · 市场 y%」+ edge，详情页再加 λ 与 σ；十列为空整块不渲染。
+    - [x] E14 哈希 v4 与 manifest v4：新增 `CanonicalPredictionV4`（V3 字段顺序 + 十列），十列全非空走 v4 / 全空走 v3 / 部分为空拒绝；`verifyStoredHash` 支持存量 v3 行回落；manifest `schemaVersion` 取批次最大值。
+    - [x] E15 批量发布接口 `POST /api/admin/predictions/publish/batch`：去重保序、上限 200、按 `(matchId, predictionId)` 升序执行、逐条独立事务、逐条回结果。
+    - [x] E16 批量发布前端替换：`Promise.allSettled` 改一次请求，结果按 `predictionId` 回填（服务端会重排），响应缺失条目按失败处理。
+    - [x] E17 后台盘口阶梯 `POST /api/admin/predictions/odds-ladder`：复用生成侧两条批量查询与同一个共识聚合器，前端抽屉只在打开时请求，冻结行置顶标注。
 - 验证命令（按改动性质分层，不要求每次改动都跑全量集成测试）：
 
   ```bash
@@ -2367,6 +2384,15 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 2026-10-21：σ 判定独立于置信度、按市场粒度否决。两者输入不同源（σ 来自跨庄共识样本，置信度来自冻结行单行报价），做成覆盖会让 `ConfidenceLevelEnum` 语义被污染，并丧失「HIGH 置信但各家打架」这一关键时刻的归因能力。否决时方向与置信度必须**成对置空**：导入校验强制「无方向 ⇒ 无置信度」，只清方向会让整批 `importFile` 抛错回滚。
   - 2026-10-21：`toPrediction` 改为返回 `Evaluation(dto, skipReason)`。跳过原因从 v6 起不止一种，调用方原先硬编码 `LOW_CONFIDENCE_ASIAN_MARKETS`，不改就会让新原因永远记录不到。混合情形（一边低置信、一边 σ 超限）仍归因低置信度——只有两个市场都输在分歧上才记 `MARKET_DISPERSION_TOO_HIGH`，否则阈值调参会把低置信场次算进分歧率。
   - 2026-10-21：`PersistenceServicesAutoConfiguration` 未改。新阈值从已透传的 `AsianModelProperties` 派生，不新增构造器参数；顺手记下来，避免下一个人按「新增配置必须改装配」的经验误改。
+  - 2026-10-21：完成 E1~E6（V24 结构化落库，`7b29b91`）。落库口径统一为**首边**（主队赢盘 / 大球），与 `AsianPublishGate.Verdict` 的「已按方向换算」明确区分——两者混用会让「押客队」的场次按「押主队」的概率记分，且统计侧再也无法按首边归一。同时修掉一个落库陷阱：`overProbability` 原先只在置信度非 LOW 的分支里投影，低置信场次会写入 0 而不是真实概率，直接落库等于让 Brier 把「没有方向」当成「强烈看空」。
+  - 2026-10-21：完成 E7+E8（`96001cd`）。`StatisticsCalculator` 不是「缺亚盘」，而是结构上无法支持：三向 Brier/LogLoss、强制三概率、固定两市场、ROI 恒 `available=false`（V23 的 `profit` 完全没被消费）。重写后市场集合由 `MarketTypeEnum.marketsFor` 生成，计算层先用 `record.predictionType() != scoringType` 隔离样本，`switch` 补 `default` 抛错——箭头 `switch` **语句**不要求穷尽且编译不报错，新增枚举值会被静默丢弃，这比 500 更危险（样本凭空消失、指标长期错但不报警）。
+  - 2026-10-21：E7 的 P0 前置（不是潜伏，是必然引爆）：`recordMarket` 对每条记录无条件 `orElseThrow` 要求存在 HAD/HHAD，而亚盘预测的 `settlementMarkets` 只有两个亚盘市场 → 必抛 `missing HAD history`；`StatisticsQueryServiceImpl` 无 catch，`HomeSummaryQueryServiceImpl` 又复用同一个 summary ⇒ **首页与统计页同时 500**。触发条件只是「发布任意一条亚盘预测 + 到开赛时间」，因为 `PredictionLockJob` 自动锁定且同样不过滤 `prediction_type`。
+  - 2026-10-21：完成 E10（`8c60098`）。诊断码从 5 个按市场硬编码收缩为 3 个通用码，市场信息移到 `MarketTypeEnum` 字段上：否则每加一个市场就要加一个诊断码，而诊断语义本身与市场无关。列表、总数、角标三条语句共用同一段谓词——三者算出不同数量时，运营看到的是「角标 5、列表 3」，无从判断哪个对。
+  - 2026-10-21：完成 E9+E11+E13（`00b8f1b`）。前端三个口径决定：①市场/状态集合按产品线裁剪（竞彩下勾「走盘」必然查空）；②首边 → 所选方向的 `1 − p` 换算**只发生在展示层**，落在服务端会让同一份 JSON 在不同页面语义不同；③十列为空时整块不渲染，渲染成「模型 — · 市场 —」会被读成「模型算出 0%」。
+  - 2026-10-21：完成 E12（`490aa9f`）。`HistoryListQueryDto` 增加 `predictionType` 并校验市场归属：跨产品线的组合（亚盘 + HAD）必然查出空集，而空集在页面上与「这段时间没有预测」无法区分，比报错更难排查。
+  - 2026-10-21：完成 E14（`8bd947a`）。触发器把十列锁死、`CanonicalPredictionV3` 却不含十列 ⇒ 公开快照复算不出「模型当时给的概率」，「公开可验证」只覆盖了方向。新增 v4 时 V1~V3 一律不动（字段顺序或精度一变，冻结的存量哈希就再也复算不出）。加 `verifyStoredHash` 处理 V24 到本次之间「十列已填、哈希按 v3 算」的存量行：没有这一步，快照生成会因「哈希不匹配」整批失败，比不覆盖概率更坏。
+  - 2026-10-21：完成 E15+E16（`a7727c8`）。前端原先并发逐条发布，同场多条预测都要更新 `matches` 行，以相反顺序拿锁时直接死锁；服务端改为按 `(matchId, predictionId)` 升序串行、逐条独立事务。顺带修一处契约错位：前端读 `alreadyPublished`、后端序列化 `reused`，该字段恒为 `undefined`，「已按既有发布结果返回」的分支从未生效。
+  - 2026-10-21：完成 E17（`c0718e0`）。阶梯的取数与聚合复用生成侧同一对查询与同一个聚合器：后台若自己取「最新一条快照」，看到的就不是模型当时用的那份数据，而这个页面的唯一用途恰恰是核对它们。冻结行未必在主盘线上（只有一家报到的档位达不到最少家数），这一点必须能看出来，否则会误以为「冻结行就是主盘」。
 - 验证记录：
   - 2026-10-21：`mvn -B -ntp -f backend/pom.xml test` 通过，**525 项**（基线 472 项 + 新增 53 项），0 失败 0 错误。新增 `AsianSettlementCalculatorTest` 47 项覆盖半球/整数/四分之一盘 × 主客方向 × 赢/走/输矩阵、拆盘半赢半输、走盘、非法盘口线与净收益换算；`SettlementServiceTest` 新增 5 项覆盖亚盘两条市场落库与 `profit`、单方向缺失只结算另一侧、无绑定快照转人工复核，以及「竞彩预测不触碰亚盘市场」的回归守卫。
   - 2026-10-21：`-Dtest='*Settlement*Test,*Asian*Test,SettlementMapperSqlContractTest'` 通过 **120 项**，含新增 `SettlementMapperSqlContractTest` 4 项。
@@ -2404,6 +2430,14 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - 因此 edge 采用**影子模式**：照算、写摘要、打指标，但不改变生成结果；σ 是**真拦**，因为它衡量的是「各家庄是否互相矛盾」，与 λ 的求解方式无关，是真实的可用信号。两者的差别不是保守程度，而是有无独立信息。
   - 度量口径有意分两个分母：σ 统计「所有成功反解并选到冻结行的市场」，gate 统计「仍有方向、当前真的会发布的市场」。混用会把「低置信」与「分歧超限」算成同一件事。要判断能否开闸，看 `gate.margin` 的分布而不是发布量。
   - 已知遗留（不在阶段 D 范围）：edge/σ 未落库（V24 归阶段 E）；发布侧仍无批量门槛动作，`DRAFT → PUBLISHED` 仍是逐条人工；σ 阈值上线后需按 `source=whitelist|fallback` 分组复核。
+  - 2026-10-21（阶段 E）：`mvn -B -ntp -f backend/pom.xml test` 全量 **699 项**通过，0 失败 0 错误（基线 640 → 阶段 E 新增 59）。分段：E7/E8 后 672、E14 后 687、E15/E16 后 694、E17 后 699。
+  - 2026-10-21（阶段 E）：`npm --prefix frontend run test` **16 个测试文件 85 项**通过，`npx tsc -b` 与 `npx vite build` 通过。新增用例覆盖：亚盘方向换算（押客队受让取 `1 − p`）、走盘/半赢半输进统计分母、产品线切换时市场与状态同步重置、`market=ASIAN_TOTAL_GOALS` 无 `type` 的老链接反推、批量发布结果按 ID 回填（服务端故意倒序返回）、盘口阶梯抽屉按需加载与冻结行标注。
+  - 2026-10-21（阶段 E）：**集成测试未在本机执行。** `docker` 命令缺失、`//./pipe/docker_engine` 不存在、WSL 被安全策略拦截、无原生 PostgreSQL 监听，Testcontainers 无法启动。`AdminPredictionStatusApplicationIT`（3 项）与 `PredictionImportApplicationIT` 的亚盘用例已写好但未运行；SQL 渲染由 `AdminPredictionStatusMapperSqlContractTest` 静态兜住。这是本阶段唯一缺失的本地证据，需由 CI 补齐。
+- 阶段 E 收口说明：
+  - **本阶段的核心不是「把亚盘加进统计」，而是承认两种产品线的指标不可混算。** 竞彩是三向 Brier + 命中/未中两态，亚盘是二选一 + 走盘 + 半赢半输；混在一个 `had`/`hhad` 结构里，两边的分母、样本和概率含义都不同。因此响应形状从具名字段改为 `markets` 数组，首页固定亚盘，统计页 tab 切换——把「混算」从计算层的问题变成展示层不可能发生的事。
+  - **走盘进 Brier 样本、不进命中率分母。** 连续化 outcome 用 `HIT=1 / HALF_WIN=0.75 / PUSH=0.5 / HALF_LOSS=0.25 / MISS=0`，与结算侧 0.25 刻度的 margin 判定同源；`hitRate` 的分母是 `hit+miss+halfWin+halfLoss`（不含 PUSH），另给 `weightedHitRate` 按 0.75/0.25 计分。两个口径都摆出来，是因为任何单一数字都会在走盘比例高时骗人。
+  - **十列进哈希与快照，是「公开可验证」的最后一块。** 触发器把十列锁死说明它们的地位等同于预测内容；若快照不含它们，外部只能复算方向、复算不出模型给出的概率，验证链在关键处断掉。
+  - **本轮不改邻线校验口径。** 实跑台账（`docs/odds-analysis-records.md`）显示整条阶梯取最大偏差会把远端档位噪声放大，限定主盘 ±0.75 后同一批 5 场全部通过；但这是模型参数决策，不在阶段 E 范围。结论已写入设计文档，留待下一阶段连同 `neighbor-tolerance` 的取窗口逻辑一起处理。
 
 
 ## 12. 任务记录模板
@@ -2493,6 +2527,7 @@ T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PAR
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-10-21 | T613 | `IN_PROGRESS -> PARTIAL`（阶段 E 收口） | 阶段 E 概率落库与统计完成（E1~E17）：统计口径按产品线隔离（`markets` 数组替代 `had`/`hhad` 具名字段，首页固定亚盘，统计页 tab 切换）；`PUSH`/`HALF_WIN`/`HALF_LOSS` 进连续化 outcome 与双 Brier，`hitRate` 与 `weightedHitRate` 并列；后台状态页四个市场各自 JOIN、诊断码收缩为 3 个通用码；公开 VO 透出十列；`CanonicalPredictionV4` 与 manifest v4 把十列纳入公开可复算范围（存量 v3 行回落兼容）；批量发布按 `(matchId, predictionId)` 串行防死锁；后台新增盘口阶梯只读接口与抽屉。分支 `feat/asian-model-v1` 领先本地 9 个提交。后端全量 699 项、前端 16 文件 85 项、tsc 与生产构建通过；**集成测试未在本机执行**（Docker/WSL 均不可用），CI 与 Draft PR 为唯一缺失证据，故置 `PARTIAL`。 |
 | 2026-10-21 | T613 | `新增；IN_PROGRESS` | 「亚盘模型 v1 交付」立项并按 T612 改号为 T613（避开 T611 分支已占用的 T612）。分支 `feat/asian-model-v1` 承载阶段 A~E，阶段 A 拆为 A1~A7。依据 `docs/asian-model-design.md` 与 `docs/data-sources-novaapi.md`；项目负责人确认结算采用精度优先方案（新增 `HALF_WIN`/`HALF_LOSS` 与 `settlements.profit`）。 |
 | 2026-10-21 | T613 | `IN_PROGRESS`（阶段 D 收口） | 阶段 D 选择性发布完成：σ（跨庄去水概率总体标准差）阈值 `0.0200` 分市场独立硬否决，两边都超限整场跳过；edge 计算为 `model − market`，按冻结行真实报价算盈亏余量，实测确认**让球主盘 edge 结构性恒为 0**（λ 由该主盘反解，投影回同线残差 `1e-16`），任何正边际都会拒发 100% 让球方向，故改为**影子门槛**——照算、进摘要与指标、不改变生成结果。版本升 `t306-asian-baseline-v6`。新增 5 个指标与跳过原因 `MARKET_DISPERSION_TOO_HIGH`，`toPrediction` 改返回 `Evaluation(dto, skipReason)` 以区分低置信与分歧超限。后端全量 640 项 + PostgreSQL 16 定向集成 5 项通过。 |
 | 2026-10-21 | T613 | `IN_PROGRESS`（阶段 C 收口） | 阶段 C λ 反解模型完成：概率口径合并为 `p_eff = (W + 0.5·HW) / (W + 0.5·HW + 0.5·HL + L)`（半盘/整盘/四分之一盘共用，两侧和为 1）；求解由二维网格改两段一维二分（和是泊松恒等，根唯一，残差 `1e-16`）；自洽性判据由「主盘残差」改为「邻线回投」（恰定方程组下残差恒为 0，原判据无效）；缺大小球主盘改为整场跳过；版本升 `t306-asian-baseline-v5`。后端全量 616 项 + PostgreSQL 16 定向集成 5 项通过。已知局限：独立泊松在极端档位低估尾部 2~4 个百分点，主盘不受影响。 |

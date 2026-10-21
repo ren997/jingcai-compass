@@ -32,7 +32,7 @@
 - `T610` 仍为 `PARTIAL`，剩余 Draft PR + 完整 CI 证据。
 - `T613` 阶段 A 已收口（`e9c2b34`）、阶段 B 已收口（`166e87e`）、阶段 C 已收口（`0bd5450`）、阶段 D 已收口（`74a5adc`），均已推送 `feat/asian-model-v1`。
 - 阶段 E 分两批：**E1~E6（V24 概率落库）已收口（`7b29b91`）**；E7~E14（统计重构、批量发布、后台亚盘展示、前端）未开始，计划文件在 `C:\Users\Admin\.workbuddy\plans\cosmic-aurora-curie-ZBnmGq5O.md`。
-- E7 起的 P0 前置（潜伏状态，一上线就炸）：统计查询只过滤 `prediction_status='LOCKED'` 不过滤 `prediction_type`，任何 ASIAN 预测被锁定后 `StatisticsCalculator` 会抛 `missing HAD history` 导致统计接口整页 500 —— 亚盘尚未批量发布，但 E11 的批量发布一上线即引爆。另有 `MarketAccumulator.record` 的 switch 未处理 `PUSH`/`HALF_WIN`/`HALF_LOSS`（静默漏计）、`AdminPredictionStatusQueryServiceImpl` 硬编码只展示 HAD/HHAD。
+- E7 起的 P0 前置（**不是潜伏，是必然引爆**）：`StatisticsCalculator.recordMarket`（`:82-90`）对每条记录无条件 `orElseThrow` 要求存在 HAD/HHAD，而 ASIAN 预测的 `settlementMarkets` 只有 `ASIAN_HANDICAP`/`ASIAN_TOTAL_GOALS` → 必抛 `missing HAD history`。`StatisticsQueryServiceImpl` 无 catch，`HomeSummaryQueryServiceImpl:53` 又复用同一个 summary → **首页和统计页同时 500**。触发条件是「发布任意一条亚盘预测 + 到开赛时间」，因为 `PredictionLockJob` 自动锁定且同样不过滤 `prediction_type` —— 不需要等批量发布上线。另有 `MarketAccumulator.record` 的 switch 未处理 `PUSH`/`HALF_WIN`/`HALF_LOSS`（静默漏计）、`AdminPredictionStatusQueryServiceImpl` 硬编码只展示 HAD/HHAD。
 
 ## 亚盘模型的硬约束（阶段 B、C、D 建立，后续阶段不得违反）
 

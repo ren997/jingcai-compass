@@ -63,6 +63,29 @@
 - **`switch` 语句必须补 `default` 抛错**：Java 箭头 `switch` **语句**不要求穷尽、编译不报错，新增枚举值被静默丢弃。
 - **后台盘口阶梯必须复用生成侧的查询与聚合器**：自己取「最新一条快照」再算，看到的就不是模型当时用的数据，而这个页面的唯一用途就是核对它们。冻结行未必在主盘线上（只有一家报到的档位达不到最少家数）。
 
+## 数据源现状（2026-10-21 核实，纠正一个常见误解）
+
+- **NovaAPI 从未进入生产代码**。`grep -ril nova backend/src/main/java` 结果为 **0**；`AsianOddsProviderTypeEnum` 只有 `STUB` / `THE_ODDS_API`；`AsianOddsProvider` 的实现只有 `StubAsianOddsProvider` 与 `TheOddsApiProvider`；`application-local.yml` 的 `provider` 仍是 `THE_ODDS_API`。NovaAPI 只以三种形态存在：`tools/novaapi-probe/`（独立探测程序，不在构建路径）、`backend/src/test/resources/asianodds/novaapi-*.json` + `NovaApiOddsFixture`（离线夹具）、`tools/NovaAsianRunTest.java`（未入库、需环境变量的一次性实跑脚手架）。
+- **T613 覆盖的是「快照之后」的全部环节**：跨庄聚合选主盘 → λ 反解与投影 → 发布门 → 结算 → 统计与双 Brier。它**不涉及一行数据采集代码**。所谓「T613 用 3 场 NovaAPI 真实抓包验收」，验的是模型数学对不对（夹具喂纯计算类），不等于生产里会调 novaapi。
+- **在产数据链是三段拼起来的**：赛程 `sporttery.cn`（`SportteryPoolSyncJob` → `DataPipelineSyncJob`）、赛果 `sporttery.cn`（`MatchResultSyncJob` → `SportteryMatchResultPayloadMapper`）、亚盘赔率 `THE_ODDS_API`（`AsianOddsSyncJob`）。三者靠 `match_source_mappings` 人工缝合，这就是 `跑真实预测的前置条件` 里那条映射硬阻塞的来源。
+- **NovaAPI 是单源**：赛程 / 赔率 / 赛果共用同一个 `matchId`。一旦切过去，`match_source_mappings`、`provider_team_mappings`、`league_aliases`、`team_aliases`、归一化评审与 `name_key`（V4/V5/V14/V15/V16/V17/V19/V22）在业务上全部失去存在理由——用户 2026-10-21 明确表示要把这批关联去掉。
+- 判断原则：**下排（模型/结算/统计）不要动，上排（采集/映射）可以整体替换**。两者唯一契约是 `asian_odds_snapshots` 的行形状与「冻结行必须是真实报价」这条，换源不影响模型。
+
+## NovaAPI 单源改造：接口字段的硬约束（2026-10-21 抓包 + 官方文档双核实）
+
+改造计划在 `~/.workbuddy/plans/quantum-thunder-einstein-9P5tHcJF.md`（6 阶段：V25 → 赛程 → 赔率+去JOIN → 自动发布 → 赛果结算 → 删映射层）。下面六条是抓真实响应 + 读官方文档交叉确认过的，**违反任意一条都不会报错，只会长期算错**：
+
+1. **`matchStartDate` 才是「实际比赛日期」**（文档原话），`matchDate` 是竞彩业务日。2026-10-21 抓包 13 场里 **10 场跨零点**（业务日 10-21、开赛 10-22）。开赛时间必须 `matchStartDate + matchTime` 按 `Asia/Shanghai` 拼；用业务日会让 77% 的场次早 24 小时。
+2. **`matchStatus` 是销售状态不是比赛状态**，文档全集 `Selling`/`SoldOut`/`Closed`。当日只观测到 `Selling`(10)/`Closed`(3)，`SoldOut` 一次未出现 → 映射 switch 必须显式处理它**并带 `default` 抛错**（箭头 switch 语句漏取值不报错）。**赛程接口压根没有「比赛是否结束」字段**，真正的比赛状态只在 `/nova/text/live` 的 `matchStatus`/`matchStatusName`；故 `matches.match_status=FINISHED` 只能由赛果写入方设置。
+3. **赛果有两套队名**：文档明确 `allHomeTeam`/`allAwayTeam` = 全称、`homeTeam`/`awayTeam` = 简称。赛程 `homeTeamName` 对应**全称**（3/3 一致），简称 2/3 不一致（`大宫松鼠RB`→`大宫松鼠`、`神户胜利船`→`神户胜利`，主客两侧都可能差）。用简称会静默改写 `matches` 里的队名。
+4. **`poolStatus` 跨接口同名不同义**：赛程 `matchPoolList[].poolStatus` = 玩法销售状态（Selling/Closed/Suspended）；赛果 `poolStatus` = 奖池派奖状态。赛果 21 场里 **2 场 `poolStatus` 为空但 `sectionsNo999` 与 `matchResultStatus=2` 齐全** → 用它过滤结算会静默漏单，判据应是「`sectionsNo999` 合法 + `matchResultStatus`」。
+5. **字段类型会漂移**：`sellStatus` 是字符串 `"2"`（文档也是 String）；`leagueId` 文档写 String 但抓包实际是数字 `42`。一律 `asText()` 读取——用 `asInt()` 读文本会静默变 0。
+6. **`sectionsNo999` 是否含加时仍是未验证推断**：文档只写「全场比分」。判它 = 90 分钟的依据是「同响应带 `winFlag`/`oddsResults`（竞彩开奖明细）⇒ 与竞彩口径一致」。**阶段 4 收尾前必须用一场真实打过加时的杯赛样本复核**，否则长期污染 ROI/Brier。
+
+**文档读取方法**（下次不用再摸索）：`https://novaapi.tsgnkj.com/` 是 Vite SPA，字段说明全部内嵌在 `/assets/index-*.js` bundle 里，没有任何独立 API 端点（`/docs`、`/swagger` 等一律回落 200）。抓 bundle 后按字段名（如 `matchStatus`、`sectionsNo999`）定位明文 JSON 描述，比抓页面或猜路径可靠。
+
+**已落地的夹具**：`sporttery/novaapi-schedule-2026-10-21.json`（13 场）与 `sporttery/novaapi-match-results-2026-10-20-to-21.json`（21 场），配套 `NovaApiScheduleFixture`/`NovaApiMatchResultFixture` 与两个守卫测试（12 项），把上述规则钉成回归断言。`SportteryPoolSyncItemDto` 已有 `externalMatchId`、`SportteryMatchResultDto` 已有 `matchId`，阶段 1/4 的 DTO 改动量为 0。
+
 ## 跑真实预测的前置条件（2026-10-21 实操确认）
 
 - **亚盘快照要求比赛映射已确认**：`AsianOddsSyncServiceImpl` 对 `!isConfirmed(mapped)` 直接 `skippedUnmapped++`，而自动确认要求 score ≥ 0.85，打分只做 id / 队名的**精确相等**比较 → 中英文队名永远拿不到分。**每次跑新比赛前必须人工写 `match_source_mappings`（`MANUAL_CONFIRMED` + `MANUAL_REVIEW`），目前没有 admin 接口，只能用 SQL 或一次性运行类。** 对应地，`provider_team_mappings` 里 68 条 THE_ODDS_API 记录全是 `PENDING`，不要指望复用。

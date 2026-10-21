@@ -3,8 +3,9 @@ import { MATCH_LIST_SORTS, MATCH_STATUSES, type MatchListQuery, type MatchListSo
 export const MATCH_PAGE_SIZE = 20;
 export const LEAGUE_OPTIONS_PAGE_SIZE = 100;
 
-export type MatchListSearch = Omit<MatchListQuery, 'pageSize' | 'matchStatuses'> & {
+export type MatchListSearch = Omit<MatchListQuery, 'pageSize' | 'matchStatuses' | 'hasPublishedPrediction'> & {
   matchStatuses: MatchStatus[];
+  hasPublishedPrediction: boolean;
 };
 
 function isCalendarDate(value: string | null): value is string {
@@ -44,6 +45,7 @@ export function parseMatchListSearch(params: URLSearchParams, fallbackDate: stri
     lotteryDate: isCalendarDate(date) ? date : fallbackDate,
     leagueId,
     matchStatuses: parseStatuses(params.get('statuses')),
+    hasPublishedPrediction: params.get('published') === 'true',
     sort: parseSort(params.get('sort')),
     pageNo: asPositiveInteger(params.get('page')) ?? 1,
   };
@@ -62,12 +64,20 @@ export function toMatchListSearchParams(search: MatchListSearch): URLSearchParam
   if (search.matchStatuses.length > 0) {
     params.set('statuses', search.matchStatuses.join(','));
   }
+  if (search.hasPublishedPrediction) {
+    params.set('published', 'true');
+  }
   return params;
 }
 
 /** 为 T501 列表接口补充固定的公共页大小。 */
 export function toMatchListQuery(search: MatchListSearch): MatchListQuery {
-  return { ...search, pageSize: MATCH_PAGE_SIZE };
+  const { hasPublishedPrediction, ...query } = search;
+  return {
+    ...query,
+    pageSize: MATCH_PAGE_SIZE,
+    ...(hasPublishedPrediction ? { hasPublishedPrediction: true } : {}),
+  };
 }
 
 export function todayInShanghai() {

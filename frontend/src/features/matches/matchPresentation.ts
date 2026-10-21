@@ -131,12 +131,44 @@ export function asianHandicapPredictionLabel(
   return `亚盘让球（${lineLabel}）：${asianHandicapPickLabel(pick)}`;
 }
 
+/** 将亚盘让球方向还原为主队或客队视角的具体盘口及该方向水位。 */
+export function asianHandicapPredictionMarketLabel(
+  handicapLine: number | null | undefined,
+  pick: AsianHandicapPick | null | undefined,
+  homeOdds: number | null | undefined,
+  awayOdds: number | null | undefined,
+) {
+  if (!pick) {
+    return '盘口暂缺';
+  }
+  const homePick = pick === 'HOME_COVER';
+  const line = handicapLine === null || handicapLine === undefined
+    ? '让球暂缺'
+    : formatAsianHandicapLine(homePick ? handicapLine : -handicapLine);
+  return `${homePick ? '主' : '客'} ${line}（赔率 ${formatNumber(homePick ? homeOdds : awayOdds)}）`;
+}
+
 export function asianHandicapPickLabel(value: AsianHandicapPick | null | undefined) {
   return value ? asianHandicapPickLabels[value] : '暂缺';
 }
 
 export function totalGoalsPickLabel(value: TotalGoalsPick | null | undefined) {
   return value ? totalGoalsPickLabels[value] : '暂缺';
+}
+
+/** 将亚盘大小球方向还原为具体盘口及该方向水位。 */
+export function totalGoalsPredictionMarketLabel(
+  totalLine: number | null | undefined,
+  pick: TotalGoalsPick | null | undefined,
+  overOdds: number | null | undefined,
+  underOdds: number | null | undefined,
+) {
+  if (!pick) {
+    return '盘口暂缺';
+  }
+  return `${pick === 'OVER' ? '大' : '小'} ${formatNumber(totalLine)}（赔率 ${formatNumber(
+    pick === 'OVER' ? overOdds : underOdds,
+  )}）`;
 }
 
 export function confidenceLabel(value: ConfidenceLevel | null | undefined) {
@@ -158,4 +190,8 @@ export function dataSourceLabel(value: string | null | undefined) {
     return 'Stub 演示数据';
   }
   return value;
+}
+
+function formatAsianHandicapLine(value: number) {
+  return `${value > 0 ? '+' : ''}${value}`;
 }

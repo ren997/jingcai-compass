@@ -74,6 +74,7 @@ export type MatchListQuery = {
   lotteryDate: string;
   leagueId?: number;
   matchStatuses?: MatchStatus[];
+  hasPublishedPrediction?: boolean;
   sort: MatchListSort;
   pageNo: number;
   pageSize: number;

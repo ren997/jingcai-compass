@@ -29,6 +29,7 @@ import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.vo.PredictionAsianMarketVo;
+import com.jingcaicompass.prediction.vo.PredictionAsianModelVo;
 import com.jingcaicompass.system.api.PageResult;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
@@ -379,7 +380,8 @@ public class MatchQueryServiceImpl implements MatchQueryService {
                 prediction.getPredictionType(),
                 prediction.getAsianHandicapConfidenceLevel(),
                 prediction.getTotalGoalsConfidenceLevel(),
-                prediction.getConfidenceLevel()
+                prediction.getConfidenceLevel(),
+                PredictionAsianModelVo.from(prediction)
         );
     }
 

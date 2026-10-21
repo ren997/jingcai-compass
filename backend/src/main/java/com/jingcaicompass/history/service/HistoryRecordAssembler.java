@@ -227,23 +227,7 @@ public class HistoryRecordAssembler {
      * 消费方据此区分「没有模型概率」与「模型概率全为 0」。
      */
     private PredictionAsianModelVo toAsianModel(Prediction prediction) {
-        if (prediction.getLambdaHome() == null
-                && prediction.getModelCoverProb() == null
-                && prediction.getModelOverProb() == null) {
-            return null;
-        }
-        return new PredictionAsianModelVo(
-                prediction.getLambdaHome(),
-                prediction.getLambdaAway(),
-                prediction.getModelCoverProb(),
-                prediction.getMarketCoverProb(),
-                prediction.getEdgeCover(),
-                prediction.getModelOverProb(),
-                prediction.getMarketOverProb(),
-                prediction.getEdgeOver(),
-                prediction.getHandicapDispersion(),
-                prediction.getTotalsDispersion()
-        );
+        return PredictionAsianModelVo.from(prediction);
     }
 
     private static Map<Long, Prediction> indexPredictionsById(Collection<Prediction> predictions) {

@@ -1,5 +1,6 @@
 package com.jingcaicompass.prediction.vo;
 
+import com.jingcaicompass.prediction.entity.Prediction;
 import java.math.BigDecimal;
 
 /**
@@ -34,5 +35,35 @@ public record PredictionAsianModelVo(
     /** 是否有可用的大小球方向概率。 */
     public boolean hasTotals() {
         return modelOverProb != null && marketOverProb != null;
+    }
+
+    /**
+     * 从预测实体映射；十列全空时返回 {@code null}。
+     *
+     * <p>返回 null 而不是"十列都为 null 的对象"，是为了让消费方能区分「这一版没有模型概率」
+     * （体彩预测、V24 之前的存量行）与「模型算出来是 0」——后者若按同样方式渲染会得到
+     * "模型概率 0%、市场概率 0%" 这种明显错误却看似正常的结论。
+     *
+     * <p>判定用"全空"而不是"任一为空"：成对约束保证同组三列同生同灭，用全空判定不会漏掉半组。
+     */
+    public static PredictionAsianModelVo from(Prediction prediction) {
+        if (prediction == null
+                || (prediction.getLambdaHome() == null
+                && prediction.getModelCoverProb() == null
+                && prediction.getModelOverProb() == null)) {
+            return null;
+        }
+        return new PredictionAsianModelVo(
+                prediction.getLambdaHome(),
+                prediction.getLambdaAway(),
+                prediction.getModelCoverProb(),
+                prediction.getMarketCoverProb(),
+                prediction.getEdgeCover(),
+                prediction.getModelOverProb(),
+                prediction.getMarketOverProb(),
+                prediction.getEdgeOver(),
+                prediction.getHandicapDispersion(),
+                prediction.getTotalsDispersion()
+        );
     }
 }

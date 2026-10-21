@@ -4,6 +4,7 @@ import com.jingcaicompass.history.dto.HistoryListQueryDto;
 import com.jingcaicompass.history.dto.HistoryQueryCriteriaDto;
 import com.jingcaicompass.history.mapper.HistoryQueryMapper;
 import com.jingcaicompass.history.vo.HistoryListItemVo;
+import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.settlement.enums.MarketTypeEnum;
 import com.jingcaicompass.settlement.enums.SettlementStatusEnum;
 import com.jingcaicompass.system.api.PageResult;
@@ -68,18 +69,59 @@ public class HistoryQueryServiceImpl implements HistoryQueryService {
         Set<SettlementStatusEnum> persistedStatuses = requestedStatuses.stream()
                 .filter(status -> status != SettlementStatusEnum.PENDING)
                 .collect(java.util.stream.Collectors.toUnmodifiableSet());
+        PredictionTypeEnum predictionType = normalizePredictionType(query);
         return new HistoryQueryCriteriaDto(
                 query == null ? null : query.startDate(),
                 query == null ? null : query.endDate(),
                 query == null ? null : query.leagueId(),
                 query == null || !StringUtils.hasText(query.modelVersion()) ? null : query.modelVersion().trim(),
                 query != null && Boolean.TRUE.equals(query.lockedOnly()),
-                query == null || query.settlementMarket() == null ? MarketTypeEnum.HAD : query.settlementMarket(),
+                resolveSettlementMarket(query, predictionType),
                 !requestedStatuses.isEmpty(),
                 requestedStatuses.contains(SettlementStatusEnum.PENDING),
                 persistedStatuses,
                 pageSize,
-                (long) (pageNo - 1) * pageSize
+                (long) (pageNo - 1) * pageSize,
+                predictionType
         );
+    }
+
+    /**
+     * 解析产品线：显式给出时以显式为准，否则由市场反推。
+     *
+     * <p>只看市场不看类型就会把「按亚盘让球筛结算状态」和「列出体彩预测」两件事混在一起，
+     * 筛出来的条目没有对应的结算行，看起来就是一条永远待结算的记录。
+     */
+    private PredictionTypeEnum normalizePredictionType(HistoryListQueryDto query) {
+        if (query == null) {
+            return PredictionTypeEnum.SPORTTERY;
+        }
+        if (query.predictionType() != null) {
+            return query.predictionType();
+        }
+        return query.settlementMarket() != null && query.settlementMarket().isAsian()
+                ? PredictionTypeEnum.ASIAN
+                : PredictionTypeEnum.SPORTTERY;
+    }
+
+    /**
+     * 确定结算市场：缺省取该类预测的第一个市场，显式给出时必须是该类预测的市场之一。
+     *
+     * <p>跨产品线的市场组合直接拒绝：它必然查出空集，而空集在页面上与「这段时间没有预测」
+     * 无法区分，比报错更难排查。
+     */
+    private MarketTypeEnum resolveSettlementMarket(HistoryListQueryDto query, PredictionTypeEnum predictionType) {
+        List<MarketTypeEnum> allowed = MarketTypeEnum.marketsFor(predictionType);
+        MarketTypeEnum requested = query == null ? null : query.settlementMarket();
+        if (requested == null) {
+            return allowed.get(0);
+        }
+        if (!allowed.contains(requested)) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_PARAMETER,
+                    "settlementMarket " + requested.getCode() + " does not belong to " + predictionType
+            );
+        }
+        return requested;
     }
 }

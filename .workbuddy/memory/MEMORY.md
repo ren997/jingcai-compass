@@ -30,7 +30,8 @@
 ## 已知未收口事项
 
 - `T613` **已完成并合入 master**：阶段 A~E 全部收口（A `e9c2b34`、B `166e87e`、C `0bd5450`、D `74a5adc`、E1~E6 `7b29b91`、E7~E17 `96001cd`→`c0718e0`，CI 回归修复 `4fa12bf`）。PR **#26** 以 merge commit `2885739` 合入（保留 25 个提交说明，164 文件 +13728/−701）。PR CI（`39610773844`）与 master push CI（`39612394966`）均全绿：单测 698 项 + 集成 68 项 + 24 个迁移 apply。
-- `T610` 仍为 `PARTIAL`，但其交付物「亚盘方向预测与标签澄清」已被 T613 整体取代，且改动已随本分支进入 master、CI 证据也已具备。下一步应确认是置 `DONE` 还是按「被 T613 取代」收档，不要再为它单独开 Draft PR。
+- `T610` **已置 `DONE`**（2026-10-21）：历次 `PARTIAL` 的唯一缺口是「Draft PR + CI 证据」（交付期间 `gh` 未登录），代码与本地验证早已完备；该缺口由 PR #26 补齐。**收档口径**：T610 交付的亚盘专用 V3 输出此后由 T613 沿 v4/v5/v6 演进，但 V3 契约（V21：亚盘专用、方向与置信度成对、`LOW` 不落库、已发布不可变）仍是现行基础，故按「已完成」而非「被取代」收档；后续模型行为与结算口径变更一律归 T613 及其后续任务。
+- `T611`、`T612` 仍为 `PARTIAL`，代码已随 PR #26 进入 master、CI 证据同样已具备，待确认是否一并置 `DONE`。
 - **迁移类 IT 禁止用 `flyway(null).migrate()` + 断言 `migrationsExecuted` 具体数字**：那个数字随每次新增迁移而变，失败信息（`expected 1 but was 3`）与本用例意图无关，排查成本极高。一律用 `flyway("<target>")` 显式限定目标版本。全量末版本断言只保留在 `PostgresApplicationIT` 一处（本意就是验末版本），遵守「加迁移必须同步改」。`T613` 就是被这条坑掉一次：阶段 A 加 V23、阶段 E 加 V24 后 `LegacyNameKeyIdentityCleanupMigrationIT` 必红，而本机无 Docker 使它在 CI 首轮才暴露。
 - 邻线校验口径（整条阶梯取最大值 vs 主盘 ±0.75）**本轮确认不改代码**，结论只写进 `docs/asian-model-design.md`，待下一阶段连同 `neighbor-tolerance` 取窗口逻辑一起处理。
 - `backend/src/test/java/com/jingcaicompass/tools/NovaAsianRunTest.java` 保持未跟踪（一次性实跑脚手架，不入库）。注意它会让本地单测数比 CI 多 1（699 vs 698），别误判为 CI 少跑了用例。

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jingcaicompass.prediction.dto.AsianModelOutputDto;
 import com.jingcaicompass.prediction.dto.PredictionImportBatchDto;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
@@ -52,6 +53,60 @@ class PredictionImportFileParserTest {
     void rejectsEmptyAndNonUtf8Files() {
         assertInvalid(new byte[0]);
         assertInvalid(new byte[] {(byte) 0xC3, (byte) 0x28});
+    }
+
+    @Test
+    void parsesNestedAsianModelProbabilities() {
+        PredictionImportBatchDto batch = parser.parse(asianModelSample(VALID_ASIAN_MODEL).getBytes(
+                StandardCharsets.UTF_8));
+
+        AsianModelOutputDto asian = batch.predictions().getFirst().asianModel();
+        assertThat(asian.lambdaHome()).isEqualByComparingTo("1.250000");
+        assertThat(asian.lambdaAway()).isEqualByComparingTo("0.950000");
+        assertThat(asian.modelCoverProb()).isEqualByComparingTo("0.512345");
+        assertThat(asian.edgeOver()).isEqualByComparingTo("0.037500");
+        assertThat(asian.totalsDispersion()).isEqualByComparingTo("0.010500");
+    }
+
+    @ParameterizedTest
+    @MethodSource("invalidAsianModelJsonContents")
+    void rejectsAsianModelProbabilitiesOutsideStrictContract(String content) {
+        assertInvalid(content.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static final String VALID_ASIAN_MODEL = "\"asianModel\":{"
+            + "\"lambdaHome\":1.250000,\"lambdaAway\":0.950000,"
+            + "\"modelCoverProb\":0.512345,\"marketCoverProb\":0.512345,\"edgeCover\":0.000000,"
+            + "\"modelOverProb\":0.487500,\"marketOverProb\":0.450000,\"edgeOver\":0.037500,"
+            + "\"handicapDispersion\":0.011800,\"totalsDispersion\":0.010500}";
+
+    private static Stream<String> invalidAsianModelJsonContents() {
+        return Stream.of(
+                asianModelSample("\"asianModel\":[1.25,0.95]"),
+                asianModelSample("\"asianModel\":\"1.250000\""),
+                asianModelSample(VALID_ASIAN_MODEL.replace("\"lambdaHome\":1.250000",
+                        "\"lambdaHome\":\"1.250000\"")),
+                asianModelSample(VALID_ASIAN_MODEL.replace("\"edgeCover\":0.000000",
+                        "\"edgeCover\":true"))
+        );
+    }
+
+    private static String asianModelSample(String asianModelField) {
+        return """
+                {"generationBatchId":"asian-model-batch","predictions":[{
+                "matchId":1,
+                "modelVersion":"t306-asian-baseline-v6",
+                "featureVersion":"t306-asian-mainline-v6",
+                "analysisSummary":"亚盘分析",
+                "generatedAt":"2026-07-26T00:00:00Z",
+                "asianOddsSnapshotId":9001,
+                "asianHandicapPick":"HOME_COVER",
+                "totalGoalsPick":"UNDER",
+                "asianHandicapConfidenceLevel":"HIGH",
+                "totalGoalsConfidenceLevel":"MEDIUM",
+                "predictionType":"ASIAN","""
+                + asianModelField
+                + "}]}";
     }
 
     private static Stream<String> invalidJsonContents() throws IOException {

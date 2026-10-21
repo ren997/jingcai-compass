@@ -28,6 +28,7 @@ import java.time.Instant;
  * @param asianHandicapConfidenceLevel 亚盘让球方向置信等级
  * @param totalGoalsConfidenceLevel 亚盘大小球方向置信等级
  * @param predictionType 预测产品类型；为空时按历史体彩契约处理
+ * @param asianModel 亚盘模型概率输出；仅亚盘预测可填，竞彩预测必须为空
  */
 public record PredictionImportDto(
         Long matchId,
@@ -46,7 +47,8 @@ public record PredictionImportDto(
         TotalGoalsPickEnum totalGoalsPick,
         ConfidenceLevelEnum asianHandicapConfidenceLevel,
         ConfidenceLevelEnum totalGoalsConfidenceLevel,
-        PredictionTypeEnum predictionType
+        PredictionTypeEnum predictionType,
+        AsianModelOutputDto asianModel
 ) {
 
     /** 兼容 V1/V2 的全量体彩导入字段；旧记录按体彩预测处理。 */
@@ -70,7 +72,7 @@ public record PredictionImportDto(
                 matchId, modelVersion, featureVersion, homeWinProb, drawProb, awayWinProb,
                 handicapPick, expectedTotalGoals, confidenceLevel, analysisSummary, generatedAt,
                 asianOddsSnapshotId, asianHandicapPick, totalGoalsPick, null, null,
-                PredictionTypeEnum.SPORTTERY
+                PredictionTypeEnum.SPORTTERY, null
         );
     }
 
@@ -105,7 +107,8 @@ public record PredictionImportDto(
                 null,
                 null,
                 null,
-                PredictionTypeEnum.SPORTTERY
+                PredictionTypeEnum.SPORTTERY,
+                null
         );
     }
 }

@@ -22,12 +22,30 @@ import org.springframework.stereotype.Component;
 public class PredictionImportFileParserImpl implements PredictionImportFileParser {
 
     private static final String PREDICTIONS_FIELD = "predictions";
+    private static final String ASIAN_MODEL_FIELD = "asianModel";
     private static final String[] NUMERIC_FIELDS = {
             "matchId",
             "homeWinProb",
             "drawProb",
             "awayWinProb",
             "expectedTotalGoals"
+    };
+    /**
+     * 嵌套对象不在顶层 {@link #NUMERIC_FIELDS} 的扫描范围内，必须单独守。
+     * 少了这一层，{@code "0.62"} 这样的字符串会被 Jackson 静默转成数字，
+     * 从而绕过严格导入契约——而这些值是 Brier 与 ROI 的计账依据。
+     */
+    private static final String[] ASIAN_MODEL_NUMERIC_FIELDS = {
+            "lambdaHome",
+            "lambdaAway",
+            "modelCoverProb",
+            "marketCoverProb",
+            "edgeCover",
+            "modelOverProb",
+            "marketOverProb",
+            "edgeOver",
+            "handicapDispersion",
+            "totalsDispersion"
     };
 
     private final ObjectMapper objectMapper;
@@ -107,6 +125,23 @@ public class PredictionImportFileParserImpl implements PredictionImportFileParse
             JsonNode matchId = item.get("matchId");
             if (matchId != null && !matchId.isNull() && !matchId.isIntegralNumber()) {
                 throw invalid("predictions[" + index + "].matchId must be an integer");
+            }
+            requireAsianModelStructure(item.get(ASIAN_MODEL_FIELD), index);
+        }
+    }
+
+    private void requireAsianModelStructure(JsonNode asianModel, int index) {
+        if (asianModel == null || asianModel.isNull()) {
+            return;
+        }
+        if (!asianModel.isObject()) {
+            throw invalid("predictions[" + index + "].asianModel must be an object");
+        }
+        for (String field : ASIAN_MODEL_NUMERIC_FIELDS) {
+            JsonNode value = asianModel.get(field);
+            if (value != null && !value.isNull() && !value.isNumber()) {
+                throw invalid(
+                        "predictions[" + index + "].asianModel." + field + " must be a JSON number");
             }
         }
     }

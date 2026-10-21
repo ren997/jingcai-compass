@@ -15,6 +15,7 @@ import com.jingcaicompass.odds.client.AsianModelProperties;
 import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.prediction.dto.AsianModelOutputDto;
 import com.jingcaicompass.prediction.dto.PredictionImportBatchDto;
 import com.jingcaicompass.prediction.dto.PredictionImportDto;
 import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
@@ -176,6 +177,63 @@ class BaselinePredictionGenerationServiceTest {
                 .contains("共识概率 主 0.5150")
                 // λ 是在主盘上反解出来的，回投必然复现共识，因此模型概率与共识概率在小数点后四位一致。
                 .contains("模型概率 0.5150");
+    }
+
+    @Test
+    void storesFirstSideProbabilitiesEvenWhenDirectionIsAwayCover() {
+        MatchEntity match = scheduledMatch(133L);
+        // 三家的让球去水概率都偏向客队（≈0.485 / 0.485 / 0.485），共识首边概率低于 0.5 → 方向为客队。
+        List<AsianOddsSnapshot> handicapRows = List.of(
+                row(731L, 133L, "BOOK_A", "-0.25", "2.06", "1.94", "2.50", "1.94", "1.94", LATEST_CAPTURE),
+                row(732L, 133L, "BOOK_B", "-0.25", "2.02", "1.90", null, null, null, EARLIER_CAPTURE),
+                row(733L, 133L, "BOOK_C", "-0.25", "2.00", "1.88", null, null, null, EARLIER_CAPTURE));
+        List<AsianOddsSnapshot> totalsRows = List.of(
+                row(734L, 133L, "BOOK_A", "-0.25", "2.06", "1.94", "2.50", "1.94", "1.94", LATEST_CAPTURE),
+                row(735L, 133L, "BOOK_B", "-0.25", "2.02", "1.90", "2.50", "1.94", "1.94", EARLIER_CAPTURE));
+        stubMarkets(match, handicapRows, totalsRows);
+        stubImport();
+
+        service.generateAndImport(LOTTERY_DATE, "admin");
+
+        PredictionImportDto prediction = capturedPrediction();
+        assertThat(prediction.asianHandicapPick()).isEqualTo(AsianHandicapPickEnum.AWAY_COVER);
+        AsianModelOutputDto asian = prediction.asianModel();
+        assertThat(asian).isNotNull();
+        // 落库恒为首边口径：方向是客队，但存的仍是"主队赢盘"的概率，必须小于 0.5。
+        // 若这里误存换算后的方向概率，值会是 0.515 一带，模型看起来就"神准"了。
+        assertThat(asian.modelCoverProb()).isLessThan(BigDecimal.valueOf(0.5));
+        assertThat(asian.marketCoverProb()).isLessThan(BigDecimal.valueOf(0.5));
+        assertThat(asian.modelCoverProb()).isEqualByComparingTo(asian.marketCoverProb());
+        assertThat(asian.edgeCover()).isEqualByComparingTo(BigDecimal.ZERO);
+        // 方向换算只发生在展示侧：1 − 0.4847 ≈ 0.5153 才是模型对客队赢盘的看法。
+        assertThat(BigDecimal.ONE.subtract(asian.modelCoverProb()))
+                .isGreaterThan(BigDecimal.valueOf(0.5));
+    }
+
+    @Test
+    void projectsTotalsProbabilitiesEvenWhenTotalsDirectionIsLowConfidence() {
+        MatchEntity match = scheduledMatch(134L);
+        // 大小球两个水位完全对称（1.94/1.94）→ 信号为 0 → 低置信度不出方向。
+        List<AsianOddsSnapshot> handicapRows = List.of(
+                row(741L, 134L, "BOOK_A", "-0.25", "1.94", "2.06", "2.50", "1.94", "1.94", LATEST_CAPTURE),
+                row(742L, 134L, "BOOK_B", "-0.25", "1.94", "2.06", "2.50", "1.94", "1.94", EARLIER_CAPTURE));
+        stubMarkets(match, handicapRows, handicapRows);
+        stubImport();
+
+        service.generateAndImport(LOTTERY_DATE, "admin");
+
+        PredictionImportDto prediction = capturedPrediction();
+        assertThat(prediction.totalGoalsPick()).isNull();
+        assertThat(prediction.totalGoalsConfidenceLevel()).isNull();
+        AsianModelOutputDto asian = prediction.asianModel();
+        assertThat(asian).isNotNull();
+        // 不出方向不等于大球概率为 0。若把 0 落库，Brier 会把"没有方向"当作"强烈看空"。
+        assertThat(asian.modelOverProb()).isNotNull().isGreaterThan(BigDecimal.ZERO);
+        // 两家去水后都是 0.5 → 共识 0.5、离散度 0。
+        assertThat(asian.marketOverProb()).isEqualByComparingTo(new BigDecimal("0.500000"));
+        assertThat(asian.totalsDispersion()).isEqualByComparingTo(BigDecimal.ZERO);
+        assertThat(asian.lambdaHome()).isNotNull();
+        assertThat(asian.lambdaAway()).isNotNull();
     }
 
     @Test

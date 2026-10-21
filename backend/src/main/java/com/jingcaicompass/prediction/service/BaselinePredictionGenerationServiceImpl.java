@@ -16,6 +16,7 @@ import com.jingcaicompass.odds.service.AsianMarketConsensusAggregator;
 import com.jingcaicompass.odds.service.AsianMarketMath;
 import com.jingcaicompass.odds.service.AsianPublishGate;
 import com.jingcaicompass.odds.service.ImpliedPoissonModel;
+import com.jingcaicompass.prediction.dto.AsianModelOutputDto;
 import com.jingcaicompass.prediction.dto.PredictionImportDto;
 import com.jingcaicompass.prediction.dto.PredictionImportFileDto;
 import com.jingcaicompass.prediction.dto.PredictionImportResultDto;
@@ -89,6 +90,8 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
     private static final BigDecimal HIGH_CONFIDENCE_MARGIN = new BigDecimal("0.1000");
     private static final BigDecimal MEDIUM_CONFIDENCE_MARGIN = new BigDecimal("0.1600");
     private static final int SUMMARY_PROBABILITY_SCALE = 4;
+    /** 落库标度：与 V24 列及导入校验的 6 位小数口径一致，多一位会被导入直接拒绝。 */
+    private static final int MODEL_OUTPUT_SCALE = 6;
 
     private final MatchMapper matchMapper;
     private final AsianOddsSnapshotMapper asianOddsSnapshotMapper;
@@ -389,10 +392,12 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
         double overProbability = 0d;
         boolean totalsDispersionExceeded = false;
         if (featureSet.totalsAtFrozenLine() != null) {
+            // 概率必须无条件投影。低置信只意味着不发布方向，绝不意味着模型认为大球概率为 0；
+            // 把 0 落库会让 Brier 把"没有方向"当成"强烈看空"，统计彻底失真。
+            overProbability = project(
+                    solution, frozen.getTotalLine(), ImpliedPoissonModel.Market.TOTALS);
             totalsConfidence = confidence(frozen.getOverOdds(), frozen.getUnderOdds());
             if (totalsConfidence != ConfidenceLevelEnum.LOW) {
-                overProbability = project(
-                        solution, frozen.getTotalLine(), ImpliedPoissonModel.Market.TOTALS);
                 totalsPick = favorsFirstSide(overProbability, frozen.getOverOdds(), frozen.getUnderOdds())
                         ? TotalGoalsPickEnum.OVER
                         : TotalGoalsPickEnum.UNDER;
@@ -452,7 +457,51 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
                 frozen.getId(), handicapPick, totalsPick,
                 handicapPick == null ? null : handicapConfidence,
                 totalsPick == null ? null : totalsConfidence,
-                PredictionTypeEnum.ASIAN));
+                PredictionTypeEnum.ASIAN,
+                asianModelOutput(featureSet, coverProbability, overProbability)));
+    }
+
+    /**
+     * 组装落库用的亚盘模型输出，概率一律取<b>首边口径</b>（主队赢盘 / 大球）。
+     *
+     * <p>这里刻意<b>不用</b> {@link AsianPublishGate.Verdict} 里的概率：那个已按所选方向
+     * 换算过（{@code AsianPublishGate} 的 {@code side} 分支会取 {@code 1 − p}），直接落库会让
+     * 客队方向、小球方向的概率反号，模型看起来"神准"或"极差"。
+     */
+    private AsianModelOutputDto asianModelOutput(
+            FeatureSet featureSet,
+            double coverProbability,
+            double overProbability
+    ) {
+        ImpliedPoissonModel.Solution solution = featureSet.solution();
+        BigDecimal modelCover = scaled(coverProbability);
+        BigDecimal marketCover = featureSet.handicapConsensus().firstProbability();
+        BigDecimal modelOver = null;
+        BigDecimal marketOver = null;
+        BigDecimal edgeOver = null;
+        BigDecimal totalsDispersion = null;
+        if (featureSet.totalsAtFrozenLine() != null) {
+            modelOver = scaled(overProbability);
+            marketOver = featureSet.totalsAtFrozenLine().firstProbability();
+            edgeOver = modelOver.subtract(marketOver);
+            totalsDispersion = featureSet.totalsAtFrozenLine().dispersion();
+        }
+        return new AsianModelOutputDto(
+                scaled(solution.lambdaHome()),
+                scaled(solution.lambdaAway()),
+                modelCover,
+                marketCover,
+                modelCover.subtract(marketCover),
+                modelOver,
+                marketOver,
+                edgeOver,
+                featureSet.handicapConsensus().dispersion(),
+                totalsDispersion
+        );
+    }
+
+    private BigDecimal scaled(double value) {
+        return BigDecimal.valueOf(value).setScale(MODEL_OUTPUT_SCALE, RoundingMode.HALF_UP);
     }
 
     private double project(

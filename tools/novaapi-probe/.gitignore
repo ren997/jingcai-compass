@@ -1,0 +1,4 @@
+novaapi-probe-out/
+*.key
+*.pem
+private-key*.txt

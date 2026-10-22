@@ -93,12 +93,23 @@ public class NovaApiClient {
                 properties.retry().maxAttempts(),
                 properties.retry().delay()
         );
-        return httpExecutor.get(
+        ProviderHttpResponse response = httpExecutor.get(
                 restClient,
                 providerCode,
                 ProviderHttpRequest.of(requestPath, headers),
                 policy,
                 properties.quotaWarningThreshold()
+        );
+        // NovaAPI 不回任何额度响应头（实测只有 nginx/date/content-type），
+        // 通用执行器按响应头解析额度，这里若原样返回会让 quota_cost 恒为 0，
+        // 面对 5000 次/日 的上限完全失去可见性。NovaAPI 的额度模型是「一次请求一个单位」，
+        // 因此按 首次 1 + 每次重试 1 计。
+        return new ProviderHttpResponse(
+                response.status(),
+                response.body(),
+                response.retryCount(),
+                response.retryCount() + 1,
+                response.headers()
         );
     }
 

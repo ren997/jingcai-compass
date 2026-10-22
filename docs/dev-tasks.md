@@ -2515,7 +2515,10 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 反证：`matches` 里 10-20 的 `周二004`(2042099) 与 10-22 的 `周四004`(2042122) 同编号不同业务日 → 按日期+编号定位必然错位
   - [x] 90 分钟口径（真实加时+点球样本）：解放者杯 `2042118` `tfStatusShort=PEN`，竞彩开奖 0:1 = `ftHomeScore` 0:1 ≠ 点球 5:3；顺带确认 `et*` 是**加时阶段自身比分**（0:0）而非累计。已固化为 `NovaApiMatchResultScoreScopeTest`
   - [x] 结算接缝：用 T406 人工事实（构造比分 0:2）在一条已 `LOCKED` 的预测上打通「FINAL 事实 → 候选查询 → 结算写入」，写出 `HAD`/`HHAD` 两条 `HIT` 结算
-  - **未收口**：10-21 这批预测是历史遗留 `DRAFT`，发布服务以 `prediction publish deadline has passed` 拒绝开赛后的发布，自动发布候选又要求 `kickoff_time > now` → 真实官方赛果无法在今天走完「发布→锁定→结算」。10-22 的 13 条 `PUBLISHED`（开赛 10-23 00:45）会在次日自然锁定并结算，届时补一次真跑证据
+  - **历史预测补算已做（2026-10-22 23:50）**：`docs/reports/2026-10-21-asian-predictions.md` 那 8 场 10 个市场，用生产结算纯函数逐市场算出：1 命中 / 2 走盘 / 7 未中，加权命中率 `0.2500`、净利 `−6.17`，结论写进该报告第五节。**刻意不落 `settlements`**，两条独立理由：
+    1. **统计口径**：这 8 条从未真实发布（`DRAFT`、`lock_time` 为空、无发布审计），写进结算表会让公开统计的命中率与 Brier 把「文档里的模型输出」当成「已发布产品」计入，事后无法区分。
+    2. **结构上发不出去**：`id=41`（周三004）与 `id=48`（周三013）只发布了让球方向，大小球判定线因聚合家数不足无方向，于是 `model_over_prob`/`market_over_prob`/`edge_over`/`totals_dispersion` 四列为空、其余六列有值；而 `PredictionContentHasher.hasAsianModelProbabilities` 要求十列**全填或全空**，部分填充直接抛错 → 算不出 `prediction_hash` → `ck_predictions_publish_lifecycle` 不允许进入 `PUBLISHED`。这是 V24 落库口径修复**之前**的历史行才有的形态（10-22 及之后的已发布行十列全填），不是活跃缺陷。
+  - **仍未收口**：10-22 的 13 条 `PUBLISHED`（开赛 10-23 00:45）会在次日自然锁定并结算，届时补一次「官方赛果 → 锁定 → 结算」的全链真跑证据（阶段 4 唯一还欠的证据）
 - 验证记录：
   - 2026-10-21（阶段 1，真库）：`NOVA_API` 连续两次 `SPORTTERY_POOL` 同步均 `SUCCESS 13/13`；`matches` 三个数 `13 | 13 | 13`（总数 / 有外部 ID / 去重外部 ID）；`match_status` 仅 `SCHEDULED`(10) / `LOCKED`(3)；跨零点 10 场业务日 10-21、开赛 10-22，与夹具一致；同一 `external_match_id` 无重复
   - 2026-10-22（阶段 1 补做，真库）：因 NovaAPI key 过期（日卡，`{"code":401,"message":"API密钥无效或已过期"}`）无法在线同步，改用离线夹具回放写库路径：13 场 `success=13 failure=0 snapshots=0`；`league_id`/`home_team_id`/`away_team_id` 填充率 **13/13/13**；字典 `leagues` 7→12、`teams` 38→64 且无重名；再回放一次规模不变（幂等）；联赛下拉可枚举出 5 个联赛（欧冠 8 场、日职 2 场、其余各 1）

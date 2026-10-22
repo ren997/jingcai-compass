@@ -29,8 +29,36 @@ class AsianOddsSnapshotMapperSqlContractTest {
     private static final List<String> ALL_QUERIES = List.of(
             "selectLatestCompleteLinesByMatchIds",
             "selectLatestHandicapLinesByMatchIds",
-            "selectLatestTotalsLinesByMatchIds"
+            "selectLatestTotalsLinesByMatchIds",
+            "selectLatestCrossProductLinesByMatchIds"
     );
+
+    /**
+     * 冻结行候选必须按「让球线 × 大小球线」的完整交叉积取，不能按让球线去重。
+     *
+     * <p>NovaAPI 的落库形态就是交叉积，同一档让球线下四档大小球按 {@code id} 递增写入。
+     * 一旦去重维度里漏掉 {@code total_line}，每组只剩最大那一档，进而是
+     * {@code AsianFreezeSnapshotSelector} 的对齐键失效、冻结行被抬高、大小球方向系统性偏小球
+     * （2026-10-22 实测 13/13）。这条 SQL 是那个缺陷的唯一引入点，故在纯单测里钉死。</p>
+     */
+    @Test
+    void crossProductQueryDistinctsOnBothLines() {
+        String sql = sqlOf("selectLatestCrossProductLinesByMatchIds");
+
+        assertThat(sql)
+                .contains("snapshot.match_id")
+                .contains("snapshot.provider_code")
+                .contains("snapshot.bookmaker_code")
+                .contains("snapshot.handicap_line")
+                .contains("snapshot.total_line")
+                .contains("snapshot.total_line IS NOT NULL")
+                .contains("snapshot.over_odds > 0")
+                .contains("snapshot.under_odds > 0");
+        // DISTINCT ON 的每一列都必须出现在 ORDER BY 前缀里，否则 PostgreSQL 直接报错。
+        assertThat(sql)
+                .contains("ORDER BY snapshot.match_id, snapshot.provider_code, snapshot.bookmaker_code")
+                .contains("snapshot.handicap_line, snapshot.total_line,");
+    }
 
     @Test
     void handicapQueryDistinctsOnBookmakerAndHandicapLine() {

@@ -60,6 +60,11 @@ public interface AsianOddsSnapshotMapper extends BaseMapper<AsianOddsSnapshot> {
      *
      * <p>{@code provider_code} 过滤同样不可省：聚合器的去重键是 {@code (bookmaker, line)}，
      * <b>不含 provider</b>，跨来源的同名庄会互相覆盖并一起参与中位数，结果是主盘悄悄偏移。</p>
+     *
+     * <p><b>本查询只服务聚合，不能用来挑冻结行</b>：去重维度里没有 {@code total_line}，
+     * 而落库形态是 (让球线 × 大小球线) 的交叉积，同一档让球线下有四档大小球、{@code id} 与
+     * {@code captured_at} 同步递增，于是每组只留下<b>最大那一档大小球</b>。挑冻结行请用
+     * {@link #selectLatestCrossProductLinesByMatchIds}。</p>
      */
     @Select("""
             <script>
@@ -115,6 +120,54 @@ public interface AsianOddsSnapshotMapper extends BaseMapper<AsianOddsSnapshot> {
             </script>
             """)
     List<AsianOddsSnapshot> selectLatestTotalsLinesByMatchIds(
+            @Param("matchIds") Collection<Long> matchIds,
+            @Param("providerCode") String providerCode
+    );
+
+    /**
+     * 为「冻结行选择」读取完整交叉积：每家 × 每档让球线 × 每档大小球线各一行。
+     *
+     * <p>为什么需要单独一条：{@link #selectLatestHandicapLinesByMatchIds} 按 {@code handicap_line}
+     * 去重，而 NovaAPI 的落库形态是「让球线 × 大小球线」交叉积，同一档让球线下有四档大小球且
+     * {@code id}/{@code captured_at} 同步递增 → 每组只剩最大那一档。结果是
+     * {@code AsianFreezeSnapshotSelector} 里「是否对齐大小球主盘」这个排序键<b>永远不成立</b>，
+     * 冻结行必然落在被抬高的线上，大小球方向系统性偏小球（2026-10-22 实测 13/13 全部如此，
+     * 且冻结行落在四档里离 50/50 最远的一档）。</p>
+     *
+     * <p>这里显式要求大小球四字段齐全，是因为冻结行必须同时承载两个市场；残缺行由聚合侧
+     * 跳过即可，不该出现在候选里。</p>
+     *
+     * <p>聚合侧不要用这条：虽然 {@code AsianMarketConsensusAggregator} 会按
+     * {@code (bookmaker, line)} 自己去重、结果等价，但让聚合读到什么行是它最需稳定的输入，
+     * 没有理由为了省一条 SQL 去动它。</p>
+     */
+    @Select("""
+            <script>
+            SELECT DISTINCT ON (
+                       snapshot.match_id,
+                       snapshot.provider_code,
+                       snapshot.bookmaker_code,
+                       snapshot.handicap_line,
+                       snapshot.total_line
+                   ) snapshot.*
+            FROM asian_odds_snapshots snapshot
+            WHERE snapshot.match_id IN
+            <foreach collection="matchIds" item="matchId" open="(" separator="," close=")">
+              #{matchId}
+            </foreach>
+              AND snapshot.provider_code = #{providerCode}
+              AND snapshot.handicap_line IS NOT NULL
+              AND snapshot.home_odds > 0
+              AND snapshot.away_odds > 0
+              AND snapshot.total_line IS NOT NULL
+              AND snapshot.over_odds > 0
+              AND snapshot.under_odds > 0
+            ORDER BY snapshot.match_id, snapshot.provider_code, snapshot.bookmaker_code,
+                     snapshot.handicap_line, snapshot.total_line,
+                     snapshot.captured_at DESC, snapshot.id DESC
+            </script>
+            """)
+    List<AsianOddsSnapshot> selectLatestCrossProductLinesByMatchIds(
             @Param("matchIds") Collection<Long> matchIds,
             @Param("providerCode") String providerCode
     );

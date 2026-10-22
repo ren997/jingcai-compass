@@ -47,7 +47,10 @@
 3. **赛果有两套队名**：`allHomeTeam`/`allAwayTeam` = 全称、`homeTeam`/`awayTeam` = 简称。赛程 `homeTeamName` 对应**全称**，用简称会静默改写 `matches` 队名。
 4. **`poolStatus` 跨接口同名不同义**：赛程里是玩法销售状态、赛果里是奖池派奖状态。赛果 21 场里 **2 场 `poolStatus` 为空但 `sectionsNo999` 与 `matchResultStatus=2` 齐全** → 用它过滤结算会静默漏单。
 5. **字段类型会漂移**：`sellStatus` 是字符串 `"2"`；`leagueId` 文档写 String 实际是数字。一律 `asText()` 读——`asInt()` 读文本会静默变 0。
-6. **`sectionsNo999` = 竞彩 90 分钟比分**（推断）。阶段 4 收尾前必须用一场真实打过加时的杯赛样本复核。
+6. **`sectionsNo999` = 竞彩 90 分钟比分（已实证）**。2026-10-21 解放者杯 `2042118`（`tfStatusShort=PEN`）：竞彩开奖 `0:1` = `soccer-events.ftHomeScore` `0:1`，≠ 点球 `5:3`。守卫在 `NovaApiMatchResultScoreScopeTest`。
+7. **赛果 `matchDate` 是开赛自然日，不是竞彩业务日**（与赛程 `matchDate` 同名不同义）。10-21 业务日 13 场里 10 场跨零点，赛果返回 `matchDate=10-22`。按 `(matchDate, matchNumStr)` 定位会**查不到**这 10 场（编号带业务日星期前缀，不会串场；但相差整数周的同名场次会撞）→ **定位只能用 `matchId`（= `matches.external_match_id`）**。
+8. **`/nova/text/match-results` 只返回已开奖场次**：未来日期返回 `results: []`，同日 13 场赛程只有 10 场已开奖。故「有记录」=「已开奖」，`matchResultStatus` 实测 31/31 为 `2`；非 `2` 时解析器**整体失败**（逐条跳过会让该场永久停在 PENDING）。
+9. **`etHomeScore/etAwayScore` 是加时阶段自身比分，不是累计**：`2042118` `ft=0:1` 而 `et=0:0`，若按累计理解不可能小于 `ft`。任何 `ft + et` 换算都会重复计入加时进球。
 
 - `/nova/tf/odds?matchId=` **一场一次调用**即返回全部机构×全部玩法（`marketId=4` 亚盘让球、`5` 大小球、`1` 胜平负）。`data.matchId` 就是竞彩 matchId，`data.idEvent` 是 Nova 内部 ID。
 - 让球 `line` = **主队让球数**（负=主让），同档 Home/Away 文本相同；`Over/Under` 大小球同 line。与 `AsianOddsLineDto.handicapLine`「主队让球为负」契约天然一致，直接用。
@@ -55,7 +58,7 @@
 
 ## 单源改造进度与事实
 
-- 阶段 0（V25 迁移）、阶段 1（赛程）、阶段 2（赔率）、阶段 3（自动发布）已完成并推送。**阶段 2 实跑验收 2026-10-22 通过**：13 场真实同步 2052 行交叉积快照、两轮增量 `2052→0`、13 场预测全部冻结在 `pinnacle` 真实行、开赛后 `skippedLive=12` 且零新增。**阶段 3 实跑验收同日通过**：13 候选全发布、次轮 `NO_PENDING_MATCH` 短路、每场仅 1 条 PUBLISHED、审计操作者 `system:auto-publish`。
+- 阶段 0（V25 迁移）、阶段 1（赛程）、阶段 2（赔率）、阶段 3（自动发布）、**阶段 4（赛果与结算，`600f3dc`）** 已完成并推送。**阶段 4 实跑 2026-10-22 通过**：首轮 `SUCCESS 23/23`（`appended=10/unchanged=13`）、次轮 `appended=0/unchanged=23`、13 条事实全 `FINAL/REGULATION_90/OFFICIAL`、13 场 `FINISHED` 且比分与开奖一致、跨零点 10 场全部按 `external_match_id` 命中。**阶段 2 实跑验收 2026-10-22 通过**：13 场真实同步 2052 行交叉积快照、两轮增量 `2052→0`、13 场预测全部冻结在 `pinnacle` 真实行、开赛后 `skippedLive=12` 且零新增。**阶段 3 实跑验收同日通过**：13 候选全发布、次轮 `NO_PENDING_MATCH` 短路、每场仅 1 条 PUBLISHED、审计操作者 `system:auto-publish`。
 - **`quota_cost` 曾恒为 0（已修）**：`ProviderHttpExecutor` 只按响应头解析额度（The Odds API 的 `x-requests-*` 约定），NovaAPI 不返回任何额度头 → 5000 次/日上限不可见。修法在 `NovaApiClient.get()` 单点按「请求 1 + 每次重试 1」计。**换源时要检查新源的额度口径是否也走响应头**，否则额度监控静默失效。
 - **赔率取数与落库的四条硬约束（阶段 2 建立）**：
   1. `/nova/tf/odds?matchId=` **一场一次调用**即返回全部机构×玩法，额度 = 场次数；`data.matchId` 是竞彩 ID、`data.idEvent` 是 Nova 内部 ID。不要照搬 The Odds API 的「按联赛 sport key 批量拉」。
@@ -70,10 +73,18 @@
 - **不给 `leagues.name_zh`/`teams.name_zh` 加唯一索引**：多处 IT 用固定名插入，本机无 Docker 跑不了 IT，加约束只会在 CI 才暴露。这是「本机验证能力决定迁移激进度」的一般原则。
 - **迁移类 IT 禁止 `flyway(null).migrate()` + 断言迁移数**：一律 `flyway("<target>")` 限定目标版本；全量末版本断言只留 `PostgresApplicationIT` 一处（加迁移必须同步改）。
 - `backend/src/main/java/db/migration/` 下有 Java 版 Flyway 迁移（V22），新建 SQL 前先 `ls` 避免撞号。当前最高 **V25**。
+- **赛果落库的三条约定（阶段 4 建立）**：
+  1. **`amended=true`**：单源之后比分变化只可能是竞彩改判，`amended` 守卫原本防的是跨源误读。仍生效的两条：终态不得回退 `PENDING`、官方事实不得被人工事实替代。
+  2. **`providerUpdatedAt` 取响应信封 `timestamp`**（该接口没有逐条更新时间）。用信封时间戳而非 `now()`，同一份载荷回放保持幂等，审计时间也不漂移。
+  3. **`score_scope` 不主动写**（保持 V25 的 DB 默认 `REGULATION_90`）：口径由「解析器只读 `sectionsNo999`」在边界保证，写常量不增加信息。
+- **赛果窗口按开赛自然日覆盖** → 业务日 D-1 的跨零点场次会出现在 D 的窗口里。D-1 赛程没采集过时这批会记 `match not found`（实测 `data_sync_runs.id=52/53`：`23/13/10`），**新库上线先补采前一天赛程**（补采后 `id=56/57` → `SUCCESS 23/23`）。
+- **`prediction_status` 有 DB 触发器只允许 `DRAFT → PUBLISHED`**，别想用 SQL 直接置 `LOCKED` 走捷径；发布服务同时校验「发布截止时间」与「比赛状态为 SCHEDULED/LOCKED」，所以**历史 DRAFT 永远补不回来**。
 - **生成是条件幂等**（阶段 3 修正）：`generatedAt` 取自已持久化特征快照，赔率快照没变时重跑命中同一 `generationBatchHash` → `reused=N / inserted=0`；只有赔率刷新后快照变了才插新批次、版本号按 `MAX(version)+1` 递增。所以 `regenerate-interval` 的真实价值是**省掉无谓的生成计算**，不是防批次爆炸。亚盘同步则是**追加快照**，重跑后方向/置信度可能翻转（不是 bug）。
 
 ## 已知待办 / 未收口
 
 - 邻线校验口径（整条阶梯取最大 vs 主盘 ±0.75）**本轮不改代码**，结论写进 `docs/asian-model-design.md`，待下一阶段连同 `neighbor-tolerance` 取窗口一起处理。
 - 一次性实跑脚手架 `backend/src/test/java/com/jingcaicompass/tools/` 下文件保持未跟踪（会让本地单测数比 CI 多 1~2，别误判）。
-- 阶段 4 赛果同步（`sectionsNo999` 需加时样本复核）、阶段 5 删映射层。
+- 阶段 5：删映射层与旧数据源（`match_source_mappings` 结构保留、停止写入；`ChinaSportteryProvider`、`TheOddsApiProvider`、5 个映射/归一化服务、后台页面）。
+- 阶段 4 唯一欠的证据：**官方赛果 → 结算的全链真跑**。10-21 那批预测是历史 DRAFT，发布已过截止时间 → 今天只能用 T406 人工事实（构造比分）证明接缝；10-22 的 13 条 `PUBLISHED`（开赛 10-23 00:45）次日自然锁定结算后补证据。
+- `docs/business-data-flow.md` 仍在描述映射层（阶段 5 一起改），阶段 4 没有动它。

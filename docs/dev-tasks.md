@@ -2528,6 +2528,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - ~~`sectionsNo999` 是否含加时仍是推断~~ → **已复核**：用解放者杯 `2042118`（踢到点球）验证开奖比分等于 90 分钟 `ft*`，且 `et*` 是加时阶段自身比分。结论落在 `docs/data-sources-novaapi.md` 与 `NovaApiMatchResultScoreScopeTest`
   - 阶段 4 的「官方赛果 → 结算」全链真跑要等 10-23 凌晨 10-22 那批自然锁定；今天的接缝证据用的是人工事实（构造比分）
   - 阶段 1 之前的 10 场历史赛程仍无 `league_id`（本次只回填了 2026-10-21 这一日）
+  - **【待修，影响所有批次方向】冻结行总是落在同一让球线上最大的大小球档**。2026-10-22 的 13 场全部出现「冻结 `total_line` 比大小球主盘高 `+0.25`/`+0.50`」，导致大小球方向 **13/13 全部 `UNDER`**。原因：`AsianOddsSnapshotMapper.selectLatestHandicapLinesByMatchIds` 按 `(match, provider, bookmaker, handicap_line)` 做 `DISTINCT ON` 并 `ORDER BY captured_at DESC, id DESC`，而交叉积让球线×大小球档是连续写入（`id` 递增、`captured_at` 递增），故每组只留最大档；`AsianFreezeSnapshotSelector` 的 `alignedWithTotalsLine` 排序键因此永远为 `false`，形同虚设。**修法**：冻结行选择改用按 `(match, provider, bookmaker, handicap_line, total_line)` 去重的完整交叉积行集——让球聚合不受影响（同家同线四档让球赔率完全相同，实测 pinnacle `0.50` 四档均 `2.03/1.88`），被污染的只有选行这一步。证据与逐场偏差表见 `docs/reports/2026-10-22-asian-predictions.md` 第三节
 
 ## 12. 任务记录模板
 

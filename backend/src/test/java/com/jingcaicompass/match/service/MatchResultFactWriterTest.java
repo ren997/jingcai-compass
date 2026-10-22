@@ -154,6 +154,71 @@ class MatchResultFactWriterTest {
         verify(factMapper, never()).insert(any(MatchResultFact.class));
     }
 
+    /**
+     * 单源赛果优先按 {@code external_match_id} 定位。
+     *
+     * <p>竞彩改期会重排场次编号，赛果行带新编号而 {@code matches} 里仍是旧编号——
+     * 按自然键查不到，按外部 ID 仍然命得中。命中外部 ID 后不再走自然键，
+     * 避免两条路径各查到一场不同比赛。</p>
+     */
+    @Test
+    void locatesMatchByExternalIdBeforeLotteryIdentity() {
+        MatchEntity byExternalId = new MatchEntity();
+        byExternalId.setId(77L);
+        byExternalId.setMatchStatus(MatchStatusEnum.LOCKED);
+        when(matchMapper.selectByExternalMatchIdForUpdate("2042108")).thenReturn(byExternalId);
+
+        MatchResultFactWriter.WriteResult result = writer.write(
+                resultWithMatchId("2042108", MatchStatusEnum.FINISHED, 0, 3, true),
+                RAW_PAYLOAD_ID
+        );
+
+        assertThat(result.matchId()).isEqualTo(77L);
+        verify(matchMapper, never()).selectByLotteryIdentityForUpdate(any(), any());
+        ArgumentCaptor<MatchResultFact> inserted = ArgumentCaptor.forClass(MatchResultFact.class);
+        verify(factMapper).insert(inserted.capture());
+        assertThat(inserted.getValue().getMatchId()).isEqualTo(77L);
+        assertThat(inserted.getValue().getHomeScore()).isZero();
+        assertThat(inserted.getValue().getAwayScore()).isEqualTo(3);
+    }
+
+    /** 单源改造前的存量行没有外部 ID，必须回落到竞彩自然键。 */
+    @Test
+    void fallsBackToLotteryIdentityWhenExternalIdIsUnknown() {
+        when(matchMapper.selectByExternalMatchIdForUpdate("2042108")).thenReturn(null);
+
+        MatchResultFactWriter.WriteResult result = writer.write(
+                resultWithMatchId("2042108", MatchStatusEnum.FINISHED, 0, 3, true),
+                RAW_PAYLOAD_ID
+        );
+
+        assertThat(result.matchId()).isEqualTo(41L);
+        verify(matchMapper).selectByLotteryIdentityForUpdate(LOTTERY_DATE, "周三001");
+    }
+
+    /**
+     * 兜底命中后必须核对是不是同一场比赛。
+     *
+     * <p>NovaAPI 的赛果日期是<b>开赛自然日</b>，跨零点场次比竞彩销售日晚一天。此时自然键一般
+     * 查不到（场次编号带业务日的星期前缀），但<b>相差整数周</b>的同名场次会撞上——
+     * 一旦撞上就会把别场比分写进来，下游无从发现。这里必须失败，不能写。</p>
+     */
+    @Test
+    void refusesLotteryIdentityThatResolvesToAnotherTrackedMatch() {
+        MatchEntity anotherMatch = new MatchEntity();
+        anotherMatch.setId(88L);
+        anotherMatch.setExternalMatchId("2042122");
+        when(matchMapper.selectByExternalMatchIdForUpdate("2042109")).thenReturn(null);
+        when(matchMapper.selectByLotteryIdentityForUpdate(LOTTERY_DATE, "周三001")).thenReturn(anotherMatch);
+
+        assertThatIllegalArgumentException().isThrownBy(() -> writer.write(
+                resultWithMatchId("2042109", MatchStatusEnum.FINISHED, 4, 1, true),
+                RAW_PAYLOAD_ID
+        )).withMessageContaining("the result belongs to 2042109");
+        verify(factMapper, never()).insert(any(MatchResultFact.class));
+        verify(matchMapper, never()).updateById(any(MatchEntity.class));
+    }
+
     @ParameterizedTest
     @MethodSource("invalidResults")
     void rejectsInvalidScoresAndOfficialVoidPayloads(SportteryMatchResultDto invalidResult) {
@@ -318,6 +383,26 @@ class MatchResultFactWriterTest {
                 amended,
                 officialVoid,
                 OffsetDateTime.parse(providerUpdatedAt)
+        );
+    }
+
+    private static SportteryMatchResultDto resultWithMatchId(
+            String matchId,
+            MatchStatusEnum status,
+            Integer homeScore,
+            Integer awayScore,
+            boolean amended
+    ) {
+        return new SportteryMatchResultDto(
+                matchId,
+                LOTTERY_DATE,
+                "周三001",
+                homeScore,
+                awayScore,
+                status,
+                amended,
+                false,
+                OffsetDateTime.parse("2026-07-22T23:30:00+08:00")
         );
     }
 

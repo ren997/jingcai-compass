@@ -26,6 +26,13 @@ final class NovaApiMatchResultFixture {
 
     static final String RESULTS_2026_10_20_TO_21 = "sporttery/novaapi-match-results-2026-10-20-to-21.json";
 
+    /**
+     * 2026-10-22 的赛果抓包。与 {@code 10-21} 的赛程抓包配合使用，是「赛果日期 ≠
+     * 竞彩业务日」的唯一真实样本：业务日 10-21 的 13 场里 10 场跨零点，
+     * 赛果返回的 {@code matchDate} 是开赛自然日 10-22。
+     */
+    static final String RESULTS_2026_10_22 = "sporttery/novaapi-match-results-2026-10-22.json";
+
     private static final String FULL_TIME_SCORE = "sectionsNo999";
     private static final String HALF_TIME_SCORE = "sectionsNo1";
 
@@ -36,6 +43,7 @@ final class NovaApiMatchResultFixture {
     record Result(
             long matchId,
             String matchNumStr,
+            /** 赛果日期：NovaAPI 给的是<b>开赛自然日</b>，不是竞彩业务日。 */
             LocalDate matchDate,
             /** 短名主队（≠ 赛程的 homeTeamName）。 */
             String homeTeam,

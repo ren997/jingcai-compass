@@ -5,9 +5,9 @@ import com.jingcaicompass.match.dto.SportteryMatchDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultDto;
 import com.jingcaicompass.match.dto.SportteryPoolSyncItemDto;
 import com.jingcaicompass.match.exception.SportteryDataAccessException;
+import com.jingcaicompass.match.service.NovaMatchResultPayloadMapper;
 import com.jingcaicompass.match.service.NovaSchedulePayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
-import com.jingcaicompass.system.provider.ProviderErrorCategory;
 import com.jingcaicompass.system.provider.ProviderHttpException;
 import com.jingcaicompass.system.provider.ProviderHttpResponse;
 import java.time.Instant;
@@ -22,8 +22,9 @@ import org.springframework.util.StringUtils;
 /**
  * NovaAPI 竞彩数据源。赛程、赔率、赛果共用同一个 {@code matchId}，是单源化的基础。
  *
- * <p>本类目前只实现赛程部分；赛果在阶段 4 补齐（当前抛错，与旧 provider 行为一致，
- * 因此切换开关不会让链路「看起来成功但其实没数据」）。</p>
+ * <p>赛程走 {@code /nova/sports-lottery/all-list?date=}，赛果走
+ * {@code /nova/text/match-results?startDate=&endDate=}。两者都以 {@code matchId} 为主键，
+ * 因此不需要任何映射层。</p>
  */
 @Component
 @ConditionalOnProperty(name = "app.sporttery.provider", havingValue = "nova")
@@ -34,17 +35,23 @@ public class NovaSportteryProvider implements SportteryProvider {
     static final String SCHEDULE_PATH = "/nova/sports-lottery/all-list";
     static final String MATCH_RESULTS_PATH = "/nova/text/match-results";
 
+    /** 赛果接口单次跨度上限（官方限制），超过会被服务端拒绝。 */
+    static final int MAX_RESULT_QUERY_SPAN_DAYS = 30;
+
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
 
     private final NovaApiClient client;
     private final NovaSchedulePayloadMapper schedulePayloadMapper;
+    private final NovaMatchResultPayloadMapper matchResultPayloadMapper;
 
     public NovaSportteryProvider(
             NovaApiClient client,
-            NovaSchedulePayloadMapper schedulePayloadMapper
+            NovaSchedulePayloadMapper schedulePayloadMapper,
+            NovaMatchResultPayloadMapper matchResultPayloadMapper
     ) {
         this.client = client;
         this.schedulePayloadMapper = schedulePayloadMapper;
+        this.matchResultPayloadMapper = matchResultPayloadMapper;
     }
 
     @Override
@@ -93,27 +100,52 @@ public class NovaSportteryProvider implements SportteryProvider {
     }
 
     /**
-     * 阶段 4 实现。这里保持抛错而不是返回空结果：空结果会被同步模板当作
-     * 「当天没有赛果」正常收尾，导致结算永远静默不执行。
+     * 按竞彩业务日区间拉取官方赛果。
+     *
+     * <p>接口限制单次跨度 ≤ 30 天，超出直接拒绝而不是让服务端返回 400：
+     * 定时任务的补数窗口由 {@code app.tasks.match-result.lookback-days} 控制（默认 7 天），
+     * 一旦有人把窗口调大到 30 天以上，这里会立刻给出可读的配置错误。</p>
      */
     @Override
     public ProviderFetchResult fetchMatchResultsRaw(LocalDate startDate, LocalDate endDate) {
-        throw new SportteryDataAccessException(
-                ProviderErrorCategory.UPSTREAM_FAILURE,
-                "NovaAPI 赛果同步尚未启用（阶段 4）"
+        if (startDate == null || endDate == null) {
+            throw new IllegalArgumentException("startDate and endDate must not be null");
+        }
+        long spanDays = java.time.temporal.ChronoUnit.DAYS.between(startDate, endDate) + 1;
+        if (spanDays > MAX_RESULT_QUERY_SPAN_DAYS) {
+            throw new IllegalArgumentException(
+                    "NovaAPI 赛果单次查询跨度不得超过 %d 天，实际 %d 天：%s~%s".formatted(
+                            MAX_RESULT_QUERY_SPAN_DAYS, spanDays, startDate, endDate
+                    )
+            );
+        }
+        ProviderHttpResponse response = call(MATCH_RESULTS_PATH, Map.of(
+                "startDate", startDate.toString(),
+                "endDate", endDate.toString()
+        ));
+        return new ProviderFetchResult(
+                startDate + ":" + endDate,
+                response.body(),
+                response.status(),
+                Instant.now(),
+                response.retryCount(),
+                response.quotaCost()
         );
     }
 
+    /**
+     * 解析已归档的赛果原始响应。
+     *
+     * <p>解析下沉到 Provider 是为了让写库路径与数据源无关：换源时解析器随之一起消失，
+     * 不会在同步服务里留下跨源分支。</p>
+     */
     @Override
     public List<SportteryMatchResultDto> parseMatchResults(
             String rawJson,
             LocalDate startDate,
             LocalDate endDate
     ) {
-        throw new SportteryDataAccessException(
-                ProviderErrorCategory.PARSE_FAILURE,
-                "NovaAPI 赛果解析尚未启用（阶段 4）"
-        );
+        return matchResultPayloadMapper.parseItems(rawJson, startDate, endDate);
     }
 
     private ProviderHttpResponse call(String path, Map<String, String> params) {

@@ -47,10 +47,7 @@ public class MatchResultFactWriter {
         IncomingFact incoming = validateAndMap(result, rawDataPayloadId);
 
         // 1) 锁定既有比赛，禁止赛果响应反向创建未知比赛。
-        MatchEntity match = matchMapper.selectByLotteryIdentityForUpdate(
-                result.lotteryDate(),
-                result.lotteryMatchNo()
-        );
+        MatchEntity match = locateMatch(result);
         if (match == null) {
             throw new IllegalArgumentException(
                     "match not found for lottery identity: " + result.lotteryDate() + "/" + result.lotteryMatchNo()
@@ -58,6 +55,43 @@ public class MatchResultFactWriter {
         }
 
         return writeLocked(match, incoming, result.amended());
+    }
+
+    /**
+     * 定位赛果对应的比赛：优先供应商比赛 ID，其次竞彩自然键。
+     *
+     * <p>单源之后 {@code external_match_id} 才是真正的主键，{@code (lottery_date,
+     * lottery_match_no)} 只是历史遗留的兜底。两者并存不是冗余：单源改造之前的存量行
+     * 没有外部 ID，只能靠自然键。</p>
+     *
+     * <p><b>兜底命中后必须核对是不是同一场比赛。</b>NovaAPI 的赛果日期是<b>开赛自然日</b>，
+     * 跨零点场次会比竞彩销售日晚一天，此时自然键通常<b>查不到</b>（场次编号带着业务日的星期前缀）。
+     * 真正的危险在<b>相差整数周</b>的情形：{@code 周三004} 每周都有，日期算错一周就会命中另一场比赛。
+     * 这里是「宁可失败也不写错」的最后一道闸。</p>
+     */
+    private MatchEntity locateMatch(SportteryMatchResultDto result) {
+        if (StringUtils.hasText(result.matchId())) {
+            MatchEntity byExternalId = matchMapper.selectByExternalMatchIdForUpdate(result.matchId());
+            if (byExternalId != null) {
+                return byExternalId;
+            }
+        }
+        MatchEntity byLotteryIdentity = matchMapper.selectByLotteryIdentityForUpdate(
+                result.lotteryDate(),
+                result.lotteryMatchNo()
+        );
+        if (byLotteryIdentity != null
+                && StringUtils.hasText(byLotteryIdentity.getExternalMatchId())
+                && StringUtils.hasText(result.matchId())
+                && !byLotteryIdentity.getExternalMatchId().equals(result.matchId())) {
+            throw new IllegalArgumentException(
+                    "lottery identity %s/%s resolves to match %d (external id %s) but the result belongs to %s"
+                            .formatted(result.lotteryDate(), result.lotteryMatchNo(),
+                                    byLotteryIdentity.getId(), byLotteryIdentity.getExternalMatchId(),
+                                    result.matchId())
+            );
+        }
+        return byLotteryIdentity;
     }
 
     /** 在独立事务中写入已校验的人工赛果；只接受专用人工原始载荷。 */

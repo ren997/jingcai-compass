@@ -16,6 +16,16 @@ public interface MatchMapper extends BaseMapper<MatchEntity> {
     @Select("SELECT * FROM matches WHERE id = #{id} FOR UPDATE")
     MatchEntity selectByIdForUpdate(@Param("id") Long id);
 
+    /** 按供应商比赛 ID 锁定赛果投影，供单源赛果写入使用。 */
+    @Select("""
+            SELECT * FROM matches
+            WHERE external_match_id = #{externalMatchId}
+            FOR UPDATE
+            """)
+    MatchEntity selectByExternalMatchIdForUpdate(
+            @Param("externalMatchId") String externalMatchId
+    );
+
     /** 按体彩自然键锁定赛果投影，串行化同场事实版本写入。 */
     @Select("""
             SELECT * FROM matches

@@ -14,7 +14,7 @@
 | 亚盘让球 | ✅ | 平博 18 个选项、Bet365 30 个选项，多档盘口 |
 | 四分之一盘 | ✅ | 实测出现 `-0.25 / +0.75 / -1.25 / 2.75 / 3.25` 等 |
 | 大小球 | ✅ | 平博 20 个选项，盘口 1.75~4.0 |
-| 赛果（90 分钟） | ✅ | `sectionsNo999` + `ftHomeScore`，与加时/点球字段分离 |
+| 赛果（90 分钟） | ✅ | `sectionsNo999` = `ftHomeScore`，已用**真实加时+点球样本**复核（解放者杯 `2042118`：开奖 0:1 = ft 0:1 ≠ 点球 5:3） |
 | 赛果回溯 | ✅ | 至少回溯到 2026-01（9 个月前），单次查询上限 30 天 |
 | 历史赔率 | ✅ | 29 天前赛事仍有 2907 个 `points` 数据点 |
 | 事件流 | ✅ | `fixture-detail` 返回 10 条事件（含 `elapsedMin`） |
@@ -76,13 +76,13 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 2. 庄家名必须映射成稳定 ASCII 编码（平博→`pinnacle`、必发→`betfair`、威廉希尔→`williamhill`、Bet365→`bet365`、1xBet→`1xbet`、韦德→`betvictor`、利记→`liji`）。白名单按编码匹配，直接写中文会永远不命中并**静默回退全量中位数**。
 3. 主盘判定以「去水概率最接近 50/50」为准，`argmin |odd_home - odd_away|` 只是它在对称盘口下的近似。2026-10-21 用仓库内 3 场抓包（events 2492881 / 2407136 / 2594567）复核，6 个市场两种口径结论一致，实现取去水口径。
 
-### 2. 赛果口径：四层比分分离
+### 2. 赛果口径：四层比分分离（90 分钟口径已用加时样本实测复核）
 
 | 字段 | 口径 |
 |---|---|
 | `htHomeScore / htAwayScore` | 半场 |
 | `ftHomeScore / ftAwayScore` | **常规 90 分钟** |
-| `etHomeScore / etAwayScore` | 含加时 |
+| `etHomeScore / etAwayScore` | **加时阶段自身比分**（不是「含加时的累计」，见下方实测） |
 | `penHomeScore / penAwayScore` | 点球 |
 | `tfStatusShort` | `FT` / `AET` / `PEN` |
 
@@ -91,7 +91,51 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 
 **注意**：`soccer-events` 的 `intHomeScore / intAwayScore` 是"实时累计"，**含加时**，不可用于结算。
 
-### 3. 赔率历史是「变化快照」，不是定时快照
+#### 90 分钟口径复核（2026-10-22，真实加时 + 点球样本，已固化为回归测试）
+
+样本：南美解放者杯 帕尔梅拉斯 vs 弗鲁米嫩塞（`matchId=2042118`，竞彩周三013），
+`tfStatusShort=PEN`。两份真实响应互相印证：
+
+| 来源 | 字段 | 值 |
+|---|---|---|
+| `/nova/text/match-results` | `sectionsNo999` | **0:1** |
+| `/nova/tsd/soccer-events` | `ftHomeScore/ftAwayScore` | **0:1** |
+| 同上 | `etHomeScore/etAwayScore` | 0:0 |
+| 同上 | `penHomeScore/penAwayScore` | 5:3 |
+
+结论两条：
+
+1. **`sectionsNo999` = 常规 90 分钟比分**，与 `ft*` 逐字相等，且不等于点球比分。
+   可以直接用于亚盘结算，不需要从 `soccer-events` 二次换算。
+2. **`et*` 不是累计值**。本场 `ft=0:1` 而 `et=0:0`——若 `et` 是「含加时」，它不可能小于 `ft`。
+   任何「`ft + et`」的换算都会重复计入加时进球。仓库不读 `et*`，并有断言守着。
+
+夹具与守卫：`backend/src/test/resources/sporttery/novaapi-soccer-events-2042118.json`、
+`NovaApiMatchResultScoreScopeTest`。
+
+#### 赛果的 `matchDate` 是**开赛自然日**，不是竞彩业务日（与赛程同名不同义）
+
+实测 2026-10-21 业务日的 13 场里 10 场跨零点：赛程 `matchDate=2026-10-21`、
+`matchStartDate=2026-10-22`，而赛果返回的 `matchDate` 是 **2026-10-22**。
+
+因此赛果**不能**用 `(matchDate, matchNumStr)` 去定位 `matches`：
+
+- 跨零点场次会「查不到」→ 10/13 场整批记失败（实测 `data_sync_runs.id=52/53`：`fetched=23
+  success=13 failure=10`，10 条 `match not found`；补采 10-20 赛程后 `id=56/57`
+  变为 `SUCCESS 23/23`）
+- 场次编号带着业务日的星期前缀（`周三004` vs `周四004`），所以**不会串场**；
+  但**相差整数周**的同名场次会撞，写入器为此加了「自然键命中但外部 ID 不同就拒绝」的闸
+
+正确做法只有一个：**用 `matchId` 定位**（= `matches.external_match_id`）。这也是单源化之后
+唯一可靠的关联方式——它是这次改造真正的收益，而不是「少写几个 SQL」。
+
+#### 该接口只返回**已开奖**场次
+
+对未来日期查询（`startDate=endDate=2026-10-25`）返回 `results: []`；同日 13 场赛程里
+只有 10 场已开奖。因此「有记录」本身就等于「已开奖」，`matchResultStatus` 实测 31/31 为 `2`。
+解析器把它当硬前置：出现其它取值即整体失败（逐条跳过会让那场比赛永久停在 PENDING 且无人察觉）。
+
+## 3. 赔率历史是「变化快照」，不是定时快照
 
 实测点数很少：当天比赛平博亚盘仅 **2 个点**（10-18 19:38、10-19 11:04），29 天前的赛事 7 个点。
 
@@ -126,10 +170,10 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 | 改动 | 位置 | 说明 |
 |---|---|---|
 | 新增 `NovaApiProvider` | `match/client` | Ed25519 签名 + 上述 5 个端点 |
-| 补实赛果同步 | `ChinaSportteryProvider.fetchMatchResultsRaw()` 现为抛异常 | 用 `/nova/text/match-results` 替代，90 分钟口径天然正确 |
+| 补实赛果同步 | `NovaSportteryProvider.fetchMatchResultsRaw()` | **已落地**：`/nova/text/match-results` + `NovaMatchResultPayloadMapper`。只读 `sectionsNo999`；按 `matchId` 定位比赛（**不要用 `matchDate`**，那是开赛自然日） |
 | 亚盘赔率适配 | `odds/client`、`odds/service` | **已落地**：`NovaApiOddsProvider`（一场一次调用）+ `NovaApiOddsPayloadMapper`（`providers → markets → options`；中文庄名归一为 ASCII；丢弃 `suspended`）。主盘仍由 `AsianMarketConsensusAggregator` 跨庄算，适配层不做决定 —— 它只负责把「一条让球线 + 一条大小球线」展开成同一行，因为冻结行要求同一行同时具备两个市场 |
-| 新增 `score_scope` 字段 | `market_result_facts` | `REGULATION_90` / `FINAL`，防止口径污染 |
-| 阶段 A 结算闭环 | `SettlementWriter` / `MarketTypeEnum` | 与数据源无关，仍需先做 |
+| `score_scope` 字段 | `match_result_facts` | V25 已加，默认 `REGULATION_90`；执行侧不改写它——口径由「只读 `sectionsNo999`」这一条在解析边界保证 |
+| 阶段 A 结算闭环 | `SettlementWriter` / `MarketTypeEnum` | 已完成（T613），赛果接进来即可结算 |
 
 **顺序建议**：先补阶段 A 的结算闭环（纯本地数学），再接数据源。否则数据接进来预测依然停在 `LOCKED`。
 

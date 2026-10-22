@@ -89,7 +89,7 @@
 ## 已知待办 / 未收口
 
 - 邻线校验口径（整条阶梯取最大 vs 主盘 ±0.75）**本轮不改代码**，结论写进 `docs/asian-model-design.md`，待下一阶段连同 `neighbor-tolerance` 取窗口一起处理。
-- 一次性实跑脚手架 `backend/src/test/java/com/jingcaicompass/tools/` 下文件保持未跟踪（会让本地单测数比 CI 多 1~2，别误判）。
+- 一次性实跑脚手架 `backend/src/test/java/com/jingcaicompass/tools/` 下文件保持未跟踪（会让本地单测数比 CI 多 1~2，别误判）。已写入 `.gitignore`（连同含明文库凭据的 `tools/verify-stage2/`），不再依赖自觉。
 - 阶段 5：删映射层与旧数据源（`match_source_mappings` 结构保留、停止写入；`ChinaSportteryProvider`、`TheOddsApiProvider`、5 个映射/归一化服务、后台页面）。
 - 阶段 4 唯一欠的证据：**官方赛果 → 锁定 → 结算的全链真跑**。10-21 那批（41~48）已用结算纯函数补算并落文档（不落库，见上），但仍不算全链证据；10-22 的 13 条 `PUBLISHED`（开赛 10-23 00:45）次日自然锁定结算后补证据。
 - `docs/business-data-flow.md` 仍在描述映射层（阶段 5 一起改），阶段 4 没有动它。

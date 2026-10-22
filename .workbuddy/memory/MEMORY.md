@@ -30,6 +30,7 @@
 - **落库口径是首边，不是所选方向**：`model_cover_prob`/`market_cover_prob`/`edge_cover` 按主队（让球）与**大球**（大小球）记；`AsianPublishGate.Verdict` 里的概率已按方向做过 `1 − p`。
 - **新增落库列必须同时改三处**：迁移列定义 + `protect_published_prediction()` 两处 ROW 列表 + `PredictionImportDto` 校验。精度统一 `numeric(9,6)`（生成侧 `PROBABILITY_SCALE = 6`，5 位会静默四舍五入）。
 - **「值只在某分支才算」是落库陷阱**：给市场新增落库列前，先确认该值在**所有分支**都被计算。
+- **交叉积落库会让「按让球线去重」丢掉大小球档**：`selectLatestHandicapLinesByMatchIds` 用 `DISTINCT ON (match, provider, bookmaker, handicap_line)` + `ORDER BY captured_at DESC, id DESC`，而同一让球线的四档是连续写入（`id` 与 `captured_at` 同步递增）→ **每组只留最大 `total_line` 档**。`AsianFreezeSnapshotSelector` 的 `alignedWithTotalsLine` 排序键因此永远 false、形同虚设，冻结行必然落在被抬高的线上 → 大小球方向**系统性偏小球**（实测 2026-10-22 的 13 场全 `UNDER`，冻结线比大小球主盘高 `+0.25`/`+0.50`，无一例外）。**冻结行选择必须用按 `(match, provider, bookmaker, handicap_line, total_line)` 去重的完整交叉积行集，不能复用让球聚合的去重结果**；让球聚合不受影响（同家同线四档让球赔率完全相同）。**待修，见 `docs/dev-tasks.md` 的 T614 未收口项。**
 
 ## 统计与公开验证的硬约束
 

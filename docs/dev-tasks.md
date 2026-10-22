@@ -5,9 +5,9 @@
 - 文档版本：v0.6
 - 最后更新：2026-10-21
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`无进行中任务`。亚盘模型交付线（`T610`/`T611`/`T612`/`T613`）已全部收口并合入 master（PR #26，merge commit `2885739`），master 主干 CI 全绿。
-- 下一任务：`待定向`。剩余未完成项全部属于数据源与上线链：`T106`/`T107`（两周连续观测，`PARTIAL`）→ `T108`（Go/No-Go，`BLOCKED`，依赖前三者）→ `T604`（Docker 部署，`BLOCKED`）→ `T605`（MVP 验收，`TODO`）。其中 `T108` 需要 14 天中国大陆节点观测证据，需项目负责人决定是否现在启动该链；若要继续产品打磨，可选 `T208`（联赛与球队标准化复核闭环，`PARTIAL`）。
-- 最近完成增量：`T610/T611/T612 收档`（T610、T611 缺口由 PR #26 的真覆盖补齐；T612 经核对确认「CI 证据」是伪缺口——仓库 CI 只跑后端 `mvn -Pintegration verify`、无前端步骤，按「本地可完整验收」口径收档）；`T613 收口并合入 master`（PR #26 merge commit `2885739`，164 文件 +13728/−701，25 个提交；PR CI 与 master push CI 均全绿：单测 698 项 + 集成 68 项 + 24 个迁移 apply；顺带修掉 CI 首轮抓出的迁移 IT 版本号硬编码回归）；`T613 阶段 E 概率落库与统计`（统计口径按产品线隔离 + `PUSH`/`HALF_*` 连续化 + 双 Brier + 前端 tab 与亚盘展示 + 十列进哈希/快照 v4 + 批量发布 + 后台盘口阶梯）；`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）
+- 当前活动任务：`T614 单源 NovaAPI 改造`（分支 `feat/nova-single-source`，阶段 0/1 已收口，下一步阶段 2：单源赔率 + 删 3 处映射 JOIN）。亚盘模型交付线（`T610`/`T611`/`T612`/`T613`）已全部收口并合入 master（PR #26，merge commit `2885739`），master 主干 CI 全绿。
+- 下一任务：`T614 阶段 2`（单源赔率 + 删 3 处 `INNER JOIN match_source_mappings`，必须单 commit）。`T614` 全部阶段收口后，数据源与上线链才能重启：`T106`/`T107`（两周连续观测，`PARTIAL`）→ `T108`（Go/No-Go，`BLOCKED`）→ `T604`（Docker 部署，`BLOCKED`）→ `T605`（MVP 验收，`TODO`）——单源改造直接决定了这条链还有没有人工映射阻塞。产品打磨侧仍可选 `T208`（联赛与球队标准化复核闭环，`PARTIAL`），但其价值随映射层删除而下降。
+- 最近完成增量：`T614 阶段 1 补做`（`matches` 的 `league_id`/`home_team_id`/`away_team_id` 由展示名派生填充，修掉单源切换后联赛下拉静默变空；真库回填 13/13/13，字典 12/64 且两次回放幂等）；`T614 阶段 1 单源赛程`（NovaAPI 成为 `matches` 唯一写入者：Ed25519 签名客户端 + `external_match_id` 优先 upsert + 解析下沉到 Provider，真库 13 场连续两次 `SUCCESS 13/13`）；`T614 阶段 0 V25`（单源结构前置五处，含 `matches.external_match_id` 部分唯一索引与 `score_scope` 90 分钟口径）；`T610/T611/T612 收档`（T610、T611 缺口由 PR #26 的真覆盖补齐；T612 经核对确认「CI 证据」是伪缺口——仓库 CI 只跑后端 `mvn -Pintegration verify`、无前端步骤，按「本地可完整验收」口径收档）；`T613 收口并合入 master`（PR #26 merge commit `2885739`，164 文件 +13728/−701，25 个提交；PR CI 与 master push CI 均全绿：单测 698 项 + 集成 68 项 + 24 个迁移 apply；顺带修掉 CI 首轮抓出的迁移 IT 版本号硬编码回归）；`T613 阶段 E 概率落库与统计`（统计口径按产品线隔离 + `PUSH`/`HALF_*` 连续化 + 双 Brier + 前端 tab 与亚盘展示 + 十列进哈希/快照 v4 + 批量发布 + 后台盘口阶梯）；`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）
 
 > 开始任何功能开发前先更新本文件；提交代码时必须同时提交对应任务状态、步骤勾选和验证记录。若本文件与 `implementation-guide.md` 的执行顺序冲突，以本文件为准；架构规则仍以 `technical-design.md` 为准。
 
@@ -2451,6 +2451,41 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - **本轮不改邻线校验口径。** 实跑台账（`docs/odds-analysis-records.md`）显示整条阶梯取最大偏差会把远端档位噪声放大，限定主盘 ±0.75 后同一批 5 场全部通过；但这是模型参数决策，不在阶段 E 范围。结论已写入设计文档，留待下一阶段连同 `neighbor-tolerance` 的取窗口逻辑一起处理。
 
 
+### T614 单源 NovaAPI 改造（赛程 + 赔率 + 赛果 + 自动发布）
+
+- 状态：`IN_PROGRESS`（阶段 0、阶段 1 已完成；阶段 2~5 未开始）
+- 分支：`feat/nova-single-source`
+- 背景：核心诉求是「每天拉数据 → 生成预测 → 次日结算」。但当前在产数据链是三段不同来源拼起来的（赛程/赛果 `sporttery.cn`、赔率 `THE_ODDS_API`），靠 `match_source_mappings` 人工缝合：自动确认要求队名精确匹配 ≥0.85，中英文永远不达标，**每跑一批新比赛都必须手写 SQL**。更硬的一条是 `ChinaSportteryProvider.fetchMatchResultsRaw()` 直接抛错——「第二天结算」今天根本跑不通。
+- 决策：NovaAPI 成为唯一数据源。赛程、赔率、赛果共用同一个 `matchId`，因此映射/归一化层（`match_source_mappings`、`provider_team_mappings`、别名表、归一化评审、`name_key` 系列）在业务上失去存在理由。数据库可清空重建；迁移不重写历史（V1~V25 全部保留），只新增。
+- 顺序约束：**先把链路跑通，再删映射层**。反过来做，出问题时无法区分「删坏了」还是「本来就没通」。
+- 不动的东西：模型/结算/统计层（T613 交付，已过 CI）一行不改；`leagues`/`teams` 表保留（`matches` 的外键目标）。
+
+- 交付阶段：
+  - [x] 阶段 0：`V25__nova_single_source.sql` 一次写全五处（`matches.external_match_id` 可空+部分唯一索引、快照唯一键加 `total_line`、`match_result_facts.score_scope`、赛果校验放宽 `provider_code` 白名单、`predictions` 发布诊断两列）；`PostgresApplicationIT` 迁移数 24→25 并新增结构断言
+  - [x] 阶段 1：NovaAPI 成为 `matches` 唯一写入者（`NovaApiClient` Ed25519 签名、`NovaSportteryProvider`、`NovaSchedulePayloadMapper`、`external_match_id` 优先的 upsert、`parseMatchPool` 下沉到 Provider）
+  - [ ] 阶段 2：单源赔率 + 删 3 处 `INNER JOIN match_source_mappings`（**必须单 commit**，中途回退会留编译不过的半截）
+  - [ ] 阶段 3：自动发布编排（生成 DRAFT 后自动过发布门）
+  - [ ] 阶段 4：赛果同步与结算打通（`sectionsNo999` 为唯一权威比分）
+  - [ ] 阶段 5：删除映射层与旧数据源
+
+- 阶段 1 补做（原计划留到阶段 5，本轮提前收口）：`matches.league_id` / `home_team_id` / `away_team_id` 填充。
+  - 理由：联赛下拉是前端从列表里按 `leagueId != null` 反推的（`useLeagueOptionsQuery`），不填就只剩「全部联赛」——单源一上线这个筛选就静默消失。它属于阶段 1 的写库完整性，不是阶段 5 才暴露的问题。
+  - 做法：新增 `match/service/MatchReferenceDictionary`，按展示名取 id、取不到就建，缓存生命周期限制在一次 `writeAll` 内（长期缓存会挡住别处新建的字典行）。名字为空时**保留既有归属**而不清空。
+  - **不加名字唯一索引**：多处 IT 用固定名插入 `leagues`/`teams`，本机无 Docker 无法预验证，加约束只会在 CI 才暴露冲突。改用「查后插 + 运行内缓存」，重名风险由单实例单任务串行写库兜住。
+
+- 执行记录：
+  - [x] 阶段 0（`db27572`）：V25 五处结构 + IT 迁移数断言与 `enforcesNovaSingleSourceStructures`
+  - [x] 阶段 1（`3eccb70`）：赛程单源接入。四条映射规则：开赛时间取 `matchStartDate + matchTime`；`matchStatus` 只映射 `SCHEDULED`/`LOCKED`（绝不落 `FINISHED`）；`SoldOut` 显式映射 `SCHEDULED`；未知销售状态记 warn 按 `LOCKED` 处理（赛程同步必须每日成功，抛错会让当天一条预测都生成不出来）
+  - [x] 阶段 1 补做：`MatchReferenceDictionary` + 写入器接线 + 3 项单测
+- 验证记录：
+  - 2026-10-21（阶段 1，真库）：`NOVA_API` 连续两次 `SPORTTERY_POOL` 同步均 `SUCCESS 13/13`；`matches` 三个数 `13 | 13 | 13`（总数 / 有外部 ID / 去重外部 ID）；`match_status` 仅 `SCHEDULED`(10) / `LOCKED`(3)；跨零点 10 场业务日 10-21、开赛 10-22，与夹具一致；同一 `external_match_id` 无重复
+  - 2026-10-22（阶段 1 补做，真库）：因 NovaAPI key 过期（日卡，`{"code":401,"message":"API密钥无效或已过期"}`）无法在线同步，改用离线夹具回放写库路径：13 场 `success=13 failure=0 snapshots=0`；`league_id`/`home_team_id`/`away_team_id` 填充率 **13/13/13**；字典 `leagues` 7→12、`teams` 38→64 且无重名；再回放一次规模不变（幂等）；联赛下拉可枚举出 5 个联赛（欧冠 8 场、日职 2 场、其余各 1）
+  - 2026-10-22（阶段 1 补做，单测）：后端全量 **732 项**通过，0 失败 0 错误（阶段 1 收口时 729 + 新增 3）
+- 已知未收口：
+  - NovaAPI key 为日卡，本地验证随时可能因过期而不可用；离线夹具 + 回放脚手架（`tools/NovaScheduleDictionaryRunTest`，未入库、需 `NOVA_VERIFY_DB=true`）是备用验证手段
+  - `sectionsNo999` 是否含加时仍是推断（文档只写「全场比分」），阶段 4 收尾前必须用一场真实加时样本复核
+  - 阶段 1 之前的 10 场历史赛程仍无 `league_id`（本次只回填了 2026-10-21 这一日）
+
 ## 12. 任务记录模板
 
 新增任务或开始尚无记录的任务时，复制以下结构。步骤必须是可按顺序执行、可单独判断完成的动作：
@@ -2538,7 +2573,9 @@ T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PAR
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
-| 2026-10-21 | T612 | `PARTIAL -> DONE` | 纯前端文案任务，缺口「CI 证据」实为**伪缺口**：仓库唯一工作流只跑 `mvn -Pintegration verify`，不含 npm/vitest（已核对工作流文件与 CI 日志）。此前 `PARTIAL` 是把后端收口条件机械套用到前端任务。按 `AGENTS.md`「本地可完整验收的任务无需 CI」，证据为前端 16 文件 75 项 + 生产构建 + 差异检查 + 08-13 浏览器实测（两场四条文案，含客队方向反向换算）。两项完成标准均有对应证据。遗留提示：仓库 CI 无前端门禁，前端回归只能靠本地 `vitest`；若要 CI 拦住前端改动需单独新增工作流，属独立事项。 |
+| 2026-10-22 | T614 / `feat/nova-single-source` | `IN_PROGRESS`（阶段 1 补做） | `matches.league_id`/`home_team_id`/`away_team_id` 改由展示名派生填充（`MatchReferenceDictionary`，缓存一次 `writeAll`）。修的是单源切换引入的真实回归：联赛下拉由前端按 `leagueId != null` 反推，不填就只剩「全部联赛」。真库回填 13/13/13，字典 `leagues` 7→12、`teams` 38→64、无重名，再回放规模不变。**不加名字唯一索引**：多处 IT 用固定名插入字典表，本机无 Docker 无法预验。 |
+| 2026-10-22 | T614 | `无 -> IN_PROGRESS` | 立项「单源 NovaAPI 改造」：赛程/赔率/赛果统一到 NovaAPI 的同一个 `matchId`，删除映射与归一化层。阶段 0（V25 结构）、阶段 1（单源赛程）已收口。阶段划分与顺序约束见任务正文；**先把链路跑通再删映射层**是唯一不可调换的顺序。 |
+| 2026-10-21 | T612 | `PARTIAL -> DONE` | 纯前端文案任务，缺口「CI 证据」实为**伪缺口**：仓库唯一工作流只跑 `mvn -Pintegration verify`，不含 npm/vitest（已核对工作流文件与 CI 日志）。按 `AGENTS.md`「本地可完整验收的任务无需 CI」，证据为前端 16 文件 75 项 + 生产构建 + 差异检查 + 08-13 浏览器实测（两场四条文案，含客队方向反向换算）。此前 `PARTIAL` 是把后端收口条件机械套用到前端任务。遗留提示：仓库 CI 无前端门禁，前端回归只能靠本地 `vitest`；若要 CI 拦住前端改动需单独新增工作流，属独立事项。 |
 | 2026-10-21 | T611 | `PARTIAL -> DONE` | 缺口由 PR #26 补齐，且是**真覆盖**：本任务的 `PublicMatchQueryApplicationIT`（4 项，覆盖 `PUBLISHED`/`LOCKED` 保留、单独 `DRAFT` 与 `SPORTTERY` 排除、列表与计数一致）包含在该 PR 的 68 项集成测试中实际执行，CI 日志可见该类；PR CI 与 master push CI 均全绿。完成标准三条各有自动化或实测证据。 |
 | 2026-10-21 | T610 | `PARTIAL -> DONE` | 历次 `PARTIAL` 的唯一缺口是「Draft PR + GitHub Actions 证据」（交付期间 `gh` 未登录），代码与本地验证在各增量中均已完备。本任务的改动随交付分支 `feat/asian-model-v1` 进入 PR #26（`2885739`），PR CI 与 master push CI 均全绿（单测 698 项 + 集成 68 项 + 24 个迁移 apply），完成标准最后一条由此满足。归属说明：本任务交付的亚盘专用 V3 输出此后由 T613 沿 v4/v5/v6 演进，但 V3 契约（V21：亚盘专用、方向与置信度成对、`LOW` 不落库、已发布不可变）仍是现行基础，故按「已完成」收档而非「被取代」；后续模型行为与结算口径变更归 T613 及其后续任务。 |
 | 2026-10-21 | T613 | `PARTIAL -> DONE`（交付收口） | Draft PR **#26** 创建后 CI 首轮（`39609921647`）失败 1 项：`LegacyNameKeyIdentityCleanupMigrationIT.migrateV22` 断言 `expect: 1 but was: 3`。根因是用无 target 的全量迁移并断言「V21→V22 只执行 1 个」，把「V22 之后不再有迁移」写死；V23、V24 落地后必然变 3 个。属本分支引入的回归，但开发机 Docker/WSL/原生 PostgreSQL 均不可用使该 IT 从未被执行，CI 首次运行即抓出。改为 `flyway("22")` 显式限定 target（`4fa12bf`）后第二轮 CI（`39610773844`）**全绿**：单测 698 项 + 集成 68 项 0 失败 0 错误，24 个迁移在空库连续 apply，`BUILD SUCCESS`。至此「代码、测试、文档、完成标准」四类证据齐备，置 `DONE`；合并 Draft PR 属交付动作，按约定不改变任务状态。 |

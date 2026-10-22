@@ -96,6 +96,13 @@
 ## 迁移编号陷阱
 
 - `backend/src/main/java/db/migration/` 下有 **Java 版 Flyway 迁移**（`V22__RepairLegacyNameKeyIdentityCleanup`）。新建 SQL 迁移前先 `ls` 这个目录，否则会撞号并报 `Found more than one migration with version <n>`。
-- 当前最高版本：**V24**（亚盘模型概率输出 10 列）。V23 = 亚盘结算市场与 profit。
+- 当前最高版本：**V25**（单源 NovaAPI 结构前置：`matches.external_match_id` 可空+部分唯一索引、快照唯一键加 `total_line`、`match_result_facts.score_scope`、赛果校验放宽 `provider_code`、`predictions` 发布诊断两列）。V24 = 亚盘模型概率输出 10 列；V23 = 亚盘结算市场与 profit。
 - `PostgresApplicationIT` 会断言迁移总数与末版本号，**每次加迁移必须同步改**（阶段 A 加 V23 后它红了一整个阶段没人发现，因为只跑定向 IT）。
 
+
+## 单源改造阶段 1：写库完整性（2026-10-22 建立）
+
+- **`matches` 必须写全 `league_id`/`home_team_id`/`away_team_id`**，不能因为「映射层要删了」就不写。联赛下拉是前端从列表里按 `leagueId !== null` 反推的（`useLeagueOptionsQuery`），不填就让筛选**静默消失**——接口和页面都不报错。字典解析由 `MatchReferenceDictionary` 负责：按 `name_zh` 取 id、取不到就建，**缓存生命周期只到一次 `writeAll`**（长期缓存会挡住别处新建的行）；名字为空时保留既有归属而不清空。
+- **不给 `leagues.name_zh` / `teams.name_zh` 加唯一索引**，尽管它是杜绝重名的正解。原因：多处 IT 用固定名插入这两张表（`DataPipelineApplicationIT` 的 `演示联赛` 等），而本机无 Docker 跑不了 IT → 加约束只会在 CI 才暴露冲突。这是「本机验证能力决定迁移激进度」的一般原则，与 `LegacyNameKeyIdentityCleanupMigrationIT` 那次教训同源。
+- **NovaAPI 的 key 是日卡**。2026-10-21 可用、2026-10-22 返回 `{"code":401,"message":"API密钥无效或已过期"}`。任何依赖真实响应的验证随时可能失效，因此离线夹具 + 回放脚手架 `backend/src/test/java/com/jingcaicompass/tools/NovaScheduleDictionaryRunTest.java`（未入库，`NOVA_VERIFY_DB=true` + `@SpringBootTest(local)`）是必备的备用验证手段。
+- 阶段 1 已验的事实：`matches` 三数相等 = API 场次数；`match_status` 只 `SCHEDULED`/`LOCKED`；跨零点按 `matchStartDate` 正确落 10-22；同一 `external_match_id` 无重复；字典两次回放规模不变（幂等）。

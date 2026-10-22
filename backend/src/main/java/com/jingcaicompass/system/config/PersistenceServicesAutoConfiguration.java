@@ -621,12 +621,16 @@ public class PersistenceServicesAutoConfiguration {
     SportteryPoolMatchWriter sportteryPoolMatchWriter(
             MatchMapper matchMapper,
             SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
-            MatchResultFactMapper matchResultFactMapper
+            MatchResultFactMapper matchResultFactMapper,
+            LeagueMapper leagueMapper,
+            TeamMapper teamMapper
     ) {
         return new SportteryPoolMatchWriter(
                 matchMapper,
                 sportteryPoolSnapshotMapper,
-                matchResultFactMapper
+                matchResultFactMapper,
+                leagueMapper,
+                teamMapper
         );
     }
 

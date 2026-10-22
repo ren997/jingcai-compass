@@ -153,6 +153,14 @@ app:
       fixed-delay: ${SETTLEMENT_FIXED_DELAY:5m}
       initial-delay: ${SETTLEMENT_INITIAL_DELAY:75s}
       batch-size: ${SETTLEMENT_BATCH_SIZE:100}
+    prediction-auto-publish:
+      enabled: ${PREDICTION_AUTO_PUBLISH_TASK_ENABLED:false}
+      fixed-delay: ${PREDICTION_AUTO_PUBLISH_FIXED_DELAY:15m}
+      initial-delay: ${PREDICTION_AUTO_PUBLISH_INITIAL_DELAY:2m}
+      # 生成不幂等（batchHash 含 generatedAt），间隔过小会持续产出同场 DRAFT。
+      regenerate-interval: ${PREDICTION_AUTO_PUBLISH_REGENERATE_INTERVAL:3h}
+      # 写入审计日志的操作者标识；发布服务拒绝空操作者。
+      operator: "${PREDICTION_AUTO_PUBLISH_OPERATOR:system:auto-publish}"
   observability:
     enabled: ${OBSERVABILITY_ENABLED:true}
     refresh-delay: ${OBSERVABILITY_REFRESH_DELAY:1m}

@@ -101,7 +101,10 @@ class DataSourceMonitoringServiceTest {
                 new SyncTaskProperties.DataPipelineTaskProperties(false, delay, Duration.ZERO),
                 new SyncTaskProperties.PredictionLockTaskProperties(false, delay, Duration.ZERO, 1),
                 new SyncTaskProperties.SnapshotPublishTaskProperties(false, delay, Duration.ZERO),
-                new SyncTaskProperties.SettlementTaskProperties(false, delay, Duration.ZERO, 1)
+                new SyncTaskProperties.SettlementTaskProperties(false, delay, Duration.ZERO, 1),
+                new SyncTaskProperties.PredictionAutoPublishTaskProperties(
+                        false, delay, Duration.ZERO, Duration.ofHours(3), "system:auto-publish"
+                )
         );
     }
 

@@ -75,6 +75,7 @@ import com.jingcaicompass.settlement.service.SportteryHandicapSettlementCalculat
 import com.jingcaicompass.settlement.service.WinDrawLossSettlementCalculator;
 import com.jingcaicompass.statistics.service.StatisticsQueryService;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
+import com.jingcaicompass.system.config.properties.SyncTaskProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import java.time.Duration;
 import java.util.List;
@@ -102,6 +103,7 @@ class PersistenceServicesAutoConfigurationTest {
                     AsianOddsProviderProperties.class,
                     PersistenceServicesAutoConfigurationTest::asianOddsProviderProperties
             )
+            .withBean(SyncTaskProperties.class, PersistenceServicesAutoConfigurationTest::taskProperties)
             .withBean(AdminSecurityProperties.class, PersistenceServicesAutoConfigurationTest::adminProperties)
             .withBean(AdminAccountCredentialValidator.class, AdminAccountCredentialValidator::new)
             .withBean(PasswordEncoder.class, () -> new BCryptPasswordEncoder(4))
@@ -268,6 +270,32 @@ class PersistenceServicesAutoConfigurationTest {
                 Duration.ofSeconds(10),
                 new AsianOddsProviderProperties.RetryProperties(2, Duration.ofMillis(500)),
                 0
+        );
+    }
+
+    /**
+     * 自动发布编排器需要任务配置里的 {@code regenerate-interval} 与 {@code operator}。
+     * 用真实对象而不是 mock：mock 的 {@code predictionAutoPublish()} 返回 null，
+     * 建 bean 时会直接 NPE。
+     */
+    private static SyncTaskProperties taskProperties() {
+        Duration delay = Duration.ofMinutes(1);
+        return new SyncTaskProperties(
+                false,
+                new SyncTaskProperties.SportteryPoolTaskProperties(false, delay, Duration.ZERO),
+                new SyncTaskProperties.MatchResultTaskProperties(false, delay, Duration.ZERO, 7),
+                new SyncTaskProperties.AsianOddsTaskProperties(false, delay, Duration.ZERO),
+                new SyncTaskProperties.DataPipelineTaskProperties(false, delay, Duration.ZERO),
+                new SyncTaskProperties.PredictionLockTaskProperties(false, Duration.ofSeconds(30), Duration.ZERO, 1),
+                new SyncTaskProperties.SnapshotPublishTaskProperties(false, delay, Duration.ZERO),
+                new SyncTaskProperties.SettlementTaskProperties(false, delay, Duration.ZERO, 1),
+                new SyncTaskProperties.PredictionAutoPublishTaskProperties(
+                        false,
+                        Duration.ofMinutes(15),
+                        Duration.ZERO,
+                        Duration.ofHours(3),
+                        "system:auto-publish"
+                )
         );
     }
 }

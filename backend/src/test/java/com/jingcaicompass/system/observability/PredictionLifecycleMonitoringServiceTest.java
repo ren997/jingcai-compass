@@ -118,7 +118,10 @@ class PredictionLifecycleMonitoringServiceTest {
                 new SyncTaskProperties.DataPipelineTaskProperties(false, delay, Duration.ZERO),
                 new SyncTaskProperties.PredictionLockTaskProperties(enabled, Duration.ofSeconds(30), Duration.ZERO, 1),
                 new SyncTaskProperties.SnapshotPublishTaskProperties(false, delay, Duration.ZERO),
-                new SyncTaskProperties.SettlementTaskProperties(enabled, Duration.ofMinutes(5), Duration.ZERO, 1)
+                new SyncTaskProperties.SettlementTaskProperties(enabled, Duration.ofMinutes(5), Duration.ZERO, 1),
+                new SyncTaskProperties.PredictionAutoPublishTaskProperties(
+                        false, delay, Duration.ZERO, Duration.ofHours(3), "system:auto-publish"
+                )
         );
     }
 }

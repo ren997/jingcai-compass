@@ -159,4 +159,91 @@ public interface PredictionMapper extends BaseMapper<Prediction> {
     /** 从 PostgreSQL 取得生命周期监测使用的统一时间。 */
     @Select("SELECT CURRENT_TIMESTAMP")
     Instant selectDatabaseTime();
+
+    /**
+     * 统计当天还没产生任何公开预测的比赛数。
+     *
+     * <p>这是自动发布的唯一短路判据：结果为 0 时整轮连生成都不做。生成侧不幂等
+     * （{@code generationBatchHash} 含 {@code generatedAt}，重跑必然插新批次），
+     * 没有这个判据就等于每次调度都往库里灌一批新 DRAFT。</p>
+     *
+     * <p>注意它统计的是「比赛是否已发布」而不是「还有多少条 DRAFT」：被
+     * {@code AsianPublishGate} 拒掉的场次压根没有 DRAFT，它们会让计数长期大于 0，
+     * 那是有意的——赔率刷新后重新评估同一场才有意义，节流交给生成间隔控制。</p>
+     */
+    @Select("""
+            SELECT COUNT(*)
+            FROM matches m
+            WHERE m.lottery_date = #{lotteryDate}
+              AND m.kickoff_time > #{now}
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM predictions p
+                  WHERE p.match_id = m.id
+                    AND p.prediction_status IN ('PUBLISHED', 'LOCKED')
+              )
+            """)
+    long countUnpublishedMatchesByLotteryDate(
+            @Param("lotteryDate") LocalDate lotteryDate,
+            @Param("now") Instant now
+    );
+
+    /** 当天最近一次生成时刻，供自动发布限制重新生成的频率。 */
+    @Select("""
+            SELECT MAX(p.generated_at)
+            FROM predictions p
+            INNER JOIN matches m ON m.id = p.match_id
+            WHERE m.lottery_date = #{lotteryDate}
+            """)
+    Instant selectLatestGeneratedAtByLotteryDate(@Param("lotteryDate") LocalDate lotteryDate);
+
+    /**
+     * 自动发布候选：每场每模型只取<b>版本号最小</b>的那条 DRAFT，且该组合必须还没有公开版本。
+     *
+     * <p>两个条件缺一不可。只取最小版本是为了不把赔率抖动逐轮翻成公开版本；
+     * 排除已有公开版本是因为一旦某场已经 PUBLISHED，后续新批次只应作为诊断痕迹留在库里，
+     * 再次发布要么撞版本冲突、要么把已公开内容顶掉。</p>
+     */
+    @Select("""
+            SELECT DISTINCT ON (p.match_id, p.model_version) p.*
+            FROM predictions p
+            INNER JOIN matches m ON m.id = p.match_id
+            WHERE m.lottery_date = #{lotteryDate}
+              AND m.kickoff_time > #{now}
+              AND p.prediction_status = 'DRAFT'
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM predictions q
+                  WHERE q.match_id = p.match_id
+                    AND q.model_version = p.model_version
+                    AND q.prediction_status IN ('PUBLISHED', 'LOCKED')
+              )
+            ORDER BY p.match_id,
+                     p.model_version ASC,
+                     p.prediction_version ASC,
+                     p.id ASC
+            """)
+    List<Prediction> selectAutoPublishCandidateDrafts(
+            @Param("lotteryDate") LocalDate lotteryDate,
+            @Param("now") Instant now
+    );
+
+    /**
+     * 追加一次自动发布失败痕迹。
+     *
+     * <p>只写 {@code publish_attempt_count} / {@code last_publish_error} / {@code updated_at}，
+     * 三者都不在 {@code protect_published_prediction()} 的不可变列里，因此已发布行也能更新。
+     * 反过来，任何触碰内容列的写法都会在触发器上直接失败。</p>
+     */
+    @Update("""
+            UPDATE predictions
+            SET publish_attempt_count = publish_attempt_count + 1,
+                last_publish_error = #{error},
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = #{predictionId}
+            """)
+    int recordPublishFailure(
+            @Param("predictionId") Long predictionId,
+            @Param("error") String error
+    );
 }

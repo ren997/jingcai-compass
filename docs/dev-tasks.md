@@ -5,8 +5,8 @@
 - 文档版本：v0.6
 - 最后更新：2026-10-21
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T614 单源 NovaAPI 改造`（分支 `feat/nova-single-source`，阶段 0/1/2 代码已收口，下一步阶段 3：自动发布编排）。亚盘模型交付线（`T610`/`T611`/`T612`/`T613`）已全部收口并合入 master（PR #26，merge commit `2885739`），master 主干 CI 全绿。
-- 下一任务：`T614 阶段 3`（自动发布编排）。`T614` 全部阶段收口后，数据源与上线链才能重启：`T106`/`T107`（两周连续观测，`PARTIAL`）→ `T108`（Go/No-Go，`BLOCKED`）→ `T604`（Docker 部署，`BLOCKED`）→ `T605`（MVP 验收，`TODO`）——单源改造直接决定了这条链还有没有人工映射阻塞。产品打磨侧仍可选 `T208`（联赛与球队标准化复核闭环，`PARTIAL`），但其价值随映射层删除而下降。
+- 当前活动任务：`T614 单源 NovaAPI 改造`（分支 `feat/nova-single-source`，阶段 0/1/2/3 已收口并实跑验收，下一步阶段 4：赛果同步与结算）。亚盘模型交付线（`T610`/`T611`/`T612`/`T613`）已全部收口并合入 master（PR #26，merge commit `2885739`），master 主干 CI 全绿。
+- 下一任务：`T614 阶段 4`（赛果同步 + 次日结算，需一场加时杯赛样本复核 `sectionsNo999` 的 90 分钟口径）。`T614` 全部阶段收口后，数据源与上线链才能重启：`T106`/`T107`（两周连续观测，`PARTIAL`）→ `T108`（Go/No-Go，`BLOCKED`）→ `T604`（Docker 部署，`BLOCKED`）→ `T605`（MVP 验收，`TODO`）——单源改造直接决定了这条链还有没有人工映射阻塞。产品打磨侧仍可选 `T208`（联赛与球队标准化复核闭环，`PARTIAL`），但其价值随映射层删除而下降。
   - **阶段 2 的实跑验收已于 2026-10-22 完成**（日卡恢复可用）：13 场真实同步 2052 行、两轮增量收敛到 0、13 场预测全部冻结在 `pinnacle` 真实快照行、开赛后零新增。过程中修掉一个额度盲区——NovaAPI 不返回额度响应头，导致 `quota_cost` 恒为 0，已改为按请求数计（`NovaApiClient.get()` 单点）。下一阶段（3 自动发布）可以开工。
 - 最近完成增量：`T614 阶段 2 单源赔率`（NovaAPI 成为赔率唯一来源：一场一次 `/nova/tf/odds?matchId=` + 交叉积落库 + 三条读查询去 `match_source_mappings` JOIN；**验收降级为离线夹具回放**，日卡密钥已过期）；`T614 阶段 1 补做`（`matches` 的 `league_id`/`home_team_id`/`away_team_id` 由展示名派生填充，修掉单源切换后联赛下拉静默变空；真库回填 13/13/13，字典 12/64 且两次回放幂等）；`T614 阶段 1 单源赛程`（NovaAPI 成为 `matches` 唯一写入者：Ed25519 签名客户端 + `external_match_id` 优先 upsert + 解析下沉到 Provider，真库 13 场连续两次 `SUCCESS 13/13`）；`T614 阶段 0 V25`（单源结构前置五处，含 `matches.external_match_id` 部分唯一索引与 `score_scope` 90 分钟口径）；`T610/T611/T612 收档`（T610、T611 缺口由 PR #26 的真覆盖补齐；T612 经核对确认「CI 证据」是伪缺口——仓库 CI 只跑后端 `mvn -Pintegration verify`、无前端步骤，按「本地可完整验收」口径收档）；`T613 收口并合入 master`（PR #26 merge commit `2885739`，164 文件 +13728/−701，25 个提交；PR CI 与 master push CI 均全绿：单测 698 项 + 集成 68 项 + 24 个迁移 apply；顺带修掉 CI 首轮抓出的迁移 IT 版本号硬编码回归）；`T613 阶段 E 概率落库与统计`（统计口径按产品线隔离 + `PUSH`/`HALF_*` 连续化 + 双 Brier + 前端 tab 与亚盘展示 + 十列进哈希/快照 v4 + 批量发布 + 后台盘口阶梯）；`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）
 
@@ -2454,7 +2454,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T614 单源 NovaAPI 改造（赛程 + 赔率 + 赛果 + 自动发布）
 
-- 状态：`IN_PROGRESS`（阶段 0、1、2 已完成且实跑验收通过；阶段 3~5 未开始）
+- 状态：`IN_PROGRESS`（阶段 0、1、2 已完成且实跑验收通过；阶段 3 已完成并实跑验收；阶段 4~5 未开始）
 - 分支：`feat/nova-single-source`
 - 背景：核心诉求是「每天拉数据 → 生成预测 → 次日结算」。但当前在产数据链是三段不同来源拼起来的（赛程/赛果 `sporttery.cn`、赔率 `THE_ODDS_API`），靠 `match_source_mappings` 人工缝合：自动确认要求队名精确匹配 ≥0.85，中英文永远不达标，**每跑一批新比赛都必须手写 SQL**。更硬的一条是 `ChinaSportteryProvider.fetchMatchResultsRaw()` 直接抛错——「第二天结算」今天根本跑不通。
 - 决策：NovaAPI 成为唯一数据源。赛程、赔率、赛果共用同一个 `matchId`，因此映射/归一化层（`match_source_mappings`、`provider_team_mappings`、别名表、归一化评审、`name_key` 系列）在业务上失去存在理由。数据库可清空重建；迁移不重写历史（V1~V25 全部保留），只新增。
@@ -2465,7 +2465,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 阶段 0：`V25__nova_single_source.sql` 一次写全五处（`matches.external_match_id` 可空+部分唯一索引、快照唯一键加 `total_line`、`match_result_facts.score_scope`、赛果校验放宽 `provider_code` 白名单、`predictions` 发布诊断两列）；`PostgresApplicationIT` 迁移数 24→25 并新增结构断言
   - [x] 阶段 1：NovaAPI 成为 `matches` 唯一写入者（`NovaApiClient` Ed25519 签名、`NovaSportteryProvider`、`NovaSchedulePayloadMapper`、`external_match_id` 优先的 upsert、`parseMatchPool` 下沉到 Provider）
   - [x] 阶段 2：单源赔率 + 删 3 处 `INNER JOIN match_source_mappings`（单 commit `9c6f616`）。**实跑验收已于 2026-10-22 全部通过**：真实同步 13 场 → 2052 行交叉积快照（`total_line` 非空率 100%）、两轮增量 `2052→0`、13 场预测全部冻结在 `pinnacle` 行、开赛后零新增；顺带修掉 `quota_cost` 恒为 0 的额度盲区
-  - [ ] 阶段 3：自动发布编排（生成 DRAFT 后自动过发布门）
+  - [x] 阶段 3：自动发布编排（`PredictionAutoPublishOrchestrator` + `PredictionAutoPublishJob`，生成 DRAFT 后自动过发布门）。**实跑验收 2026-10-22 通过**：首轮 13 候选全发布、次轮 `NO_PENDING_MATCH` 短路、每场仅 1 条 PUBLISHED、13 条审计记录操作者为 `system:auto-publish`
   - [ ] 阶段 4：赛果同步与结算打通（`sectionsNo999` 为唯一权威比分）
   - [ ] 阶段 5：删除映射层与旧数据源
 
@@ -2492,6 +2492,14 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 两轮同步收敛 → `round1=2052 / round2=0`（`captured_at` 不同故唯一键不冲突，第二轮零插入即证明 writer 去重维度含 `total_line` 生效）
   - [x] 开赛后不追加 → 以 `businessDate=2026-10-21`（该批比赛均已开赛）跑一轮：`skippedLive=12`、`inserted=0`、该批比赛的 `NOVA_API` 快照数仍为 **0**
 - 阶段 2 实跑**顺带发现并修掉的一个真问题**：`quota_cost` 恒为 0。`ProviderHttpExecutor` 只从响应头解析额度（The Odds API 的 `x-requests-*` 约定），而 NovaAPI 实测不返回任何额度头（只有 `nginx/date/content-type`），于是并发上限 5000 次/日完全不可见。修法是在 `NovaApiClient.get()` 单点改写：**一次请求 = 1 个单位，重试各计 1**（`retryCount + 1`）。对照证据：同一操作修复前 `quota_cost=0`（`id=49`）、修复后 `=13`（`id=50`）。
+- 阶段 3 的**实跑验收（2026-10-22 通过，本机全自动发布已启用）**：
+  - [x] 首轮：`pendingMatchCount=13`、`generationPerformed=false`（生成节流生效，当天 21:58 已生成过）、`candidateCount=13`、`publishedCount=13`、`failedCount=0`
+  - [x] 次轮：`pendingMatchCount=0` → `skippedReason=NO_PENDING_MATCH`，未生成、未发布
+  - [x] 真库收敛：`SELECT match_id, model_version ... HAVING count(*) FILTER (WHERE status='PUBLISHED') > 1` 返回 **0 行**；当日 13 场每场 `versions=1 / pub=1 / draft=0`
+  - [x] 发布字段齐全：13 条新 PUBLISHED 的 `publish_time` / `lock_time` / `prediction_hash` 全部非空；`lock_time` 等于开赛时间（跨零点场次正确落在次日 `00:45`）
+  - [x] 审计：`audit_logs` 13 条 `target_type=PREDICTION, action_type=PUBLISH`，`operator_id=system:auto-publish`
+  - [x] 候选查询语义：强制跑一遍生成后再查候选 → `count=0`（已发布场次不会重复进候选）
+- 阶段 3 顺带修正的一条认知：**生成并非无条件不幂等**。`generatedAt` 取自已持久化特征快照，赔率快照没变时重跑会命中同一 `generationBatchHash` 并返回 `reused=13 / inserted=0`；只有赔率刷新后快照变了才会插新批次、版本号按 `MAX(version)+1` 递增。因此 `regenerate-interval` 的真实价值是**省掉无谓的生成计算**，而不是防止批次爆炸——后者由幂等性本身保证。这条也解释了为什么「当天全部发布后重新生成」无法造出 `PUBLISHED v1 + DRAFT v2` 形态：短路先于生成，且生成幂等。
 - 验证记录：
   - 2026-10-21（阶段 1，真库）：`NOVA_API` 连续两次 `SPORTTERY_POOL` 同步均 `SUCCESS 13/13`；`matches` 三个数 `13 | 13 | 13`（总数 / 有外部 ID / 去重外部 ID）；`match_status` 仅 `SCHEDULED`(10) / `LOCKED`(3)；跨零点 10 场业务日 10-21、开赛 10-22，与夹具一致；同一 `external_match_id` 无重复
   - 2026-10-22（阶段 1 补做，真库）：因 NovaAPI key 过期（日卡，`{"code":401,"message":"API密钥无效或已过期"}`）无法在线同步，改用离线夹具回放写库路径：13 场 `success=13 failure=0 snapshots=0`；`league_id`/`home_team_id`/`away_team_id` 填充率 **13/13/13**；字典 `leagues` 7→12、`teams` 38→64 且无重名；再回放一次规模不变（幂等）；联赛下拉可枚举出 5 个联赛（欧冠 8 场、日职 2 场、其余各 1）
@@ -2588,6 +2596,7 @@ T209 已作为 M2 的独立证据收口；M2 仍因 T208 时效修正保持 `PAR
 
 | 日期 | 任务/提交 | 状态变化 | 验证或说明 |
 | --- | --- | --- | --- |
+| 2026-10-22 | T614 / `feat/nova-single-source` | `IN_PROGRESS`（阶段 3 实跑验收通过） | 自动发布编排：新增 `PredictionAutoPublishOrchestrator`（**不加 `@Transactional`**——`generateAndImport` 自带事务，同事务内调 publish 会被批次里逐条 catch 的异常标记 rollback-only 而整批回滚）+ `PredictionAutoPublishJob`；新增四条 Mapper SQL（已发布比赛计数、最近生成时刻、候选 DRAFT、失败落库）与 `app.tasks.prediction-auto-publish.*` 配置。收敛规则：`DISTINCT ON (match_id, model_version)` 取**版本号最小**的 DRAFT + `NOT EXISTS` 排除已有 PUBLISHED/LOCKED + `kickoff_time > now`。实跑验收：首轮 13 候选全发布、次轮 `NO_PENDING_MATCH` 短路、每场仅 1 条 PUBLISHED、13 条审计记录操作者 `system:auto-publish`、`lock_time` 正确落在跨零点场次的次日 00:45。**顺带修正一条认知**：生成并非无条件不幂等——`generatedAt` 取自已持久化特征快照，快照未变时重跑返回 `reused=13 / inserted=0`，`regenerate-interval` 的真实价值是省计算而非防批次爆炸。后端全量 **776 项单测 0 失败**。 |
 | 2026-10-22 | T614 / `feat/nova-single-source` | `IN_PROGRESS`（阶段 2 实跑验收通过） | 日卡恢复可用后补做阶段 2 实跑，五项全过：真实同步 13 场产出 **2052 行**交叉积快照（`total_line` 非空率 100%，两轮增量 `2052→0`）；13 场预测全部生成入库、`skippedByReason={}`，`asian_odds_snapshot_id` 全部指向 `bookmaker_code=pinnacle` 且四赔率齐全的真实行；以 `businessDate=2026-10-21` 复跑确认开赛后 `skippedLive=12`、`inserted=0`。**顺带修掉一个额度盲区**：`ProviderHttpExecutor` 只从响应头解析额度（The Odds API 约定），NovaAPI 实测不返回任何额度头，导致 `quota_cost` 恒为 0、5000 次/日上限不可见；改为在 `NovaApiClient.get()` 单点按「请求 1 + 每次重试 1」计，对照证据 `id=49 quota_cost=0` → `id=50 quota_cost=13`。同时修正了原验收清单里一条错判据（「每家庄 `DISTINCT total_line`>1」在只保留 4 档平衡盘的设计下必然不成立，正确判据是按 `(比赛, 让球线)` 聚合后 ≥2 家庄齐全）。后端全量 **755 项单测 0 失败**。 |
 | 2026-10-22 | T614 / `feat/nova-single-source` | `IN_PROGRESS`（阶段 2 代码完成，实跑验收待补） | 单源赔率：新增 `NovaApiOddsProvider`（一场一次 `/nova/tf/odds?matchId=`，额度=场次数，30 次/分限速放在 `NovaApiClient` 全局）与 `NovaApiOddsPayloadMapper`（`marketId` 4/5、`line` 同值配对且**不取反**、中文庄名转 ASCII、按平衡度取 4 档大小球后交叉积）；`AsianOddsSnapshotMapper` 三条读查询删除 `INNER JOIN match_source_mappings` 并改按 `provider_code` 过滤（聚合器去重键不含 provider，混源会让主盘悄悄偏移）；`AsianOddsSnapshotWriter` 去重维度补 `total_line` 与 `IS NULL`（漏改会在交叉积下每轮整批重插）；同步侧删 Nova 分支的映射门禁、额度累加改为仅 `THE_ODDS_API`、开赛后不再追加快照。后端全量 **751 项单测 0 失败**（新增 `NovaApiOddsProviderTest` 6 项、`NovaApiOddsPayloadMapperTest` 10 项，均基于 2026-10-21 三个真实抓包）。**缺口**：日卡密钥过期，真实同步、真库主盘命中、两轮增量收敛均未验证，清单已写入任务正文。 |
 | 2026-10-22 | T614 / `feat/nova-single-source` | `IN_PROGRESS`（阶段 1 补做） | `matches.league_id`/`home_team_id`/`away_team_id` 改由展示名派生填充（`MatchReferenceDictionary`，缓存一次 `writeAll`）。修的是单源切换引入的真实回归：联赛下拉由前端按 `leagueId != null` 反推，不填就只剩「全部联赛」。真库回填 13/13/13，字典 `leagues` 7→12、`teams` 38→64、无重名，再回放规模不变。**不加名字唯一索引**：多处 IT 用固定名插入字典表，本机无 Docker 无法预验。 |

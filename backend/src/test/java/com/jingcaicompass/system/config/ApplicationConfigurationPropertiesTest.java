@@ -83,7 +83,12 @@ class ApplicationConfigurationPropertiesTest {
                     "app.tasks.settlement.enabled=false",
                     "app.tasks.settlement.fixed-delay=5m",
                     "app.tasks.settlement.initial-delay=75s",
-                    "app.tasks.settlement.batch-size=100"
+                    "app.tasks.settlement.batch-size=100",
+                    "app.tasks.prediction-auto-publish.enabled=false",
+                    "app.tasks.prediction-auto-publish.fixed-delay=15m",
+                    "app.tasks.prediction-auto-publish.initial-delay=2m",
+                    "app.tasks.prediction-auto-publish.regenerate-interval=3h",
+                    "app.tasks.prediction-auto-publish.operator=system:auto-publish"
             );
 
     @Test
@@ -145,6 +150,10 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(tasks.settlement().fixedDelay()).isEqualTo(Duration.ofMinutes(5));
             assertThat(tasks.settlement().initialDelay()).isEqualTo(Duration.ofSeconds(75));
             assertThat(tasks.settlement().batchSize()).isEqualTo(100);
+            assertThat(tasks.predictionAutoPublish().enabled()).isFalse();
+            assertThat(tasks.predictionAutoPublish().fixedDelay()).isEqualTo(Duration.ofMinutes(15));
+            assertThat(tasks.predictionAutoPublish().regenerateInterval()).isEqualTo(Duration.ofHours(3));
+            assertThat(tasks.predictionAutoPublish().operator()).isEqualTo("system:auto-publish");
 
             SyncTaskSchedule schedule = new SyncTaskSchedule(tasks);
             assertThat(schedule.sportteryPoolFixedDelayMillis()).isEqualTo(900_000L);
@@ -254,6 +263,27 @@ class ApplicationConfigurationPropertiesTest {
                             .rootCause()
                             .hasMessageContaining("app.tasks.prediction-lock.fixed-delay");
                 });
+    }
+
+    @Test
+    void rejectsAutoPublishRegenerateIntervalBelowZero() {
+        contextRunner
+                .withPropertyValues("app.tasks.prediction-auto-publish.regenerate-interval=-1s")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.tasks.prediction-auto-publish.regenerate-interval");
+                });
+    }
+
+    @Test
+    void rejectsAutoPublishBlankOperator() {
+        // 空操作者会让发布服务对每一条候选都抛 AUTH_UNAUTHORIZED，
+        // 表现是「自动发布每轮全失败」，比启动期报错难查得多
+        contextRunner
+                .withPropertyValues("app.tasks.prediction-auto-publish.operator= ")
+                .run(context -> assertThat(context).hasFailed());
     }
 
     @Test

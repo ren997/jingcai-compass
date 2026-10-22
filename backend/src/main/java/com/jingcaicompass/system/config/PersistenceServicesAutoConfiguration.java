@@ -98,6 +98,7 @@ import com.jingcaicompass.odds.service.AsianOddsSyncServiceImpl;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.job.PredictionLockJob;
 import com.jingcaicompass.prediction.service.BaselinePredictionGenerationService;
+import com.jingcaicompass.prediction.service.PredictionAutoPublishOrchestrator;
 import com.jingcaicompass.prediction.service.BaselinePredictionGenerationServiceImpl;
 import com.jingcaicompass.prediction.service.PredictionBatchPublishService;
 import com.jingcaicompass.prediction.service.PredictionContentHasher;
@@ -491,6 +492,33 @@ public class PersistenceServicesAutoConfiguration {
             PredictionPublishService predictionPublishService
     ) {
         return new PredictionBatchPublishService(predictionMapper, predictionPublishService);
+    }
+
+    /**
+     * 自动发布编排器。
+     *
+     * <p>刻意复用 {@code predictionImportClock} 而不是自己造一个 {@code Clock.systemUTC()}：
+     * 编排器用它在 SQL 里筛「开赛时间未到」的候选，发布服务用同一个时钟判断发布时间是否早于锁定时间。
+     * 两个时钟不一致时会出现「编排器认为还没开赛、发布服务认为已过截止」的错位，
+     * 而且只在开赛前后几分钟的窗口里偶发。</p>
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    PredictionAutoPublishOrchestrator predictionAutoPublishOrchestrator(
+            BaselinePredictionGenerationService baselinePredictionGenerationService,
+            PredictionBatchPublishService predictionBatchPublishService,
+            PredictionMapper predictionMapper,
+            Clock predictionImportClock,
+            SyncTaskProperties taskProperties
+    ) {
+        return new PredictionAutoPublishOrchestrator(
+                baselinePredictionGenerationService,
+                predictionBatchPublishService,
+                predictionMapper,
+                predictionImportClock,
+                taskProperties.predictionAutoPublish().regenerateInterval(),
+                taskProperties.predictionAutoPublish().operator()
+        );
     }
 
     @Bean

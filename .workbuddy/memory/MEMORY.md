@@ -55,7 +55,7 @@
 
 ## 单源改造进度与事实
 
-- 阶段 0（V25 迁移）、阶段 1（赛程）、阶段 2（赔率）已完成并推送，**阶段 2 实跑验收 2026-10-22 全部通过**（日卡恢复可用）：13 场真实同步 2052 行交叉积快照、两轮增量 `2052→0`、13 场预测全部冻结在 `pinnacle` 真实行、开赛后 `skippedLive=12` 且零新增。
+- 阶段 0（V25 迁移）、阶段 1（赛程）、阶段 2（赔率）、阶段 3（自动发布）已完成并推送。**阶段 2 实跑验收 2026-10-22 通过**：13 场真实同步 2052 行交叉积快照、两轮增量 `2052→0`、13 场预测全部冻结在 `pinnacle` 真实行、开赛后 `skippedLive=12` 且零新增。**阶段 3 实跑验收同日通过**：13 候选全发布、次轮 `NO_PENDING_MATCH` 短路、每场仅 1 条 PUBLISHED、审计操作者 `system:auto-publish`。
 - **`quota_cost` 曾恒为 0（已修）**：`ProviderHttpExecutor` 只按响应头解析额度（The Odds API 的 `x-requests-*` 约定），NovaAPI 不返回任何额度头 → 5000 次/日上限不可见。修法在 `NovaApiClient.get()` 单点按「请求 1 + 每次重试 1」计。**换源时要检查新源的额度口径是否也走响应头**，否则额度监控静默失效。
 - **赔率取数与落库的四条硬约束（阶段 2 建立）**：
   1. `/nova/tf/odds?matchId=` **一场一次调用**即返回全部机构×玩法，额度 = 场次数；`data.matchId` 是竞彩 ID、`data.idEvent` 是 Nova 内部 ID。不要照搬 The Odds API 的「按联赛 sport key 批量拉」。
@@ -70,10 +70,10 @@
 - **不给 `leagues.name_zh`/`teams.name_zh` 加唯一索引**：多处 IT 用固定名插入，本机无 Docker 跑不了 IT，加约束只会在 CI 才暴露。这是「本机验证能力决定迁移激进度」的一般原则。
 - **迁移类 IT 禁止 `flyway(null).migrate()` + 断言迁移数**：一律 `flyway("<target>")` 限定目标版本；全量末版本断言只留 `PostgresApplicationIT` 一处（加迁移必须同步改）。
 - `backend/src/main/java/db/migration/` 下有 Java 版 Flyway 迁移（V22），新建 SQL 前先 `ls` 避免撞号。当前最高 **V25**。
-- 生成**不幂等**：`generationBatchHash` 含 `generatedAt`，重跑会插新批次。亚盘同步是**追加快照**，重跑后方向/置信度可能翻转（不是 bug）。
+- **生成是条件幂等**（阶段 3 修正）：`generatedAt` 取自已持久化特征快照，赔率快照没变时重跑命中同一 `generationBatchHash` → `reused=N / inserted=0`；只有赔率刷新后快照变了才插新批次、版本号按 `MAX(version)+1` 递增。所以 `regenerate-interval` 的真实价值是**省掉无谓的生成计算**，不是防批次爆炸。亚盘同步则是**追加快照**，重跑后方向/置信度可能翻转（不是 bug）。
 
 ## 已知待办 / 未收口
 
 - 邻线校验口径（整条阶梯取最大 vs 主盘 ±0.75）**本轮不改代码**，结论写进 `docs/asian-model-design.md`，待下一阶段连同 `neighbor-tolerance` 取窗口一起处理。
 - 一次性实跑脚手架 `backend/src/test/java/com/jingcaicompass/tools/` 下文件保持未跟踪（会让本地单测数比 CI 多 1~2，别误判）。
-- 阶段 3 自动发布、阶段 4 赛果同步（`sectionsNo999` 需加时样本复核）、阶段 5 删映射层。
+- 阶段 4 赛果同步（`sectionsNo999` 需加时样本复核）、阶段 5 删映射层。

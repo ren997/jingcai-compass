@@ -25,6 +25,7 @@ import com.jingcaicompass.match.vo.MatchSummaryVo;
 import com.jingcaicompass.match.vo.SportteryMarketVo;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
@@ -63,6 +64,7 @@ public class MatchQueryServiceImpl implements MatchQueryService {
     private final MatchSourceMappingMapper matchSourceMappingMapper;
     private final RawDataPayloadMapper rawDataPayloadMapper;
     private final PaginationProperties paginationProperties;
+    private final ActiveAsianOddsProvider activeAsianOddsProvider;
 
     public MatchQueryServiceImpl(
             MatchMapper matchMapper,
@@ -71,7 +73,8 @@ public class MatchQueryServiceImpl implements MatchQueryService {
             PredictionMapper predictionMapper,
             MatchSourceMappingMapper matchSourceMappingMapper,
             RawDataPayloadMapper rawDataPayloadMapper,
-            PaginationProperties paginationProperties
+            PaginationProperties paginationProperties,
+            ActiveAsianOddsProvider activeAsianOddsProvider
     ) {
         this.matchMapper = matchMapper;
         this.sportterySnapshotMapper = sportterySnapshotMapper;
@@ -80,6 +83,7 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         this.matchSourceMappingMapper = matchSourceMappingMapper;
         this.rawDataPayloadMapper = rawDataPayloadMapper;
         this.paginationProperties = paginationProperties;
+        this.activeAsianOddsProvider = activeAsianOddsProvider;
     }
 
     @Override
@@ -205,7 +209,9 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         if (matchIds.isEmpty()) {
             return Map.of();
         }
-        return asianOddsSnapshotMapper.selectLatestCompleteConfirmedLinesByMatchIds(matchIds).stream()
+        return asianOddsSnapshotMapper
+                .selectLatestCompleteLinesByMatchIds(matchIds, activeAsianOddsProvider.providerCode())
+                .stream()
                 .collect(Collectors.toMap(AsianOddsSnapshot::getMatchId, snapshot -> snapshot));
     }
 

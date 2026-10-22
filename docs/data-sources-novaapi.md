@@ -116,7 +116,7 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 ## 风险与待办
 
 1. **机构覆盖偏少**：日职仅 5 家（平博/威廉希尔/Bet365/1xBet/韦德），欧冠 7 家。若后续要用必发（交易所）做真实概率基准，只在大场次可用。
-2. **`main` / `suspended` 恒为 null**：主盘、停盘需自算；停盘判断只能靠 `odds` 缺失或异常。入库解析必须显式丢弃 `suspended = true` 的 option（阶段 B 已在文档层面登记，代码侧等 NovaAPI Provider 接入时落地）。
+2. **`main` / `suspended` 恒为 null**：主盘需自算；停盘判断只能靠 `odds` 缺失或异常。**解析器已落地**（`NovaApiOddsPayloadMapper`）：`suspended` 为 `true` 的 option 直接丢弃——留着会把「不可交易」当成报价写进快照，而冻结行正是按快照报价计账的。
 3. **单次赛果查询 30 天上限**：回测取数要按月分页，一年约 12 次请求，可接受。
 4. **日卡仅验证了单日**：跨日行为（赛程滚动、赛果出现时延、跨日赔率延续）仍需 3~5 天观察。
 5. **数据保留总深度未定**：已验证到 2026-01，再往前未测；若做多赛季训练集，需补测。
@@ -127,8 +127,21 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 |---|---|---|
 | 新增 `NovaApiProvider` | `match/client` | Ed25519 签名 + 上述 5 个端点 |
 | 补实赛果同步 | `ChinaSportteryProvider.fetchMatchResultsRaw()` 现为抛异常 | 用 `/nova/text/match-results` 替代，90 分钟口径天然正确 |
-| 亚盘赔率适配 | `odds/client` | `providers → markets → options` 映射；每家每档一行完整入库（不要只留主盘）、中文庄名归一为 ASCII、丢弃 `suspended`。主盘由 `AsianMarketConsensusAggregator` 跨庄算，不在适配层决定 |
+| 亚盘赔率适配 | `odds/client`、`odds/service` | **已落地**：`NovaApiOddsProvider`（一场一次调用）+ `NovaApiOddsPayloadMapper`（`providers → markets → options`；中文庄名归一为 ASCII；丢弃 `suspended`）。主盘仍由 `AsianMarketConsensusAggregator` 跨庄算，适配层不做决定 —— 它只负责把「一条让球线 + 一条大小球线」展开成同一行，因为冻结行要求同一行同时具备两个市场 |
 | 新增 `score_scope` 字段 | `market_result_facts` | `REGULATION_90` / `FINAL`，防止口径污染 |
 | 阶段 A 结算闭环 | `SettlementWriter` / `MarketTypeEnum` | 与数据源无关，仍需先做 |
 
 **顺序建议**：先补阶段 A 的结算闭环（纯本地数学），再接数据源。否则数据接进来预测依然停在 `LOCKED`。
+
+## 落库形态：为什么是交叉积
+
+NovaAPI 的让球档与大小球档是两条独立阶梯（平博 9 档 × 16 档，1xBet 15 档 × 42 档）。
+而 `asian_odds_snapshots` 一行要同时承载两个市场，`AsianFreezeSnapshotSelector.freezable()`
+又要求冻结行在**同一行**里既有共识让球线、又有齐全的大小球四字段。因此只能展开成
+(让球线 × 大小球线) 的交叉积。
+
+全量交叉积会失控（一场四家庄上千行、每 20 分钟一轮），所以大小球侧只保留
+**跨庄去水概率最平衡的 4 档**。判据刻意不是「报出家数」：按家数会系统性选中
+`1.5/2.5/3.5/4.5` 这类档位稀疏但每家都报的整数盘，把真正的四分盘主盘 `2.75/3.0` 排掉，
+结果是聚合器把主盘定到 2.5 —— 一切看起来正常，但共识已不是市场共识。
+真实抓包下每场约 110~160 行，且这 4 档必然包含各庄自己的主盘线。

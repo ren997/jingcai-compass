@@ -89,6 +89,7 @@ import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.job.AsianOddsSyncJob;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
 import com.jingcaicompass.odds.service.AsianOddsPayloadMapper;
 import com.jingcaicompass.odds.service.AsianOddsProvider;
 import com.jingcaicompass.odds.service.AsianOddsSnapshotWriter;
@@ -264,7 +265,8 @@ public class PersistenceServicesAutoConfiguration {
             PredictionMapper predictionMapper,
             MatchSourceMappingMapper matchSourceMappingMapper,
             RawDataPayloadMapper rawDataPayloadMapper,
-            PaginationProperties paginationProperties
+            PaginationProperties paginationProperties,
+            ActiveAsianOddsProvider activeAsianOddsProvider
     ) {
         return new MatchQueryServiceImpl(
                 matchMapper,
@@ -273,7 +275,8 @@ public class PersistenceServicesAutoConfiguration {
                 predictionMapper,
                 matchSourceMappingMapper,
                 rawDataPayloadMapper,
-                paginationProperties
+                paginationProperties,
+                activeAsianOddsProvider
         );
     }
 
@@ -417,7 +420,8 @@ public class PersistenceServicesAutoConfiguration {
             Clock predictionImportClock,
             AsianOddsAggregationProperties asianOddsAggregationProperties,
             AsianModelProperties asianModelProperties,
-            MeterRegistry meterRegistry
+            MeterRegistry meterRegistry,
+            ActiveAsianOddsProvider activeAsianOddsProvider
     ) {
         return new BaselinePredictionGenerationServiceImpl(
                 matchMapper,
@@ -429,7 +433,8 @@ public class PersistenceServicesAutoConfiguration {
                 predictionImportClock,
                 asianOddsAggregationProperties,
                 asianModelProperties,
-                meterRegistry
+                meterRegistry,
+                activeAsianOddsProvider
         );
     }
 
@@ -459,15 +464,23 @@ public class PersistenceServicesAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    ActiveAsianOddsProvider activeAsianOddsProvider(AsianOddsProviderProperties asianOddsProviderProperties) {
+        return new ActiveAsianOddsProvider(asianOddsProviderProperties.provider().getCode());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     AdminOddsLadderQueryService adminOddsLadderQueryService(
             PredictionMapper predictionMapper,
             AsianOddsSnapshotMapper asianOddsSnapshotMapper,
-            AsianOddsAggregationProperties asianOddsAggregationProperties
+            AsianOddsAggregationProperties asianOddsAggregationProperties,
+            ActiveAsianOddsProvider activeAsianOddsProvider
     ) {
         return new AdminOddsLadderQueryService(
                 predictionMapper,
                 asianOddsSnapshotMapper,
-                asianOddsAggregationProperties
+                asianOddsAggregationProperties,
+                activeAsianOddsProvider
         );
     }
 

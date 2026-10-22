@@ -11,6 +11,7 @@ import com.jingcaicompass.odds.client.AsianModelProperties;
 import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
 import com.jingcaicompass.odds.service.AsianFreezeSnapshotSelector;
 import com.jingcaicompass.odds.service.AsianMarketConsensusAggregator;
 import com.jingcaicompass.odds.service.AsianMarketMath;
@@ -106,6 +107,7 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
     private final BigDecimal residualTolerance;
     private final AsianPublishGate publishGate;
     private final MeterRegistry meterRegistry;
+    private final ActiveAsianOddsProvider activeAsianOddsProvider;
 
     public BaselinePredictionGenerationServiceImpl(
             MatchMapper matchMapper,
@@ -117,7 +119,8 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
             Clock clock,
             AsianOddsAggregationProperties aggregationProperties,
             AsianModelProperties modelProperties,
-            MeterRegistry meterRegistry
+            MeterRegistry meterRegistry,
+            ActiveAsianOddsProvider activeAsianOddsProvider
     ) {
         AsianOddsAggregationProperties effectiveProperties =
                 aggregationProperties == null ? AsianOddsAggregationProperties.defaults() : aggregationProperties;
@@ -136,6 +139,7 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
         this.residualTolerance = effectiveModelProperties.residualTolerance();
         this.publishGate = new AsianPublishGate(effectiveModelProperties);
         this.meterRegistry = meterRegistry;
+        this.activeAsianOddsProvider = activeAsianOddsProvider;
     }
 
     @Override
@@ -145,7 +149,7 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
             throw new BusinessException(ErrorCode.INVALID_PARAMETER, "lotteryDate must not be null");
         }
 
-        // 1) 只读取持久化比赛与已确认映射的亚盘报价，不调用外部 Provider。
+        // 1) 只读取持久化比赛与当前来源的亚盘报价，不调用外部 Provider。
         List<MatchEntity> matches = matchMapper.selectPublicDailyMatches(lotteryDate);
         List<Long> matchIds = matchIds(matches);
         Map<Long, List<AsianOddsSnapshot>> handicapRowsByMatchId = handicapRowsByMatchId(matchIds);
@@ -226,7 +230,9 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
             return Map.of();
         }
         Map<Long, List<AsianOddsSnapshot>> result = new LinkedHashMap<>();
-        for (AsianOddsSnapshot row : asianOddsSnapshotMapper.selectLatestConfirmedHandicapLinesByMatchIds(matchIds)) {
+        String providerCode = activeAsianOddsProvider.providerCode();
+        for (AsianOddsSnapshot row
+                : asianOddsSnapshotMapper.selectLatestHandicapLinesByMatchIds(matchIds, providerCode)) {
             if (row != null && row.getMatchId() != null) {
                 result.computeIfAbsent(row.getMatchId(), key -> new ArrayList<>()).add(row);
             }
@@ -239,7 +245,9 @@ public class BaselinePredictionGenerationServiceImpl implements BaselinePredicti
             return Map.of();
         }
         Map<Long, List<AsianMarketConsensusAggregator.Quote>> result = new LinkedHashMap<>();
-        for (AsianOddsSnapshot row : asianOddsSnapshotMapper.selectLatestConfirmedTotalsLinesByMatchIds(matchIds)) {
+        String providerCode = activeAsianOddsProvider.providerCode();
+        for (AsianOddsSnapshot row
+                : asianOddsSnapshotMapper.selectLatestTotalsLinesByMatchIds(matchIds, providerCode)) {
             if (row == null || row.getMatchId() == null) {
                 continue;
             }

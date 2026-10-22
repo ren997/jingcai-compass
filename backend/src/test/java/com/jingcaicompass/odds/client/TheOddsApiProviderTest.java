@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.odds.dto.AsianOddsQueryDto;
 import com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum;
 import com.jingcaicompass.odds.service.AsianOddsPayloadMapper;
+import com.jingcaicompass.odds.service.NovaApiOddsPayloadMapper;
 import com.jingcaicompass.system.provider.ProviderHttpException;
 import com.jingcaicompass.system.provider.ProviderHttpExecutor;
 import java.io.IOException;
@@ -33,7 +34,7 @@ class TheOddsApiProviderTest {
         server = new MockWebServer();
         server.start();
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
-        payloadMapper = new AsianOddsPayloadMapper(objectMapper);
+        payloadMapper = new AsianOddsPayloadMapper(objectMapper, new NovaApiOddsPayloadMapper());
         AsianOddsProviderProperties properties = new AsianOddsProviderProperties(
                 AsianOddsProviderTypeEnum.THE_ODDS_API,
                 URI.create(server.url("/").toString()),

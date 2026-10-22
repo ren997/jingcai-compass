@@ -21,22 +21,23 @@ public interface AsianOddsSnapshotMapper extends BaseMapper<AsianOddsSnapshot> {
     List<AsianOddsSnapshot> selectLatestPublicLinesByMatchId(@Param("matchId") Long matchId);
 
     /**
-     * 为预测基线读取已确认赛事映射下、让球与大小球字段完整的最新亚盘。
+     * 为公开列表读取单场比赛「两市场字段齐全」的最新一条亚盘。
      *
-     * <p>仅依赖已经落库的快照与人工/自动确认映射，不在预测请求中访问 Provider。</p>
+     * <p>单源之后这里不再 JOIN {@code match_source_mappings}：JOIN 的唯一语义是
+     * 「只取已确认映射的场次」，而单源下 {@code match_id} 本身就是唯一权威键，该条件恒真。
+     * 取而代之的是按 {@code provider_code} 过滤——这是必要的，不是可选优化：
+     * 快照表里可能同时存在历史 STUB 行与新 provider 行，混在一起会让首页展示的
+     * 「最新一条」突然变成另一个来源的报价。</p>
      */
     @Select("""
             <script>
             SELECT DISTINCT ON (snapshot.match_id) snapshot.*
             FROM asian_odds_snapshots snapshot
-            INNER JOIN match_source_mappings mapping
-              ON mapping.match_id = snapshot.match_id
-             AND mapping.provider_code = snapshot.provider_code
-             AND mapping.mapping_status IN ('AUTO_CONFIRMED', 'MANUAL_CONFIRMED')
             WHERE snapshot.match_id IN
             <foreach collection="matchIds" item="matchId" open="(" separator="," close=")">
               #{matchId}
             </foreach>
+              AND snapshot.provider_code = #{providerCode}
               AND snapshot.handicap_line IS NOT NULL
               AND snapshot.home_odds IS NOT NULL
               AND snapshot.away_odds IS NOT NULL
@@ -46,15 +47,19 @@ public interface AsianOddsSnapshotMapper extends BaseMapper<AsianOddsSnapshot> {
             ORDER BY snapshot.match_id, snapshot.captured_at DESC, snapshot.id DESC
             </script>
             """)
-    List<AsianOddsSnapshot> selectLatestCompleteConfirmedLinesByMatchIds(
-            @Param("matchIds") Collection<Long> matchIds
+    List<AsianOddsSnapshot> selectLatestCompleteLinesByMatchIds(
+            @Param("matchIds") Collection<Long> matchIds,
+            @Param("providerCode") String providerCode
     );
 
     /**
-     * 为跨庄聚合读取「每家每家每档让球线」的最新报价。
+     * 为跨庄聚合读取「每家每档让球线」的最新报价。
      *
      * <p>与按场比赛取一条主盘不同，这里必须保留全部庄家与全部盘口线：主盘由后续聚合选出，
      * 取数阶段一旦收敛到单条就无法判断哪条线最平衡。</p>
+     *
+     * <p>{@code provider_code} 过滤同样不可省：聚合器的去重键是 {@code (bookmaker, line)}，
+     * <b>不含 provider</b>，跨来源的同名庄会互相覆盖并一起参与中位数，结果是主盘悄悄偏移。</p>
      */
     @Select("""
             <script>
@@ -65,14 +70,11 @@ public interface AsianOddsSnapshotMapper extends BaseMapper<AsianOddsSnapshot> {
                        snapshot.handicap_line
                    ) snapshot.*
             FROM asian_odds_snapshots snapshot
-            INNER JOIN match_source_mappings mapping
-              ON mapping.match_id = snapshot.match_id
-             AND mapping.provider_code = snapshot.provider_code
-             AND mapping.mapping_status IN ('AUTO_CONFIRMED', 'MANUAL_CONFIRMED')
             WHERE snapshot.match_id IN
             <foreach collection="matchIds" item="matchId" open="(" separator="," close=")">
               #{matchId}
             </foreach>
+              AND snapshot.provider_code = #{providerCode}
               AND snapshot.handicap_line IS NOT NULL
               AND snapshot.home_odds > 0
               AND snapshot.away_odds > 0
@@ -80,8 +82,9 @@ public interface AsianOddsSnapshotMapper extends BaseMapper<AsianOddsSnapshot> {
                      snapshot.handicap_line, snapshot.captured_at DESC, snapshot.id DESC
             </script>
             """)
-    List<AsianOddsSnapshot> selectLatestConfirmedHandicapLinesByMatchIds(
-            @Param("matchIds") Collection<Long> matchIds
+    List<AsianOddsSnapshot> selectLatestHandicapLinesByMatchIds(
+            @Param("matchIds") Collection<Long> matchIds,
+            @Param("providerCode") String providerCode
     );
 
     /**
@@ -99,14 +102,11 @@ public interface AsianOddsSnapshotMapper extends BaseMapper<AsianOddsSnapshot> {
                        snapshot.total_line
                    ) snapshot.*
             FROM asian_odds_snapshots snapshot
-            INNER JOIN match_source_mappings mapping
-              ON mapping.match_id = snapshot.match_id
-             AND mapping.provider_code = snapshot.provider_code
-             AND mapping.mapping_status IN ('AUTO_CONFIRMED', 'MANUAL_CONFIRMED')
             WHERE snapshot.match_id IN
             <foreach collection="matchIds" item="matchId" open="(" separator="," close=")">
               #{matchId}
             </foreach>
+              AND snapshot.provider_code = #{providerCode}
               AND snapshot.total_line IS NOT NULL
               AND snapshot.over_odds > 0
               AND snapshot.under_odds > 0
@@ -114,7 +114,8 @@ public interface AsianOddsSnapshotMapper extends BaseMapper<AsianOddsSnapshot> {
                      snapshot.total_line, snapshot.captured_at DESC, snapshot.id DESC
             </script>
             """)
-    List<AsianOddsSnapshot> selectLatestConfirmedTotalsLinesByMatchIds(
-            @Param("matchIds") Collection<Long> matchIds
+    List<AsianOddsSnapshot> selectLatestTotalsLinesByMatchIds(
+            @Param("matchIds") Collection<Long> matchIds,
+            @Param("providerCode") String providerCode
     );
 }

@@ -3,10 +3,13 @@ package com.jingcaicompass.odds.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.baomidou.mybatisplus.core.MybatisConfiguration;
 import com.baomidou.mybatisplus.core.conditions.Wrapper;
+import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.jingcaicompass.odds.dto.AsianOddsLineDto;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.enums.OddsSnapshotTypeEnum;
@@ -15,6 +18,8 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
+import org.apache.ibatis.builder.MapperBuilderAssistant;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -29,6 +34,18 @@ class AsianOddsSnapshotWriterTest {
     private AsianOddsSnapshotMapper asianOddsSnapshotMapper;
 
     private AsianOddsSnapshotWriter writer;
+
+    /**
+     * Lambda 条件要还原成列名需要 MyBatis-Plus 的实体元数据；纯单测不启动容器，
+     * 否则 {@code wrapper.getSqlSegment()} 会抛「cannot find lambda cache」。
+     */
+    @BeforeAll
+    static void initialiseTableMetadata() {
+        TableInfoHelper.initTableInfo(
+                new MapperBuilderAssistant(new MybatisConfiguration(), ""),
+                AsianOddsSnapshot.class
+        );
+    }
 
     @BeforeEach
     void setUp() {
@@ -180,6 +197,34 @@ class AsianOddsSnapshotWriterTest {
         assertThat(result.skippedIncomplete()).isEqualTo(1);
         verify(asianOddsSnapshotMapper, never()).insert(any(AsianOddsSnapshot.class));
         verify(asianOddsSnapshotMapper, never()).selectOne(any());
+    }
+
+    /**
+     * 去重查询必须带 {@code total_line} 维度，且 {@code total_line} 为空时要用 {@code IS NULL}。
+     *
+     * <p>这是交叉积落库下最容易被忽略的一处：若沿用旧维度（只到 handicap_line），
+     * 同一档让球的多行大小球会共用一条「最新行」，内容永远对不上，
+     * 于是每轮同步都把整批行重插一遍。唯一键含 captured_at，数据库不会报错，只会静默膨胀。</p>
+     */
+    @Test
+    void dedupeLookupScopesByTotalLineIncludingNull() {
+        when(asianOddsSnapshotMapper.selectOne(any(Wrapper.class))).thenReturn(null);
+
+        writer.writeLines(
+                10L,
+                "STUB",
+                List.of(
+                        line("pinnacle", "-0.5", "1.90", "1.95", "2.5", "1.92", "1.94"),
+                        line("pinnacle", "-0.5", "1.90", "1.95", null, null, null)
+                ),
+                "a".repeat(64)
+        );
+
+        ArgumentCaptor<Wrapper<AsianOddsSnapshot>> captor = ArgumentCaptor.forClass(Wrapper.class);
+        verify(asianOddsSnapshotMapper, times(2)).selectOne(captor.capture());
+        assertThat(captor.getAllValues().get(0).getSqlSegment()).contains("total_line");
+        // MyBatis-Plus 的 eq(null) 会生成永假的 total_line = NULL，必须显式 isNull。
+        assertThat(captor.getAllValues().get(1).getSqlSegment()).contains("total_line IS NULL");
     }
 
     private static AsianOddsLineDto line(

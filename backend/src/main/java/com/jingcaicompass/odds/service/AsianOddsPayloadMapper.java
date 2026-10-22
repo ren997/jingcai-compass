@@ -22,10 +22,17 @@ import org.springframework.util.StringUtils;
 @Component
 public class AsianOddsPayloadMapper {
 
-    private final ObjectMapper objectMapper;
+    private static final String THE_ODDS_API = "THE_ODDS_API";
 
-    public AsianOddsPayloadMapper(ObjectMapper objectMapper) {
+    private final ObjectMapper objectMapper;
+    private final NovaApiOddsPayloadMapper novaApiOddsPayloadMapper;
+
+    public AsianOddsPayloadMapper(
+            ObjectMapper objectMapper,
+            NovaApiOddsPayloadMapper novaApiOddsPayloadMapper
+    ) {
         this.objectMapper = objectMapper;
+        this.novaApiOddsPayloadMapper = novaApiOddsPayloadMapper;
     }
 
     public List<AsianOddsMatchOddsDto> parseMatches(String payloadJson) {
@@ -43,15 +50,24 @@ public class AsianOddsPayloadMapper {
             if (root.isObject() && root.has("matches")) {
                 return readList(root.get("matches"));
             }
-            if (root.isObject() && "THE_ODDS_API".equals(root.path("provider").asText())
+            if (root.isObject() && THE_ODDS_API.equals(root.path("provider").asText())
                     && root.has("responses")) {
                 return parseTheOddsResponses(root);
+            }
+            if (root.isObject() && NovaApiOddsPayloadMapper.PROVIDER_CODE.equals(root.path("provider").asText())
+                    && root.has("responses")) {
+                return novaApiOddsPayloadMapper.parse(root);
             }
             // RawDataPayloadService 对非对象 JSON 的兜底包装
             if (root.isObject() && root.has("raw") && root.get("raw").isTextual()) {
                 return parseMatches(root.get("raw").asText());
             }
-            return List.of();
+            // 未知结构必须抛错：这里曾经 return List.of()，结果是「换源后同步成功、零条快照、
+            // 覆盖率 0%」，而调用方只会看到一份正常的同步记录——排查方向被彻底带偏。
+            throw new BusinessException(
+                    ErrorCode.DATA_SOURCE_PARSE_FAILED,
+                    "无法识别的亚盘载荷结构（既非比赛数组，也非已知 Provider 的聚合格式）"
+            );
         } catch (JsonProcessingException exception) {
             throw new BusinessException(ErrorCode.DATA_SOURCE_PARSE_FAILED, "亚盘载荷解析失败", exception);
         }

@@ -15,6 +15,7 @@ import com.jingcaicompass.odds.client.AsianModelProperties;
 import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
 import com.jingcaicompass.prediction.dto.AsianModelOutputDto;
 import com.jingcaicompass.prediction.dto.PredictionImportBatchDto;
 import com.jingcaicompass.prediction.dto.PredictionImportDto;
@@ -83,7 +84,8 @@ class BaselinePredictionGenerationServiceTest {
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 AsianOddsAggregationProperties.defaults(),
                 properties,
-                meterRegistry
+                meterRegistry,
+                new ActiveAsianOddsProvider("NOVA_API")
         );
     }
 
@@ -589,9 +591,9 @@ class BaselinePredictionGenerationServiceTest {
             List<AsianOddsSnapshot> totalsRows
     ) {
         when(matchMapper.selectPublicDailyMatches(LOTTERY_DATE)).thenReturn(List.of(match));
-        when(asianOddsSnapshotMapper.selectLatestConfirmedHandicapLinesByMatchIds(List.of(match.getId())))
+        when(asianOddsSnapshotMapper.selectLatestHandicapLinesByMatchIds(List.of(match.getId()), "NOVA_API"))
                 .thenReturn(handicapRows);
-        when(asianOddsSnapshotMapper.selectLatestConfirmedTotalsLinesByMatchIds(List.of(match.getId())))
+        when(asianOddsSnapshotMapper.selectLatestTotalsLinesByMatchIds(List.of(match.getId()), "NOVA_API"))
                 .thenReturn(totalsRows);
     }
 

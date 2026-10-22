@@ -1,5 +1,7 @@
 package com.jingcaicompass.match.client;
 
+import com.jingcaicompass.system.provider.ProviderErrorCategory;
+import com.jingcaicompass.system.provider.ProviderException;
 import com.jingcaicompass.system.provider.ProviderHttpExecutor;
 import com.jingcaicompass.system.provider.ProviderHttpRequest;
 import com.jingcaicompass.system.provider.ProviderHttpResponse;
@@ -16,9 +18,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.StringJoiner;
 import java.util.TreeMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
@@ -36,7 +39,7 @@ import org.springframework.web.client.RestClient;
  * 但一旦出现需要转义的字符就会出现「本地能签、服务端拒签」。</p>
  */
 @Component
-@ConditionalOnProperty(name = "app.sporttery.provider", havingValue = "nova")
+@Conditional(NovaApiEnabledCondition.class)
 public class NovaApiClient {
 
     /** 私钥下发的 PKCS#8 Ed25519 最小前缀（RFC 8410），用于把裸 32 字节种子补成合法结构。 */
@@ -49,6 +52,16 @@ public class NovaApiClient {
     private static final int ED25519_PKCS8_LENGTH = 48;
     private static final int ED25519_SEED_LENGTH = 32;
     private static final int ED25519_SEED_MARKER_LENGTH = 4;
+
+    /**
+     * 最小请求间隔。官方限速 30 次/分钟，这里按固定间隔匀速放行而不是攒令牌突发：
+     * 亚盘赔率是一场一次调用，一轮十几场会在几秒内连发，突发桶打空后必然吃 429，
+     * 而 429 被统一归为可重试，会把同步拖成成倍的重试与超时。
+     */
+    private static final long MIN_REQUEST_INTERVAL_NANOS = Duration.ofSeconds(2).toNanos();
+
+    private final Object pacingLock = new Object();
+    private long nextSlotNanos = 0L;
 
     private final RestClient restClient;
     private final NovaApiProperties properties;
@@ -72,6 +85,7 @@ public class NovaApiClient {
      * @param params       业务查询参数；可为空
      */
     public ProviderHttpResponse get(String providerCode, String path, Map<String, String> params) {
+        awaitPacingSlot();
         Map<String, String> encoded = encodeValues(params);
         String requestPath = buildRequestPath(path, encoded);
         Map<String, String> headers = signatureHeaders(encoded, System.currentTimeMillis());
@@ -91,6 +105,34 @@ public class NovaApiClient {
     /** 连接超时，供调用方拼装错误信息时引用。 */
     public Duration connectTimeout() {
         return properties.connectTimeout();
+    }
+
+    /**
+     * 匀速放行：只在真的需要等待时才 sleep，首个请求与间隔足够长的请求零延迟。
+     *
+     * <p>锁内只做时间记账，sleep 放在锁外，避免限速把并发调用串成一条队。</p>
+     */
+    private void awaitPacingSlot() {
+        long waitNanos;
+        synchronized (pacingLock) {
+            long now = System.nanoTime();
+            long slot = Math.max(now, nextSlotNanos);
+            nextSlotNanos = slot + MIN_REQUEST_INTERVAL_NANOS;
+            waitNanos = slot - now;
+        }
+        if (waitNanos <= 0) {
+            return;
+        }
+        try {
+            TimeUnit.NANOSECONDS.sleep(waitNanos);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new ProviderException(
+                    "NOVA_API",
+                    ProviderErrorCategory.UPSTREAM_FAILURE,
+                    "NovaAPI 限速等待被中断"
+            );
+        }
     }
 
     /**

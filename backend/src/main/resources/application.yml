@@ -90,6 +90,8 @@ app:
       delay: ${NOVA_RETRY_DELAY:500ms}
     quota-warning-threshold: ${NOVA_QUOTA_WARNING_THRESHOLD:0}
   asian-odds:
+    # STUB / THE_ODDS_API / NOVA_API。NOVA_API 使用 app.nova 的凭据与限速，
+    # 下面的 base-url / api-key 与 the-odds 段只在回退到 The Odds API 时生效。
     provider: ${ASIAN_ODDS_PROVIDER:stub}
     base-url: ${ASIAN_ODDS_BASE_URL:https://api.the-odds-api.com}
     api-key: ${ASIAN_ODDS_API_KEY:}
@@ -102,6 +104,7 @@ app:
     the-odds:
       # 验证节点用外部 application-validation.yml 或 SPRING_APPLICATION_JSON 提供联赛映射。
       league-sport-keys: {}
+      # 验证期累计预算，仅对 THE_ODDS_API 生效；NOVA_API 的额度是每轮实际请求数。
       quota-budget: ${ASIAN_ODDS_QUOTA_BUDGET:0}
     # 跨庄聚合范围：低抽水白名单按线判定，家数不足回退全量中位数。
     aggregation:

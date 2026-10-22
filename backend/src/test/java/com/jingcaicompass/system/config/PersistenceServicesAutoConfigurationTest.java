@@ -53,6 +53,7 @@ import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.job.AsianOddsSyncJob;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.odds.service.AsianOddsPayloadMapper;
+import com.jingcaicompass.odds.service.NovaApiOddsPayloadMapper;
 import com.jingcaicompass.odds.service.AsianOddsProvider;
 import com.jingcaicompass.prediction.job.PredictionLockJob;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
@@ -93,13 +94,13 @@ class PersistenceServicesAutoConfigurationTest {
             .withConfiguration(AutoConfigurations.of(PersistenceServicesAutoConfiguration.class))
             .withBean(ObjectMapper.class, ObjectMapper::new)
             .withBean(SportteryPoolPayloadMapper.class, () -> new SportteryPoolPayloadMapper(new ObjectMapper()))
-            .withBean(AsianOddsPayloadMapper.class, () -> new AsianOddsPayloadMapper(new ObjectMapper()))
+            .withBean(AsianOddsPayloadMapper.class, () -> new AsianOddsPayloadMapper(new ObjectMapper(), new NovaApiOddsPayloadMapper()))
             .withBean(SportteryProvider.class, () -> mock(SportteryProvider.class))
             .withBean(SportteryProviderProperties.class, () -> mock(SportteryProviderProperties.class))
             .withBean(AsianOddsProvider.class, () -> mock(AsianOddsProvider.class))
             .withBean(
                     AsianOddsProviderProperties.class,
-                    () -> mock(AsianOddsProviderProperties.class)
+                    PersistenceServicesAutoConfigurationTest::asianOddsProviderProperties
             )
             .withBean(AdminSecurityProperties.class, PersistenceServicesAutoConfigurationTest::adminProperties)
             .withBean(AdminAccountCredentialValidator.class, AdminAccountCredentialValidator::new)
@@ -252,5 +253,21 @@ class PersistenceServicesAutoConfigurationTest {
         AdminAccountMapper mapper = mock(AdminAccountMapper.class);
         when(mapper.selectCount(any())).thenReturn(1L);
         return mapper;
+    }
+
+    /**
+     * 用真实配置对象而不是 mock：{@code ActiveAsianOddsProvider} 需要
+     * {@code provider().getCode()}，mock 出来的 record 会返回 null 并在建 bean 时 NPE。
+     */
+    private static AsianOddsProviderProperties asianOddsProviderProperties() {
+        return new AsianOddsProviderProperties(
+                com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum.STUB,
+                java.net.URI.create("https://api.the-odds-api.com"),
+                "",
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(10),
+                new AsianOddsProviderProperties.RetryProperties(2, Duration.ofMillis(500)),
+                0
+        );
     }
 }

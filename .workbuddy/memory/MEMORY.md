@@ -36,9 +36,13 @@
 - **两种产品线统计不可混算**：响应用 `markets` 数组而**不是** `had`/`hhad` 具名字段——具名字段把「HAD/HHAD 必然存在」写进响应形状。竞彩与亚盘按 `predictionType` 分别请求，首页固定亚盘。
 - **走盘进 Brier 样本、不进命中率分母**：`outcome = HIT 1 / HALF_WIN .75 / PUSH .5 / HALF_LOSS .25 / MISS 0`；`settled` 不含 PUSH，另给 `weightedHitRate`。
 - **哈希结构只能追加不能修改**：V4 = V3 字段序 + 十列（6 位定标）。全非空 → v4、全空 → v3、部分为空抛错。`verifyStoredHash` 必须回落认「十列已填但哈希按 v3 算」的存量行。
+- **「部分为空抛错」会让单边方向的早期亚盘行永远发不出去**：只发布让球方向、大小球无方向时，`model_over_prob`/`market_over_prob`/`edge_over`/`totals_dispersion` 四列为空而其余六列有值 → 算不出 `prediction_hash` → 撞 `ck_predictions_publish_lifecycle`。实测 `predictions.id=41`（周三004）、`48`（周三013）属此形态。已发布的 10-22 那批（49~61）十列全填，说明生成侧现在会双边都算；**判一个 DRAFT 行能否合法发布，先查十列是否全填**。
+- **`ck_predictions_publish_lifecycle` 要求四样同时写**：`DRAFT` 时 `publish_time`/`lock_time`/`prediction_hash` 全为 NULL，`PUBLISHED`/`LOCKED` 时三者全非空且 `publish_time < lock_time`。所以「先补 `lock_time` 再改状态」必失败，唯一合法入口是 `PredictionMapper.publishDraft`。
 - **批量写操作按 `(matchId, predictionId)` 升序串行 + 逐条独立事务**：同场多条都要更新 `matches` 行，并发反向拿锁会死锁。前端必须按 ID 回填（服务端会重排）。
 - **`switch` 语句必须补 `default` 抛错**：Java 箭头 `switch` **语句**不要求穷尽、编译不报错，新增枚举值被静默丢弃。
 - **后台盘口阶梯必须复用生成侧的查询与聚合器**，否则看到的不是模型当时用的数据。
+- **历史复盘不要写 `settlements`**：从未真实发布的行（`DRAFT`/`lock_time` 空/无发布审计）一旦进结算表，公开统计的命中率与 Brier 会把「文档里的模型输出」当成「已发布产品」计入，事后无法区分。正确做法是用生产纯函数算（`AsianMarketTermsResolver.resolve` → `MarketSettlementCalculatorRouter.calculate` → 净利按 `SettlementMarginSupport.netProfit` 同规则换算），结果落文档。注意 `SettlementMarginSupport` 是**包内私有**，`com.jingcaicompass.tools` 下的脚手架调不到，只能复述换算规则。
+- **10-21 那 8 场（id 41~48）实测复盘**：1 命中 / 2 走盘 / 7 未中，加权命中率 `0.2500`、净利 `-6.17`；唯一命中是周三008 的大球 3.50。两个走盘都在整数让球盘（008 主 -2.00 净胜 2、009 主 -1.00 净胜 1），是结构不是判对。8 场总进球均值 3.75 而 5 个大小球方向有 4 个小球 → 该读成「市场当天整体低估进球」。
 
 ## NovaAPI 单源：接口字段的硬约束（抓包 + 官方文档双核实）
 
@@ -86,5 +90,5 @@
 - 邻线校验口径（整条阶梯取最大 vs 主盘 ±0.75）**本轮不改代码**，结论写进 `docs/asian-model-design.md`，待下一阶段连同 `neighbor-tolerance` 取窗口一起处理。
 - 一次性实跑脚手架 `backend/src/test/java/com/jingcaicompass/tools/` 下文件保持未跟踪（会让本地单测数比 CI 多 1~2，别误判）。
 - 阶段 5：删映射层与旧数据源（`match_source_mappings` 结构保留、停止写入；`ChinaSportteryProvider`、`TheOddsApiProvider`、5 个映射/归一化服务、后台页面）。
-- 阶段 4 唯一欠的证据：**官方赛果 → 结算的全链真跑**。10-21 那批预测是历史 DRAFT，发布已过截止时间 → 今天只能用 T406 人工事实（构造比分）证明接缝；10-22 的 13 条 `PUBLISHED`（开赛 10-23 00:45）次日自然锁定结算后补证据。
+- 阶段 4 唯一欠的证据：**官方赛果 → 锁定 → 结算的全链真跑**。10-21 那批（41~48）已用结算纯函数补算并落文档（不落库，见上），但仍不算全链证据；10-22 的 13 条 `PUBLISHED`（开赛 10-23 00:45）次日自然锁定结算后补证据。
 - `docs/business-data-flow.md` 仍在描述映射层（阶段 5 一起改），阶段 4 没有动它。

@@ -94,6 +94,15 @@ public class AsianOddsSnapshotWriter {
         );
     }
 
+    /**
+     * 与前一条同维度快照比内容，变了才追加。
+     *
+     * <p>去重维度必须与 V25 的唯一键 {@code uk_asian_odds_snapshots_dedupe}
+     * （match_id, provider_code, bookmaker_code, captured_at, handicap_line, total_line）一致。
+     * 漏掉 {@code total_line} 会在交叉积落库下产生两个后果：查询永远命中同一条
+     * {@code handicap_line} 上的「最后一个 total_line」，于是每轮都把整批行重插一遍；
+     * 而这些行的 {@code captured_at} 不同、唯一键不冲突，数据库不会报错，只会静默膨胀。</p>
+     */
     private boolean appendIfChanged(
             Long matchId,
             String providerCode,
@@ -108,6 +117,9 @@ public class AsianOddsSnapshotWriter {
                 .eq(AsianOddsSnapshot::getProviderCode, providerCode)
                 .eq(AsianOddsSnapshot::getBookmakerCode, line.bookmakerCode().trim())
                 .eq(AsianOddsSnapshot::getHandicapLine, line.handicapLine())
+                // MyBatis-Plus 的 eq(null) 会生成 total_line = NULL（永假），必须显式 isNull。
+                .eq(totalLine != null, AsianOddsSnapshot::getTotalLine, totalLine)
+                .isNull(totalLine == null, AsianOddsSnapshot::getTotalLine)
                 .orderByDesc(AsianOddsSnapshot::getCapturedAt)
                 .last("LIMIT 1"));
 

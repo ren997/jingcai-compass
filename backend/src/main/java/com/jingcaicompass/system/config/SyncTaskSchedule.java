@@ -70,4 +70,12 @@ public class SyncTaskSchedule {
     public long settlementInitialDelayMillis() {
         return taskProperties.settlement().initialDelay().toMillis();
     }
+
+    public long predictionAutoPublishFixedDelayMillis() {
+        return taskProperties.predictionAutoPublish().fixedDelay().toMillis();
+    }
+
+    public long predictionAutoPublishInitialDelayMillis() {
+        return taskProperties.predictionAutoPublish().initialDelay().toMillis();
+    }
 }

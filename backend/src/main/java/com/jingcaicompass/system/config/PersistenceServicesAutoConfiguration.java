@@ -89,6 +89,7 @@ import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.job.AsianOddsSyncJob;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
 import com.jingcaicompass.odds.service.AsianOddsPayloadMapper;
 import com.jingcaicompass.odds.service.AsianOddsProvider;
 import com.jingcaicompass.odds.service.AsianOddsSnapshotWriter;
@@ -97,6 +98,7 @@ import com.jingcaicompass.odds.service.AsianOddsSyncServiceImpl;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
 import com.jingcaicompass.prediction.job.PredictionLockJob;
 import com.jingcaicompass.prediction.service.BaselinePredictionGenerationService;
+import com.jingcaicompass.prediction.service.PredictionAutoPublishOrchestrator;
 import com.jingcaicompass.prediction.service.BaselinePredictionGenerationServiceImpl;
 import com.jingcaicompass.prediction.service.PredictionBatchPublishService;
 import com.jingcaicompass.prediction.service.PredictionContentHasher;
@@ -264,7 +266,8 @@ public class PersistenceServicesAutoConfiguration {
             PredictionMapper predictionMapper,
             MatchSourceMappingMapper matchSourceMappingMapper,
             RawDataPayloadMapper rawDataPayloadMapper,
-            PaginationProperties paginationProperties
+            PaginationProperties paginationProperties,
+            ActiveAsianOddsProvider activeAsianOddsProvider
     ) {
         return new MatchQueryServiceImpl(
                 matchMapper,
@@ -273,7 +276,8 @@ public class PersistenceServicesAutoConfiguration {
                 predictionMapper,
                 matchSourceMappingMapper,
                 rawDataPayloadMapper,
-                paginationProperties
+                paginationProperties,
+                activeAsianOddsProvider
         );
     }
 
@@ -417,7 +421,8 @@ public class PersistenceServicesAutoConfiguration {
             Clock predictionImportClock,
             AsianOddsAggregationProperties asianOddsAggregationProperties,
             AsianModelProperties asianModelProperties,
-            MeterRegistry meterRegistry
+            MeterRegistry meterRegistry,
+            ActiveAsianOddsProvider activeAsianOddsProvider
     ) {
         return new BaselinePredictionGenerationServiceImpl(
                 matchMapper,
@@ -429,7 +434,8 @@ public class PersistenceServicesAutoConfiguration {
                 predictionImportClock,
                 asianOddsAggregationProperties,
                 asianModelProperties,
-                meterRegistry
+                meterRegistry,
+                activeAsianOddsProvider
         );
     }
 
@@ -459,15 +465,23 @@ public class PersistenceServicesAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    ActiveAsianOddsProvider activeAsianOddsProvider(AsianOddsProviderProperties asianOddsProviderProperties) {
+        return new ActiveAsianOddsProvider(asianOddsProviderProperties.provider().getCode());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     AdminOddsLadderQueryService adminOddsLadderQueryService(
             PredictionMapper predictionMapper,
             AsianOddsSnapshotMapper asianOddsSnapshotMapper,
-            AsianOddsAggregationProperties asianOddsAggregationProperties
+            AsianOddsAggregationProperties asianOddsAggregationProperties,
+            ActiveAsianOddsProvider activeAsianOddsProvider
     ) {
         return new AdminOddsLadderQueryService(
                 predictionMapper,
                 asianOddsSnapshotMapper,
-                asianOddsAggregationProperties
+                asianOddsAggregationProperties,
+                activeAsianOddsProvider
         );
     }
 
@@ -478,6 +492,33 @@ public class PersistenceServicesAutoConfiguration {
             PredictionPublishService predictionPublishService
     ) {
         return new PredictionBatchPublishService(predictionMapper, predictionPublishService);
+    }
+
+    /**
+     * 自动发布编排器。
+     *
+     * <p>刻意复用 {@code predictionImportClock} 而不是自己造一个 {@code Clock.systemUTC()}：
+     * 编排器用它在 SQL 里筛「开赛时间未到」的候选，发布服务用同一个时钟判断发布时间是否早于锁定时间。
+     * 两个时钟不一致时会出现「编排器认为还没开赛、发布服务认为已过截止」的错位，
+     * 而且只在开赛前后几分钟的窗口里偶发。</p>
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    PredictionAutoPublishOrchestrator predictionAutoPublishOrchestrator(
+            BaselinePredictionGenerationService baselinePredictionGenerationService,
+            PredictionBatchPublishService predictionBatchPublishService,
+            PredictionMapper predictionMapper,
+            Clock predictionImportClock,
+            SyncTaskProperties taskProperties
+    ) {
+        return new PredictionAutoPublishOrchestrator(
+                baselinePredictionGenerationService,
+                predictionBatchPublishService,
+                predictionMapper,
+                predictionImportClock,
+                taskProperties.predictionAutoPublish().regenerateInterval(),
+                taskProperties.predictionAutoPublish().operator()
+        );
     }
 
     @Bean
@@ -621,12 +662,16 @@ public class PersistenceServicesAutoConfiguration {
     SportteryPoolMatchWriter sportteryPoolMatchWriter(
             MatchMapper matchMapper,
             SportteryPoolSnapshotMapper sportteryPoolSnapshotMapper,
-            MatchResultFactMapper matchResultFactMapper
+            MatchResultFactMapper matchResultFactMapper,
+            LeagueMapper leagueMapper,
+            TeamMapper teamMapper
     ) {
         return new SportteryPoolMatchWriter(
                 matchMapper,
                 sportteryPoolSnapshotMapper,
-                matchResultFactMapper
+                matchResultFactMapper,
+                leagueMapper,
+                teamMapper
         );
     }
 

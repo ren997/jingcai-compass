@@ -10,7 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 冻结行选择：必须落在共识线上，并按白名单 → 方向同向 → 大小球对齐 → 抽水 → 时间排序。 */
+/** 冻结行选择：必须落在共识线上，并按大小球对齐 → 白名单 → 方向同向 → 抽水 → 时间排序。 */
 class AsianFreezeSnapshotSelectorTest {
 
     private static final Instant OLDER = Instant.parse("2026-10-20T10:00:00Z");
@@ -47,6 +47,27 @@ class AsianFreezeSnapshotSelectorTest {
         List<AsianOddsSnapshot> rows = List.of(
                 row("bet365", "-0.25", "1.93", "2.08", "3.00", NEWER, 2L),
                 row("williamhill", "-0.25", "1.90", "1.95", "2.75", OLDER, 1L));
+
+        assertThat(selector.select(rows, consensus("-0.25", "0.52"), Optional.of(consensus("2.75", "0.48"))))
+                .map(AsianOddsSnapshot::getTotalLine)
+                .contains(new BigDecimal("2.75"));
+    }
+
+    /**
+     * 大小球对齐必须压过白名单。
+     *
+     * <p>这条不是「更好」，而是「正确」：方向由 λ 投影回判定线得出，λ 又由大小球主盘反解，
+     * 判定线不是主盘那一档时投影出的概率不再复现市场，{@code edge_over} 会凭空出现，
+     * 结算也按被抬高的线判。若把白名单排在前面，白名单庄一旦没报主盘那一档就会静默退回错误线
+     * ——2026-10-22 那批 13/13 全小球正是这么来的。</p>
+     */
+    @Test
+    void prefersTotalsLineAlignmentOverWhitelist() {
+        List<AsianOddsSnapshot> rows = List.of(
+                // 白名单庄，但只报了 3.00 这一档（交叉积被压成单档时的典型形态）。
+                row("pinnacle", "-0.25", "1.90", "1.95", "3.00", NEWER, 2L),
+                // 非白名单庄，报的正是大小球主盘 2.75。
+                row("bet365", "-0.25", "1.93", "2.08", "2.75", OLDER, 1L));
 
         assertThat(selector.select(rows, consensus("-0.25", "0.52"), Optional.of(consensus("2.75", "0.48"))))
                 .map(AsianOddsSnapshot::getTotalLine)

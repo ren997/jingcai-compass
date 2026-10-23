@@ -4,6 +4,7 @@ import com.jingcaicompass.admin.vo.AdminOddsLadderVo;
 import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
 import com.jingcaicompass.odds.service.AsianMarketConsensusAggregator;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
@@ -29,14 +30,17 @@ public class AdminOddsLadderQueryService {
     private final PredictionMapper predictionMapper;
     private final AsianOddsSnapshotMapper snapshotMapper;
     private final AsianMarketConsensusAggregator consensusAggregator;
+    private final ActiveAsianOddsProvider activeAsianOddsProvider;
 
     public AdminOddsLadderQueryService(
             PredictionMapper predictionMapper,
             AsianOddsSnapshotMapper snapshotMapper,
-            AsianOddsAggregationProperties aggregationProperties
+            AsianOddsAggregationProperties aggregationProperties,
+            ActiveAsianOddsProvider activeAsianOddsProvider
     ) {
         this.predictionMapper = predictionMapper;
         this.snapshotMapper = snapshotMapper;
+        this.activeAsianOddsProvider = activeAsianOddsProvider;
         this.consensusAggregator = new AsianMarketConsensusAggregator(
                 aggregationProperties == null
                         ? AsianOddsAggregationProperties.defaults()
@@ -68,10 +72,11 @@ public class AdminOddsLadderQueryService {
         Long matchId = prediction.getMatchId();
 
         // 2) 按市场取「每家每档线」的最新报价，与生成侧同一对查询
+        String providerCode = activeAsianOddsProvider.providerCode();
         List<AsianOddsSnapshot> handicapRows = snapshotMapper
-                .selectLatestConfirmedHandicapLinesByMatchIds(List.of(matchId));
+                .selectLatestHandicapLinesByMatchIds(List.of(matchId), providerCode);
         List<AsianOddsSnapshot> totalsRows = snapshotMapper
-                .selectLatestConfirmedTotalsLinesByMatchIds(List.of(matchId));
+                .selectLatestTotalsLinesByMatchIds(List.of(matchId), providerCode);
 
         // 3) 聚合：逐家去水 → 中位 → 归一，主盘取偏离 50/50 最小的线
         AsianMarketConsensusAggregator.MarketAggregate handicap = consensusAggregator.aggregate(

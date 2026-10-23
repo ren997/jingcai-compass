@@ -15,6 +15,7 @@ import com.jingcaicompass.odds.client.AsianModelProperties;
 import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
 import com.jingcaicompass.prediction.dto.AsianModelOutputDto;
 import com.jingcaicompass.prediction.dto.PredictionImportBatchDto;
 import com.jingcaicompass.prediction.dto.PredictionImportDto;
@@ -83,7 +84,8 @@ class BaselinePredictionGenerationServiceTest {
                 Clock.fixed(NOW, ZoneOffset.UTC),
                 AsianOddsAggregationProperties.defaults(),
                 properties,
-                meterRegistry
+                meterRegistry,
+                new ActiveAsianOddsProvider("NOVA_API")
         );
     }
 
@@ -236,6 +238,83 @@ class BaselinePredictionGenerationServiceTest {
         assertThat(asian.lambdaAway()).isNotNull();
     }
 
+    /**
+     * 冻结行必须落在大小球主盘那一档，而不是交叉积里最大的那一档。
+     *
+     * <p>这是 2026-10-22 那批「13 场全部小球」的回归守卫。NovaAPI 的落库形态是
+     * (让球线 × 大小球线) 交叉积，同一档让球线下四档大小球按 {@code id} 递增写入；
+     * 聚合取数按 {@code handicap_line} 去重只留最新一条 = 留最大那一档，于是冻结行被抬高，
+     * 而 λ 由主盘反解、方向却投影回被抬高的线 → 系统性偏小球。</p>
+     *
+     * <p>本例刻意复刻真实数值（平博周四001 的让球 +0.50 四档）：主盘 2.75 是四档里
+     * 最平衡的一档，3.25 是离 50/50 最远的一档。修复前冻结 3.25 判小球，修复后冻结 2.75 判大球。</p>
+     */
+    @Test
+    void freezesOnTotalsConsensusLineNotOnLargestTotalsLineOfCrossProduct() {
+        MatchEntity match = scheduledMatch(135L);
+        // 聚合取数：每家每档让球线只剩一行，且是交叉积里最后写入的那档（3.25）。
+        List<AsianOddsSnapshot> handicapRows = List.of(
+                row(751L, 135L, "BOOK_A", "-0.50", "1.90", "1.90", "3.25", "2.34", "1.64", LATEST_CAPTURE),
+                row(752L, 135L, "BOOK_B", "-0.50", "1.90", "1.90", "3.25", "2.34", "1.64", EARLIER_CAPTURE));
+        // 冻结行候选：完整交叉积，同一档让球线下四档大小球齐全。
+        List<AsianOddsSnapshot> crossProductRows = List.of(
+                row(753L, 135L, "BOOK_A", "-0.50", "1.90", "1.90", "2.50", "1.66", "2.29", LATEST_CAPTURE),
+                row(754L, 135L, "BOOK_A", "-0.50", "1.90", "1.90", "2.75", "1.83", "2.07", LATEST_CAPTURE),
+                row(755L, 135L, "BOOK_A", "-0.50", "1.90", "1.90", "3.00", "2.06", "1.81", LATEST_CAPTURE),
+                row(756L, 135L, "BOOK_A", "-0.50", "1.90", "1.90", "3.25", "2.34", "1.64", LATEST_CAPTURE),
+                row(757L, 135L, "BOOK_B", "-0.50", "1.90", "1.90", "2.50", "1.66", "2.29", EARLIER_CAPTURE),
+                row(758L, 135L, "BOOK_B", "-0.50", "1.90", "1.90", "2.75", "1.83", "2.07", EARLIER_CAPTURE),
+                row(759L, 135L, "BOOK_B", "-0.50", "1.90", "1.90", "3.00", "2.06", "1.81", EARLIER_CAPTURE),
+                row(760L, 135L, "BOOK_B", "-0.50", "1.90", "1.90", "3.25", "2.34", "1.64", EARLIER_CAPTURE));
+        stubMarkets(match, handicapRows, crossProductRows, crossProductRows);
+        stubImport();
+
+        service.generateAndImport(LOTTERY_DATE, "admin");
+
+        PredictionImportDto prediction = capturedPrediction();
+        // 2.75 档去水 0.5308，是四档里唯一离 50/50 最近的一档 → 主盘；754 是该档最新一行。
+        assertThat(prediction.asianOddsSnapshotId()).isEqualTo(754L);
+        assertThat(prediction.analysisSummary()).contains("大小球 判定线 2.75");
+        // 修复前冻结 3.25（去水 0.4121）会判小球，方向与市场相反。
+        assertThat(prediction.totalGoalsPick()).isEqualTo(TotalGoalsPickEnum.OVER);
+        assertThat(prediction.totalGoalsConfidenceLevel()).isEqualTo(ConfidenceLevelEnum.MEDIUM);
+    }
+
+    /**
+     * 共识让球线上没有任何一家报出大小球主盘那一档时，宁可跳过也不发一条注定偏的方向。
+     *
+     * <p>此时判定线无法与反解线对齐，{@code edge_over} 会凭空出现、结算也会按被抬高的线判定。
+     * 这是「数据稀疏」而非正常路径，必须留下可诊断的跳过原因，不能静默降级。</p>
+     */
+    @Test
+    void skipsWhenNoSnapshotOnTotalsConsensusLine() {
+        MatchEntity match = scheduledMatch(136L);
+        List<AsianOddsSnapshot> handicapRows = List.of(
+                row(761L, 136L, "BOOK_A", "-0.50", "1.90", "1.90", "3.25", "2.34", "1.64", LATEST_CAPTURE),
+                row(762L, 136L, "BOOK_B", "-0.50", "1.90", "1.90", "3.25", "2.34", "1.64", EARLIER_CAPTURE));
+        // 2.75 那一档只出现在另一档让球线（-0.75）上，因此在 -0.50 上不可冻结。
+        List<AsianOddsSnapshot> crossProductRows = List.of(
+                row(763L, 136L, "BOOK_A", "-0.50", "1.90", "1.90", "2.50", "1.66", "2.29", LATEST_CAPTURE),
+                row(764L, 136L, "BOOK_A", "-0.50", "1.90", "1.90", "3.25", "2.34", "1.64", LATEST_CAPTURE),
+                row(765L, 136L, "BOOK_B", "-0.50", "1.90", "1.90", "2.50", "1.66", "2.29", EARLIER_CAPTURE),
+                row(766L, 136L, "BOOK_B", "-0.50", "1.90", "1.90", "3.25", "2.34", "1.64", EARLIER_CAPTURE));
+        List<AsianOddsSnapshot> totalsRows = List.of(
+                row(767L, 136L, "BOOK_A", "-0.75", "1.90", "1.90", "2.75", "1.83", "2.07", LATEST_CAPTURE),
+                row(768L, 136L, "BOOK_B", "-0.75", "1.90", "1.90", "2.75", "1.83", "2.07", EARLIER_CAPTURE),
+                row(763L, 136L, "BOOK_A", "-0.50", "1.90", "1.90", "2.50", "1.66", "2.29", LATEST_CAPTURE),
+                row(764L, 136L, "BOOK_A", "-0.50", "1.90", "1.90", "3.25", "2.34", "1.64", LATEST_CAPTURE),
+                row(765L, 136L, "BOOK_B", "-0.50", "1.90", "1.90", "2.50", "1.66", "2.29", EARLIER_CAPTURE),
+                row(766L, 136L, "BOOK_B", "-0.50", "1.90", "1.90", "3.25", "2.34", "1.64", EARLIER_CAPTURE));
+        stubMarkets(match, handicapRows, totalsRows, crossProductRows);
+
+        BaselinePredictionGenerationVo result = service.generateAndImport(LOTTERY_DATE, "admin");
+
+        assertThat(result.generatedCount()).isZero();
+        assertThat(result.skippedByReason())
+                .containsEntry(BaselinePredictionSkipReasonEnum.NO_ASIAN_SNAPSHOT_ON_TOTALS_CONSENSUS_LINE, 1);
+        verify(predictionImportService, never()).importFile(any(byte[].class));
+    }
+
     @Test
     void skipsWhenTotalsMarketHasFewerThanTwoBookmakers() {
         MatchEntity match = scheduledMatch(104L);
@@ -277,19 +356,16 @@ class BaselinePredictionGenerationServiceTest {
     @Test
     void summaryStaysUnderDatabaseLimit() {
         MatchEntity match = scheduledMatch(111L);
-        // 冻结行的大小球线是 3.00，而大小球主盘在更平衡的 2.50 —— 摘要要多写一句「该行未报主盘线」，
-        // 这是最坏情况下的文本长度来源之一。
+        // 冻结行与主盘同在 2.50，这是修复后的正常形态（判定线必须等于大小球主盘线）。
         List<AsianOddsSnapshot> handicapRows = List.of(
-                row(1201L, 111L, "BOOK_ALPHA_LONG_NAME", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", LATEST_CAPTURE),
-                row(1202L, 111L, "BOOK_BETA_LONG_NAME", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", EARLIER_CAPTURE),
+                row(1201L, 111L, "BOOK_ALPHA_LONG_NAME", "-0.50", "1.90", "1.90", "2.50", "1.85", "1.95", LATEST_CAPTURE),
+                row(1202L, 111L, "BOOK_BETA_LONG_NAME", "-0.50", "1.90", "1.90", "2.50", "1.85", "1.95", EARLIER_CAPTURE),
                 // 一档合格邻线，让摘要带上「邻线最大偏差 x%（N 档）」；报价须与主盘反解出的 λ 相容。
                 row(1203L, 111L, "BOOK_GAMMA_LONG_NAME", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE),
                 row(1204L, 111L, "BOOK_DELTA_LONG_NAME", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
-        // 同一批行的大小球投影：-0.50 那两家报 3.00，-0.75 那两家报 2.50，主盘落在更平衡的 2.50。
-        // 3.00 档的去水概率必须与反解出的 λ 相容（偏差在 0.04 内），否则整场会先被判不自洽。
         List<AsianOddsSnapshot> totalsRows = List.of(
-                row(1301L, 111L, "BOOK_ALPHA_LONG_NAME", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", LATEST_CAPTURE),
-                row(1302L, 111L, "BOOK_BETA_LONG_NAME", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", EARLIER_CAPTURE),
+                row(1301L, 111L, "BOOK_ALPHA_LONG_NAME", "-0.50", "1.90", "1.90", "2.50", "1.85", "1.95", LATEST_CAPTURE),
+                row(1302L, 111L, "BOOK_BETA_LONG_NAME", "-0.50", "1.90", "1.90", "2.50", "1.85", "1.95", EARLIER_CAPTURE),
                 row(1303L, 111L, "BOOK_GAMMA_LONG_NAME", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE),
                 row(1304L, 111L, "BOOK_DELTA_LONG_NAME", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
         stubMarkets(match, handicapRows, totalsRows);
@@ -300,7 +376,7 @@ class BaselinePredictionGenerationServiceTest {
         PredictionImportDto prediction = capturedPrediction();
         assertThat(prediction.analysisSummary())
                 .contains("亚盘 λ 反解 v6", "反解 λ 主", "模型概率", "影子门槛")
-                .contains("大小球主盘 2.50，该行未报主盘线")
+                .contains("大小球 判定线 2.50")
                 .contains("邻线最大偏差");
         // predictions.analysis_summary 是 varchar(1000)，超长会在导入时抛 SQL 异常并整批回滚。
         // 收紧到 900 是为了让阶段 E 再往摘要里加字段时在这里撞墙，而不是在集成测试里整批回滚。
@@ -468,28 +544,6 @@ class BaselinePredictionGenerationServiceTest {
     }
 
     @Test
-    void skipsWholeMatchWhenTotalsJudgmentLineIsMissingAndHandicapDispersionExceeds() {
-        MatchEntity match = scheduledMatch(118L);
-        // 让球 σ 超限；冻结行报的大小球线 3.00 在全场没有任何共识（大小球主盘在 2.50），
-        // 因此两个市场都没有可发布方向。此时必须归因于分歧，而不能漏成 LOW_CONFIDENCE。
-        List<AsianOddsSnapshot> handicapRows = List.of(
-                row(2001L, 118L, "BOOK_A", "-0.50", "1.80", "2.20", "3.00", "2.50", "1.55", LATEST_CAPTURE),
-                row(2002L, 118L, "BOOK_B", "-0.50", "1.80", "2.20", "3.00", "2.50", "1.55", EARLIER_CAPTURE),
-                row(2003L, 118L, "BOOK_C", "-0.50", "2.20", "1.80", "3.00", "2.55", "1.52", EARLIER_CAPTURE),
-                row(2004L, 118L, "BOOK_D", "-0.50", "2.20", "1.80", "3.00", "2.55", "1.52", EARLIER_CAPTURE));
-        List<AsianOddsSnapshot> totalsRows = List.of(
-                row(2101L, 118L, "BOOK_A", "-0.50", "1.80", "2.20", "2.50", "1.85", "1.95", LATEST_CAPTURE),
-                row(2102L, 118L, "BOOK_B", "-0.50", "1.80", "2.20", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
-        stubMarkets(match, handicapRows, totalsRows);
-
-        BaselinePredictionGenerationVo result = service.generateAndImport(LOTTERY_DATE, "admin");
-
-        verify(predictionImportService, never()).importFile(any());
-        assertThat(result.skippedByReason()).containsEntry(
-                BaselinePredictionSkipReasonEnum.MARKET_DISPERSION_TOO_HIGH, 1);
-    }
-
-    @Test
     void prefersConfidenceReasonWhenOnlyOneMarketIsRejectedByDispersion() {
         MatchEntity match = scheduledMatch(117L);
         // 让球对称 1.90/1.90 → 置信度 LOW（没有方向，但不是分歧问题）；大小球 σ=0.05 超限。
@@ -530,27 +584,48 @@ class BaselinePredictionGenerationServiceTest {
                 .tag("market", "handicap").summary().totalAmount()).isZero();
     }
 
+    /**
+     * 大小球的 edge 现在也结构性恒为 0，与让球同构。
+     *
+     * <p>修复前它唯一的非零来源就是「冻结行的大小球线不是主盘」——λ 在 2.50 反解、投影到 3.00，
+     * 与市场共识自然不相等，于是 {@code edge_over} 记录下一段形状偏差，看起来像 alpha。
+     * 判定线被强制对齐主盘后这条路径消失：投影回的就是反解线，模型概率与共识概率逐位相等。</p>
+     */
     @Test
-    void shadowGateEdgeIsNonZeroOnlyWhenFrozenTotalsLineDiffersFromMain() {
+    void totalsEdgeIsStructurallyZeroBecauseJudgmentLineIsAlwaysMainLine() {
         MatchEntity match = scheduledMatch(119L);
-        // 冻结行的让球在 -0.50，但它报的大小球线是 3.00，而大小球主盘在更平衡的 2.50。
-        // 这是 edge 唯一能非零的情形：λ 是在 2.50 上反解的，投影到 3.00 与市场共识不再相等。
+        // 复刻真实交叉积：-0.50 这一档同时报了 2.50 与 3.00 两档大小球，但聚合取数按让球线去重
+        // 只剩 3.00 那一行（id 更大）。大小球主盘是更平衡的 2.50。
         List<AsianOddsSnapshot> handicapRows = List.of(
                 row(2201L, 119L, "BOOK_A", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", LATEST_CAPTURE),
                 row(2202L, 119L, "BOOK_B", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", EARLIER_CAPTURE),
                 row(2203L, 119L, "BOOK_C", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE),
                 row(2204L, 119L, "BOOK_D", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
-        stubMarkets(match, handicapRows, handicapRows);
+        List<AsianOddsSnapshot> totalsRows = List.of(
+                row(2205L, 119L, "BOOK_A", "-0.50", "1.90", "1.90", "2.50", "1.85", "1.95", LATEST_CAPTURE),
+                row(2201L, 119L, "BOOK_A", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", LATEST_CAPTURE),
+                row(2206L, 119L, "BOOK_B", "-0.50", "1.90", "1.90", "2.50", "1.85", "1.95", EARLIER_CAPTURE),
+                row(2202L, 119L, "BOOK_B", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", EARLIER_CAPTURE),
+                row(2203L, 119L, "BOOK_C", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE),
+                row(2204L, 119L, "BOOK_D", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
+        List<AsianOddsSnapshot> crossProductRows = List.of(
+                row(2205L, 119L, "BOOK_A", "-0.50", "1.90", "1.90", "2.50", "1.85", "1.95", LATEST_CAPTURE),
+                row(2201L, 119L, "BOOK_A", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", LATEST_CAPTURE),
+                row(2206L, 119L, "BOOK_B", "-0.50", "1.90", "1.90", "2.50", "1.85", "1.95", EARLIER_CAPTURE),
+                row(2202L, 119L, "BOOK_B", "-0.50", "1.90", "1.90", "3.00", "2.50", "1.55", EARLIER_CAPTURE),
+                row(2203L, 119L, "BOOK_C", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE),
+                row(2204L, 119L, "BOOK_D", "-0.75", "2.26", "1.73", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
+        stubMarkets(match, handicapRows, totalsRows, crossProductRows);
         stubImport();
 
         service.generateAndImport(LOTTERY_DATE, "admin");
 
-        // 让球在主盘线上没有方向（对称报价 → LOW），因此只有大小球记了 edge。
-        // 0.78% 的偏差来自独立泊松尾部更薄，不是 alpha，摘要里也只写「仅记录」。
-        double totalsEdge = meterRegistry.get("jingcai.prediction.asian.gate.edge")
-                .tag("market", "totals").summary().totalAmount();
-        assertThat(totalsEdge).isNotZero();
-        assertThat(totalsEdge).isGreaterThan(1e-3d);
+        // 冻结行落在 2.50 那一档（修复前会落在 3.00），方向随之为大球。
+        assertThat(capturedPrediction().asianOddsSnapshotId()).isEqualTo(2205L);
+        assertThat(capturedPrediction().totalGoalsPick()).isEqualTo(TotalGoalsPickEnum.OVER);
+        // 投影回的就是反解线，edge 恒 0——修复前那一批 0.78% 的「偏差」纯粹是线位偏移。
+        assertThat(meterRegistry.get("jingcai.prediction.asian.gate.edge")
+                .tag("market", "totals").summary().totalAmount()).isZero();
     }
 
     @Test
@@ -588,11 +663,26 @@ class BaselinePredictionGenerationServiceTest {
             List<AsianOddsSnapshot> handicapRows,
             List<AsianOddsSnapshot> totalsRows
     ) {
+        stubMarkets(match, handicapRows, totalsRows, handicapRows);
+    }
+
+    /**
+     * @param handicapRows 聚合取数结果：每家每档让球线一行（交叉积已被压成单档大小球）
+     * @param freezeRows   冻结行候选：完整交叉积，每家 × 每档让球线 × 每档大小球线
+     */
+    private void stubMarkets(
+            MatchEntity match,
+            List<AsianOddsSnapshot> handicapRows,
+            List<AsianOddsSnapshot> totalsRows,
+            List<AsianOddsSnapshot> freezeRows
+    ) {
         when(matchMapper.selectPublicDailyMatches(LOTTERY_DATE)).thenReturn(List.of(match));
-        when(asianOddsSnapshotMapper.selectLatestConfirmedHandicapLinesByMatchIds(List.of(match.getId())))
+        when(asianOddsSnapshotMapper.selectLatestHandicapLinesByMatchIds(List.of(match.getId()), "NOVA_API"))
                 .thenReturn(handicapRows);
-        when(asianOddsSnapshotMapper.selectLatestConfirmedTotalsLinesByMatchIds(List.of(match.getId())))
+        when(asianOddsSnapshotMapper.selectLatestTotalsLinesByMatchIds(List.of(match.getId()), "NOVA_API"))
                 .thenReturn(totalsRows);
+        when(asianOddsSnapshotMapper.selectLatestCrossProductLinesByMatchIds(List.of(match.getId()), "NOVA_API"))
+                .thenReturn(freezeRows);
     }
 
     private void stubImport() {

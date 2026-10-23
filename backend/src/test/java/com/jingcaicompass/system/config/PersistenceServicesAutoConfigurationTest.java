@@ -53,6 +53,7 @@ import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.job.AsianOddsSyncJob;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.odds.service.AsianOddsPayloadMapper;
+import com.jingcaicompass.odds.service.NovaApiOddsPayloadMapper;
 import com.jingcaicompass.odds.service.AsianOddsProvider;
 import com.jingcaicompass.prediction.job.PredictionLockJob;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
@@ -74,6 +75,7 @@ import com.jingcaicompass.settlement.service.SportteryHandicapSettlementCalculat
 import com.jingcaicompass.settlement.service.WinDrawLossSettlementCalculator;
 import com.jingcaicompass.statistics.service.StatisticsQueryService;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
+import com.jingcaicompass.system.config.properties.SyncTaskProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import java.time.Duration;
 import java.util.List;
@@ -93,14 +95,15 @@ class PersistenceServicesAutoConfigurationTest {
             .withConfiguration(AutoConfigurations.of(PersistenceServicesAutoConfiguration.class))
             .withBean(ObjectMapper.class, ObjectMapper::new)
             .withBean(SportteryPoolPayloadMapper.class, () -> new SportteryPoolPayloadMapper(new ObjectMapper()))
-            .withBean(AsianOddsPayloadMapper.class, () -> new AsianOddsPayloadMapper(new ObjectMapper()))
+            .withBean(AsianOddsPayloadMapper.class, () -> new AsianOddsPayloadMapper(new ObjectMapper(), new NovaApiOddsPayloadMapper()))
             .withBean(SportteryProvider.class, () -> mock(SportteryProvider.class))
             .withBean(SportteryProviderProperties.class, () -> mock(SportteryProviderProperties.class))
             .withBean(AsianOddsProvider.class, () -> mock(AsianOddsProvider.class))
             .withBean(
                     AsianOddsProviderProperties.class,
-                    () -> mock(AsianOddsProviderProperties.class)
+                    PersistenceServicesAutoConfigurationTest::asianOddsProviderProperties
             )
+            .withBean(SyncTaskProperties.class, PersistenceServicesAutoConfigurationTest::taskProperties)
             .withBean(AdminSecurityProperties.class, PersistenceServicesAutoConfigurationTest::adminProperties)
             .withBean(AdminAccountCredentialValidator.class, AdminAccountCredentialValidator::new)
             .withBean(PasswordEncoder.class, () -> new BCryptPasswordEncoder(4))
@@ -252,5 +255,47 @@ class PersistenceServicesAutoConfigurationTest {
         AdminAccountMapper mapper = mock(AdminAccountMapper.class);
         when(mapper.selectCount(any())).thenReturn(1L);
         return mapper;
+    }
+
+    /**
+     * 用真实配置对象而不是 mock：{@code ActiveAsianOddsProvider} 需要
+     * {@code provider().getCode()}，mock 出来的 record 会返回 null 并在建 bean 时 NPE。
+     */
+    private static AsianOddsProviderProperties asianOddsProviderProperties() {
+        return new AsianOddsProviderProperties(
+                com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum.STUB,
+                java.net.URI.create("https://api.the-odds-api.com"),
+                "",
+                Duration.ofSeconds(5),
+                Duration.ofSeconds(10),
+                new AsianOddsProviderProperties.RetryProperties(2, Duration.ofMillis(500)),
+                0
+        );
+    }
+
+    /**
+     * 自动发布编排器需要任务配置里的 {@code regenerate-interval} 与 {@code operator}。
+     * 用真实对象而不是 mock：mock 的 {@code predictionAutoPublish()} 返回 null，
+     * 建 bean 时会直接 NPE。
+     */
+    private static SyncTaskProperties taskProperties() {
+        Duration delay = Duration.ofMinutes(1);
+        return new SyncTaskProperties(
+                false,
+                new SyncTaskProperties.SportteryPoolTaskProperties(false, delay, Duration.ZERO),
+                new SyncTaskProperties.MatchResultTaskProperties(false, delay, Duration.ZERO, 7),
+                new SyncTaskProperties.AsianOddsTaskProperties(false, delay, Duration.ZERO),
+                new SyncTaskProperties.DataPipelineTaskProperties(false, delay, Duration.ZERO),
+                new SyncTaskProperties.PredictionLockTaskProperties(false, Duration.ofSeconds(30), Duration.ZERO, 1),
+                new SyncTaskProperties.SnapshotPublishTaskProperties(false, delay, Duration.ZERO),
+                new SyncTaskProperties.SettlementTaskProperties(false, delay, Duration.ZERO, 1),
+                new SyncTaskProperties.PredictionAutoPublishTaskProperties(
+                        false,
+                        Duration.ofMinutes(15),
+                        Duration.ZERO,
+                        Duration.ofHours(3),
+                        "system:auto-publish"
+                )
+        );
     }
 }

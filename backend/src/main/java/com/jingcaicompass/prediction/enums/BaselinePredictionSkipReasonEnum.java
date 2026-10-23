@@ -24,6 +24,8 @@ public enum BaselinePredictionSkipReasonEnum {
             "反解 λ 后主盘残差或邻线偏差超限，两个市场定价不自洽"),
     NO_ASIAN_SNAPSHOT_ON_CONSENSUS_LINE("NO_ASIAN_SNAPSHOT_ON_CONSENSUS_LINE",
             "共识主盘线上没有让球与大小球完整可冻结的真实快照"),
+    NO_ASIAN_SNAPSHOT_ON_TOTALS_CONSENSUS_LINE("NO_ASIAN_SNAPSHOT_ON_TOTALS_CONSENSUS_LINE",
+            "共识让球线上没有任何一家报出大小球主盘那一档，判定线无法与反解线对齐"),
     MARKET_DISPERSION_TOO_HIGH("MARKET_DISPERSION_TOO_HIGH",
             "让球与大小球的共识离散度均超上限，不生成草稿"),
     LOW_CONFIDENCE_ASIAN_MARKETS("LOW_CONFIDENCE_ASIAN_MARKETS",
@@ -37,6 +39,7 @@ public enum BaselinePredictionSkipReasonEnum {
                     + "INSUFFICIENT_ASIAN_CONSTRAINTS-缺大小球主盘（λ 反解只够一个约束），"
                     + "INCONSISTENT_ASIAN_MARKETS-两个市场定价不自洽，"
                     + "NO_ASIAN_SNAPSHOT_ON_CONSENSUS_LINE-共识线上无完整快照，"
+                    + "NO_ASIAN_SNAPSHOT_ON_TOTALS_CONSENSUS_LINE-共识让球线上无大小球主盘档位，"
                     + "MARKET_DISPERSION_TOO_HIGH-两市场跨庄分歧均超限，"
                     + "LOW_CONFIDENCE_ASIAN_MARKETS-两项亚盘预测均无可发布方向";
 

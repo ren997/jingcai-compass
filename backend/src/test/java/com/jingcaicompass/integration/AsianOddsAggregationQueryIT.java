@@ -22,11 +22,15 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * T613-B PostgreSQL 16 验证跨庄聚合的两条取数查询。
+ * PostgreSQL 16 验证跨庄聚合的两条取数查询。
  *
  * <p>这两条 SQL 用 {@code DISTINCT ON} 加多列排序，注解文本断言查不出语法错误，也查不出
  * 「去重维度写错导致同一家庄被重复计数」这类只在真库暴露的问题。主盘选择完全依赖这两条查询的
  * 去重口径，因此必须有真实库证据。</p>
+ *
+ * <p>单源改造后这两个测试同时承担一个反向证据：查询<b>不再依赖 {@code match_source_mappings}</b>。
+ * 因此造数据时只写 {@code matches} 与 {@code asian_odds_snapshots}，一条映射都不插——
+ * 如果哪天有人把 JOIN 加回来，这里会立刻变成空结果。</p>
  */
 @Testcontainers
 @ActiveProfiles("integration")
@@ -80,7 +84,7 @@ class AsianOddsAggregationQueryIT {
 
     @Test
     void handicapQueryReturnsLatestQuotePerBookmakerAndLine() {
-        long matchId = insertMatch("ah-latest", "MANUAL_CONFIRMED");
+        long matchId = insertMatch("ah-latest");
         insertSnapshot(matchId, "pinnacle", "-0.25", "1.90", "1.95", "2.50", "1.90", "1.95",
                 "2026-10-21 09:00:00+08");
         insertSnapshot(matchId, "pinnacle", "-0.25", "1.75", "2.10", "2.50", "1.85", "2.00",
@@ -89,7 +93,7 @@ class AsianOddsAggregationQueryIT {
                 "2026-10-21 10:00:00+08");
 
         List<AsianOddsSnapshot> rows =
-                asianOddsSnapshotMapper.selectLatestConfirmedHandicapLinesByMatchIds(List.of(matchId));
+                asianOddsSnapshotMapper.selectLatestHandicapLinesByMatchIds(List.of(matchId), "STUB");
 
         assertThat(rows).hasSize(2);
         AsianOddsSnapshot pinnacle = rows.stream()
@@ -101,7 +105,7 @@ class AsianOddsAggregationQueryIT {
 
     @Test
     void totalsQueryDeduplicatesByTotalLineAcrossHandicapRows() {
-        long matchId = insertMatch("totals-dedupe", "MANUAL_CONFIRMED");
+        long matchId = insertMatch("totals-dedupe");
         // 同一家庄的同一档大小球随让球线重复出现，必须按 total_line 折叠成一条。
         insertSnapshot(matchId, "pinnacle", "-0.50", "1.95", "1.95", "2.75", "1.85", "2.00",
                 "2026-10-21 09:00:00+08");
@@ -111,7 +115,7 @@ class AsianOddsAggregationQueryIT {
                 "2026-10-21 11:05:00+08");
 
         List<AsianOddsSnapshot> rows =
-                asianOddsSnapshotMapper.selectLatestConfirmedTotalsLinesByMatchIds(List.of(matchId));
+                asianOddsSnapshotMapper.selectLatestTotalsLinesByMatchIds(List.of(matchId), "STUB");
 
         assertThat(rows).hasSize(2);
         AsianOddsSnapshot line275 = rows.stream()
@@ -124,28 +128,32 @@ class AsianOddsAggregationQueryIT {
     }
 
     @Test
-    void pendingMappingRowsAreExcludedFromBothQueries() {
-        long pendingMatch = insertMatch("pending", "PENDING");
-        insertSnapshot(pendingMatch, "pinnacle", "-0.25", "1.90", "1.95", "2.50", "1.90", "1.95",
+    void otherProviderRowsAreExcludedFromBothQueries() {
+        long matchId = insertMatch("other-provider");
+        insertSnapshot(matchId, "NOVA_API", "pinnacle", "-0.25", "1.90", "1.95", "2.50", "1.90", "1.95",
                 "2026-10-21 10:00:00+08");
 
-        assertThat(asianOddsSnapshotMapper.selectLatestConfirmedHandicapLinesByMatchIds(List.of(pendingMatch)))
+        // provider_code 过滤不是可选优化：聚合器按 (bookmaker, line) 去重、不含 provider，
+        // 两个来源的同名庄会互相覆盖并一起进中位数，主盘会悄悄偏移。
+        assertThat(asianOddsSnapshotMapper.selectLatestHandicapLinesByMatchIds(List.of(matchId), "STUB"))
                 .isEmpty();
-        assertThat(asianOddsSnapshotMapper.selectLatestConfirmedTotalsLinesByMatchIds(List.of(pendingMatch)))
+        assertThat(asianOddsSnapshotMapper.selectLatestTotalsLinesByMatchIds(List.of(matchId), "STUB"))
                 .isEmpty();
+        assertThat(asianOddsSnapshotMapper.selectLatestHandicapLinesByMatchIds(List.of(matchId), "NOVA_API"))
+                .hasSize(1);
     }
 
     @Test
     void nonPositivePriceRowsAreExcluded() {
-        long matchId = insertMatch("zero-price", "MANUAL_CONFIRMED");
+        long matchId = insertMatch("zero-price");
         insertSnapshot(matchId, "pinnacle", "-0.25", "0.00", "1.95", "2.50", "1.90", "1.95",
                 "2026-10-21 10:00:00+08");
 
-        assertThat(asianOddsSnapshotMapper.selectLatestConfirmedHandicapLinesByMatchIds(List.of(matchId)))
+        assertThat(asianOddsSnapshotMapper.selectLatestHandicapLinesByMatchIds(List.of(matchId), "STUB"))
                 .isEmpty();
     }
 
-    private long insertMatch(String suffix, String mappingStatus) {
+    private long insertMatch(String suffix) {
         long key = KEY_SEQUENCE.incrementAndGet();
         long matchId = jdbcTemplate.queryForObject(
                 """
@@ -159,22 +167,27 @@ class AsianOddsAggregationQueryIT {
                 Long.class,
                 "T613B-" + suffix + "-" + key
         );
-        jdbcTemplate.update(
-                """
-                INSERT INTO match_source_mappings (
-                    match_id, provider_code, external_match_id, mapping_status,
-                    mapping_confidence, mapping_method, confirmed_by
-                ) VALUES (?, 'STUB', ?, ?, 1.0000, 'MANUAL_REVIEW', 't613b-it')
-                """,
-                matchId,
-                "t613b-" + suffix + "-" + key,
-                mappingStatus
-        );
         return matchId;
     }
 
     private void insertSnapshot(
             long matchId,
+            String bookmakerCode,
+            String handicapLine,
+            String homeOdds,
+            String awayOdds,
+            String totalLine,
+            String overOdds,
+            String underOdds,
+            String capturedAt
+    ) {
+        insertSnapshot(matchId, "STUB", bookmakerCode, handicapLine, homeOdds, awayOdds,
+                totalLine, overOdds, underOdds, capturedAt);
+    }
+
+    private void insertSnapshot(
+            long matchId,
+            String providerCode,
             String bookmakerCode,
             String handicapLine,
             String homeOdds,
@@ -191,12 +204,13 @@ class AsianOddsAggregationQueryIT {
                     handicap_line, home_odds, away_odds,
                     total_line, over_odds, under_odds,
                     snapshot_type, captured_at, raw_payload_hash
-                ) VALUES (?, 'STUB', ?,
+                ) VALUES (?, ?, ?,
                           CAST(? AS NUMERIC), CAST(? AS NUMERIC), CAST(? AS NUMERIC),
                           CAST(? AS NUMERIC), CAST(? AS NUMERIC), CAST(? AS NUMERIC),
                           'FIRST_SEEN', CAST(? AS TIMESTAMPTZ), ?)
                 """,
                 matchId,
+                providerCode,
                 bookmakerCode,
                 handicapLine,
                 homeOdds,

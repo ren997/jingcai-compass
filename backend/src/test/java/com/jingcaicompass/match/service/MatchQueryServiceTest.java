@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -25,6 +26,7 @@ import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.ConfidenceLevelEnum;
 import com.jingcaicompass.prediction.enums.HandicapPickEnum;
@@ -68,7 +70,8 @@ class MatchQueryServiceTest {
                 predictionMapper,
                 matchSourceMappingMapper,
                 rawDataPayloadMapper,
-                new PaginationProperties(50)
+                new PaginationProperties(50),
+                new ActiveAsianOddsProvider("NOVA_API")
         );
     }
 
@@ -99,7 +102,7 @@ class MatchQueryServiceTest {
         when(matchMapper.selectPublicPage(any())).thenReturn(List.of(match));
         when(sportterySnapshotMapper.selectLatestByMatchIds(anyCollection())).thenReturn(List.of(snapshot));
         when(rawDataPayloadMapper.selectList(any())).thenReturn(List.of());
-        when(asianOddsSnapshotMapper.selectLatestCompleteConfirmedLinesByMatchIds(anyCollection())).thenReturn(List.of());
+        when(asianOddsSnapshotMapper.selectLatestCompleteLinesByMatchIds(anyCollection(), anyString())).thenReturn(List.of());
         when(predictionMapper.selectCurrentPublishedByMatchIds(anyCollection())).thenReturn(List.of());
 
         var page = matchQueryService.list(new MatchListQueryDto(
@@ -164,7 +167,7 @@ class MatchQueryServiceTest {
         when(matchMapper.selectPublicPage(any())).thenReturn(List.of(match));
         when(sportterySnapshotMapper.selectLatestByMatchIds(anyCollection())).thenReturn(List.of(sporttery));
         when(rawDataPayloadMapper.selectList(any())).thenReturn(List.of());
-        when(asianOddsSnapshotMapper.selectLatestCompleteConfirmedLinesByMatchIds(anyCollection()))
+        when(asianOddsSnapshotMapper.selectLatestCompleteLinesByMatchIds(anyCollection(), anyString()))
                 .thenReturn(List.of(asianMain));
         when(asianOddsSnapshotMapper.selectBatchIds(List.of(9001L))).thenReturn(List.of(asianMain));
         when(predictionMapper.selectCurrentPublishedByMatchIds(anyCollection()))
@@ -192,7 +195,7 @@ class MatchQueryServiceTest {
                 assertThat(summary.asianMarket().bookmakerCode()).isEqualTo("BOOK_A");
             });
         });
-        verify(asianOddsSnapshotMapper).selectLatestCompleteConfirmedLinesByMatchIds(anyCollection());
+        verify(asianOddsSnapshotMapper).selectLatestCompleteLinesByMatchIds(anyCollection(), anyString());
         verify(predictionMapper).selectCurrentPublishedByMatchIds(anyCollection());
     }
 

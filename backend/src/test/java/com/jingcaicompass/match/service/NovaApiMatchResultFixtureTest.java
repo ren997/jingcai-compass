@@ -1,5 +1,6 @@
 package com.jingcaicompass.match.service;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -133,5 +134,57 @@ class NovaApiMatchResultFixtureTest {
         assertThat(shortNameDiffers)
                 .extracting(NovaApiMatchResultFixture.Result::matchId)
                 .containsExactlyInAnyOrder(2042108L, 2042107L);
+    }
+
+    /**
+     * 赛果的 {@code matchDate} 是<b>开赛自然日</b>，不是竞彩业务日。
+     *
+     * <p>这是整次单源改造里最容易写错库的一条：赛程接口的 {@code matchDate} 是业务日
+     * （10-21），而同一场比赛的赛果返回的是开赛自然日（10-22）。2026-10-21 的 13 场里
+     * 有 10 场跨零点，这 10 场若按 {@code (matchDate, matchNumStr)} 去 {@code matches}
+     * 里定位，会<b>查不到</b>而整批记失败（场次编号带着业务日的星期前缀，所以不会串场；
+     * 但相差整数周的同名场次仍会撞）。</p>
+     *
+     * <p>因此赛果定位只能用 {@code matchId}（= {@code matches.external_match_id}）。</p>
+     */
+    @Test
+    void resultMatchDateIsKickoffCalendarDateNotLotteryBusinessDate() {
+        Map<Long, NovaApiScheduleFixture.Match> scheduleById =
+                NovaApiScheduleFixture.load(NovaApiScheduleFixture.SCHEDULE_2026_10_21).stream()
+                        .collect(Collectors.toMap(
+                                NovaApiScheduleFixture.Match::matchId,
+                                Function.identity(),
+                                (left, right) -> left));
+
+        List<NovaApiMatchResultFixture.Result> overlapping =
+                NovaApiMatchResultFixture.load(NovaApiMatchResultFixture.RESULTS_2026_10_22).stream()
+                        .filter(item -> scheduleById.containsKey(item.matchId()))
+                        .toList();
+
+        // 业务日 10-21 的 13 场里，10 场在赛果窗口内已经开奖。
+        assertThat(overlapping).hasSize(10);
+
+        assertThat(overlapping).allSatisfy(item -> {
+            NovaApiScheduleFixture.Match scheduled = scheduleById.get(item.matchId());
+            // 前提：这 10 场全部跨零点，否则本测试证明不了日期口径差异。
+            assertThat(scheduled.matchStartDate())
+                    .as("matchId=%s 应跨零点", item.matchId())
+                    .isNotEqualTo(scheduled.matchDate());
+            // 赛果日期 = 开赛自然日。
+            assertThat(item.matchDate())
+                    .as("赛果 matchDate 应等于赛程 matchStartDate：matchId=%s", item.matchId())
+                    .isEqualTo(scheduled.matchStartDate());
+            // 且不等于竞彩业务日 —— 这正是不该拿它当 lottery_date 的原因。
+            assertThat(item.matchDate()).isNotEqualTo(scheduled.matchDate());
+        });
+    }
+
+    @Test
+    void extractsCanonicalFieldsFromNovaEventStream() {
+        JsonNode event = NovaApiScheduleFixture.readTree(
+                "sporttery/novaapi-soccer-events-2042118.json").path("data").path("matches").get(0);
+
+        assertThat(event.path("matchId").asLong()).isEqualTo(2042118L);
+        assertThat(event.path("tfStatusShort").asText()).isEqualTo("PEN");
     }
 }

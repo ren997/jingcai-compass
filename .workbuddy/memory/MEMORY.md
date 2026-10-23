@@ -1,101 +1,95 @@
 # 竞彩罗盘 · 项目长期约定
 
-## 分支与交付（2026-10-21 起，已写入 AGENTS.md 与 docs/dev-tasks.md）
+## 分支与交付
 
-- 分支前缀**不再使用 `codex/`**（那是旧工具名）。约定为 `feat/<topic>`。
-- **不按功能/任务拆分支**。一个交付分支承载同一目标下的多个连续任务，分支名描述整个交付而不是第一个任务。
+- 分支前缀 `feat/<topic>`（不用 `codex/`）。**不按任务拆分支**：一个交付分支承载同一目标下的多个连续任务。
 - 同一时刻只允许一个任务 `IN_PROGRESS`；任务 `DONE` 不触发合并，整个交付完成后才合并 Draft PR。
-- 当前交付分支：`feat/asian-model-v1`（对应 T613）。
+- 当前交付分支：`feat/nova-single-source`（NovaAPI 单源改造，6 阶段，计划见 `~/.workbuddy/plans/quantum-thunder-einstein-9P5tHcJF.md`）。
 
-## 验证策略（用户明确要求减负）
+## 验证策略与测试分层（用户明确要求减负）
 
-- 不要求每次改动都跑全量集成测试。
 - 纯计算/映射/校验 → 普通单测，秒级，不启动容器。
-- **涉及 Flyway 迁移、PostgreSQL 专有约束/触发器 → 必须在本机真实 PG 16 容器验证一次**（这是唯一不能用"项目能启动"替代的环节，因为约束违例只在边界输入时暴露，而那次结算往往已发布不可回滚）。
-- 交付收尾跑一次全量 `-Pintegration verify` + CI。
-
-## 测试分层事实
-
-- `mvn test`（125 个 `*Test.java`）**零 Docker**；注释里提到 Testcontainers 的 3 个文件实为静态 SQL 字符串断言。
-- 只有 18 个 `*IT.java` 需要 Docker，仅在 `-Pintegration` 下执行。
-- Testcontainers 版本固定 1.21.4（1.19.8 与 Docker Engine 29 的 Windows 命名管道不兼容）。
-- IT 未启用 `.withReuse(true)`，冷启动约 15 秒，是"跑 Docker 很慢"的主因。
+- **涉及 Flyway 迁移、PostgreSQL 专有约束/触发器 → 必须在本机真实 PG 16 容器验证一次**。这是唯一不能用「项目能启动」替代的环节。
+- `mvn test`（125+ 个 `*Test.java`）**零 Docker**；只有 18 个 `*IT.java` 需要 Docker，仅在 `-Pintegration` 下执行。Testcontainers 固定 1.21.4；IT 未开 `.withReuse(true)`，冷启动 ~15s。
+- **仓库 CI 没有前端门禁**：唯一工作流只跑 `mvn -Pintegration verify`。纯前端任务本地 `npx vitest run` + `tsc -b` + `vite build` 即可收档，别等 CI。
 
 ## 用户偏好
 
-- 项目为个人自用，数据源合规问题不作为阻塞项。
-- 倾向务实：能跑通优先于流程完备，但接受"关键节点必须验证"的论证。
+- 个人自用，数据源合规不作为阻塞项。务实优先：能跑通优先于流程完备，但接受「关键节点必须验证」的论证。
 - 中文交流，回答要有明确结论而非罗列选项。
 
-## 已知未收口事项
+## 亚盘模型的硬约束（不得违反）
 
-- `T613` **已完成并合入 master**：阶段 A~E 全部收口（A `e9c2b34`、B `166e87e`、C `0bd5450`、D `74a5adc`、E1~E6 `7b29b91`、E7~E17 `96001cd`→`c0718e0`，CI 回归修复 `4fa12bf`）。PR **#26** 以 merge commit `2885739` 合入（保留 25 个提交说明，164 文件 +13728/−701）。PR CI（`39610773844`）与 master push CI（`39612394966`）均全绿：单测 698 项 + 集成 68 项 + 24 个迁移 apply。
-- `T610` **已置 `DONE`**（2026-10-21）：历次 `PARTIAL` 的唯一缺口是「Draft PR + CI 证据」（交付期间 `gh` 未登录），代码与本地验证早已完备；该缺口由 PR #26 补齐。**收档口径**：T610 交付的亚盘专用 V3 输出此后由 T613 沿 v4/v5/v6 演进，但 V3 契约（V21：亚盘专用、方向与置信度成对、`LOW` 不落库、已发布不可变）仍是现行基础，故按「已完成」而非「被取代」收档；后续模型行为与结算口径变更一律归 T613 及其后续任务。
-- `T611`、`T612` **均已置 `DONE`**（2026-10-21）。T611 是真覆盖：它的 `PublicMatchQueryApplicationIT`（4 项）在 PR #26 的 68 项集成测试里实际执行。T612 是纯前端任务，缺口「CI 证据」实为**伪缺口**（见下条）。
-- **仓库 CI 没有前端门禁（长期事实）**：唯一工作流 `.github/workflows/backend-integration.yml` 只跑 `mvn -B -ntp -f backend/pom.xml -Pintegration verify`，**不含任何 npm / vitest / build 步骤**。因此：①纯前端任务按 `AGENTS.md`「本地可完整验收的任务无需 CI」收档，别再为它等 CI；②前端回归只能靠本地 `npx vitest run` + `tsc -b` + `vite build`；③若要让 CI 拦住前端改动，需单独新增一个前端工作流，属独立事项。
-- **迁移类 IT 禁止用 `flyway(null).migrate()` + 断言 `migrationsExecuted` 具体数字**：那个数字随每次新增迁移而变，失败信息（`expected 1 but was 3`）与本用例意图无关，排查成本极高。一律用 `flyway("<target>")` 显式限定目标版本。全量末版本断言只保留在 `PostgresApplicationIT` 一处（本意就是验末版本），遵守「加迁移必须同步改」。`T613` 就是被这条坑掉一次：阶段 A 加 V23、阶段 E 加 V24 后 `LegacyNameKeyIdentityCleanupMigrationIT` 必红，而本机无 Docker 使它在 CI 首轮才暴露。
-- 邻线校验口径（整条阶梯取最大值 vs 主盘 ±0.75）**本轮确认不改代码**，结论只写进 `docs/asian-model-design.md`，待下一阶段连同 `neighbor-tolerance` 取窗口逻辑一起处理。
-- `backend/src/test/java/com/jingcaicompass/tools/NovaAsianRunTest.java` 保持未跟踪（一次性实跑脚手架，不入库）。注意它会让本地单测数比 CI 多 1（699 vs 698），别误判为 CI 少跑了用例。
+- **共识定线 + 真实行冻结**：决策线由跨庄聚合选出，但 `predictions.asian_odds_snapshot_id` 必须指向一条**确实报出该线**的真实快照行（复合外键 `(id, match_id)`）。不要用共识公平价计账——公平价无法成交。
+- **方向与置信度有意不同源**：方向取自模型概率（v5 起，两主盘反解 λ 后投影），置信度按冻结行真实报价算。「共识方向明确却判低置信」不是 bug。
+- **主盘残差不是自洽性检验**：两方程两未知数恰定，残差必然趋近 0（实测 `1e-16`）。判断市场打架只能看**邻线回投**（家数 ≥2 且非主盘线）；`lineCount == 0` 要单打 `no-neighbor`。
+- **edge 门槛只能是影子**：让球方向的模型概率是把 λ 投影回**同一条主盘线**，而 λ 由该线去水概率反解 → `edge ≡ 0`。任何正 `safety-margin` 会拒发 100% 让球方向，调参无效。真判据应是 `margin = 模型概率 − 1/赔率`（含抽水）。
+- **σ 可以真拦，但两种 source 不可比**：σ = 跨庄去水概率总体标准差，与 λ 求解无关，适合硬过滤（阈值 `0.0200`，严格大于才拒，分市场独立判定）。白名单按时达标时样本从十几家掉到两三家 → σ 系统性偏小，`source=whitelist` 与 `fallback` 不可横向比较。
+- 聚合顺序固定 **逐家去水 → 中位 → 归一**；主盘 = 偏离 50/50 最小的线（不是众数），线型偏好仅在精确同分时生效。
+- 统一概率口径 `p_eff = (W + 0.5·HW) / (W + 0.5·HW + 0.5·HL + L)`，市场侧与模型侧逐字一致。
+- **落库口径是首边，不是所选方向**：`model_cover_prob`/`market_cover_prob`/`edge_cover` 按主队（让球）与**大球**（大小球）记；`AsianPublishGate.Verdict` 里的概率已按方向做过 `1 − p`。
+- **新增落库列必须同时改三处**：迁移列定义 + `protect_published_prediction()` 两处 ROW 列表 + `PredictionImportDto` 校验。精度统一 `numeric(9,6)`（生成侧 `PROBABILITY_SCALE = 6`，5 位会静默四舍五入）。
+- **「值只在某分支才算」是落库陷阱**：给市场新增落库列前，先确认该值在**所有分支**都被计算。
+- **交叉积落库会让「按让球线去重」丢掉大小球档**：`selectLatestHandicapLinesByMatchIds` 用 `DISTINCT ON (match, provider, bookmaker, handicap_line)` + `ORDER BY captured_at DESC, id DESC`，而同一让球线的四档是连续写入（`id` 与 `captured_at` 同步递增）→ **每组只留最大 `total_line` 档**。`AsianFreezeSnapshotSelector` 的 `alignedWithTotalsLine` 排序键因此永远 false、形同虚设，冻结行必然落在被抬高的线上 → 大小球方向**系统性偏小球**（实测 2026-10-22 的 13 场全 `UNDER`，冻结线比大小球主盘高 `+0.25`/`+0.50`，无一例外）。**冻结行选择必须用按 `(match, provider, bookmaker, handicap_line, total_line)` 去重的完整交叉积行集，不能复用让球聚合的去重结果**；让球聚合不受影响（同家同线四档让球赔率完全相同）。**已于 2026-10-22 深夜修复（`7e4b631`）**：新增 `selectLatestCrossProductLinesByMatchIds` 专供选行（聚合输入不动）；`alignedWithTotalsLine` 提到排序键**第一位**（排在白名单前——线正确性是硬要求，白名单只是价格偏好）；判定线 ≠ 主盘线则整场跳过（`NO_ASIAN_SNAPSHOT_ON_TOTALS_CONSENSUS_LINE`），摘要里两支护已随之删除。**真库重算**：13 场 → 10 生成 / 3 跳过，判定线全部落到主盘，方向 4 大 / 2 小 / 4 无方向，`edge_over` 由「非零」变**恒 0**（大小球方向从此与让球同构，只是市场共识的复述）。已发布的 10-22 那 13 条改不了，结算按旧抬高线判，回测需单独剔除。
 
-## 已完成的历史 P0（留档，避免重复排查）
+## 统计与公开验证的硬约束
 
-`StatisticsCalculator.recordMarket` 曾对每条记录无条件 `orElseThrow` 要求 HAD/HHAD，亚盘预测必抛 `missing HAD history` → `HomeSummaryQueryServiceImpl` 复用同一 summary ⇒ 首页与统计页同时 500。E7 已重写为按 `predictionType` 隔离样本 + `marketsFor()` 生成市场集合；`MarketAccumulator` 的箭头 switch 已补 `default` 抛错（该 switch 是**语句**，不要求穷尽且编译不报错，新增枚举值会被静默丢弃）。
-
-## 亚盘模型的硬约束（阶段 B、C、D 建立，后续阶段不得违反）
-
-- **共识定线 + 真实行冻结**：决策线由跨庄聚合选出，但 `predictions.asian_odds_snapshot_id` 必须指向一条**确实报出该线**的真实快照行（复合外键 `(id, match_id)`，结算只读该行）。不要试图用共识公平价计账——公平价无法成交。
-- **方向与置信度有意不同源**：方向取自**模型概率**（v5 起，由两个主盘反解 λ 后投影得到），置信度按冻结行真实报价计算。看到「共识方向明确却判低置信」不是 bug，是计账价偏高导致的真实不可交易性。
-- **主盘残差不是自洽性检验**：两方程两未知数是恰定方程组，残差必然趋近 0（实测 `1e-16`）。判断市场是否打架只能看**邻线回投**（合格档位：家数 ≥2 且非主盘线）。`lineCount == 0` 要单打 `no-neighbor`，不能算通过。
-- **edge 门槛只能是影子，不能真拦**：让球方向的模型概率是把 λ 投影回**同一条主盘线**，而 λ 正是由该线去水概率反解 → `edge ≡ 0`（v6 实测 3/3 场为 `0.0000`）。任何正 `safety-margin` 都会拒发 100% 的让球方向，调参无效。真判据应看 `margin = 模型概率 − 1/赔率`（含抽水），不是 `edge`。edge 唯一能非零的情形是冻结线 ≠ 主盘线（大小球常见），那是形状偏差不是 alpha。
-- **σ 可以真拦，但两种 source 不可比**：σ = 跨庄去水概率的**总体**标准差，衡量"市场是否自相矛盾"，与 λ 求解无关，所以适合做硬过滤（阈值 `0.0200`，严格大于才拒，分市场独立判定）。但白名单按线生效，达标时样本常从十几家掉到两三家，σ 系统性偏小 → `source=whitelist` 与 `source=fallback` 的 σ 不能横向比较，指标必须带 `source` 标签。
-- 聚合顺序固定为 **逐家去水 → 中位 → 归一**；主盘 = 偏离 50/50 最小的线（不是众数），线型偏好仅在精确同分（ε=0）时生效。
-- 统一概率口径 `p_eff = (W + 0.5·HW) / (W + 0.5·HW + 0.5·HL + L)`，市场侧与模型侧必须逐字一致。
-- **落库口径是首边，不是所选方向**：`model_cover_prob` / `market_cover_prob` / `edge_cover` 一律按主队（让球）与**大球**（大小球）记，而 `AsianPublishGate.Verdict` 里的概率**已按方向做过 `1 − p` 换算**。混用会让方向字段与概率字段互相矛盾，且统计侧无法再按首边归一。
-- **新增落库列必须同时改三处**：V 版本迁移的列定义 + `protect_published_prediction()` 两处 ROW 列表（漏改等于允许事后重写已发布预测背后的概率）+ `PredictionImportDto` 的模型输出校验。列精度统一 `numeric(9,6)`，不用 5 位（生成侧 `PROBABILITY_SCALE = 6`，5 位会静默四舍五入）。
-- **「值只在某个分支才算」是落库陷阱**：`overProbability` 原先只在置信度非 LOW 的分支里投影，直接落库会写入 0 而非真实概率。给任何市场新增落库列前，先确认该值在**所有分支**都被计算。
-
-## 统计与公开验证的硬约束（阶段 E 建立）
-
-- **两种产品线的统计不可混算**：响应形状用 `markets` 数组而**不是** `had`/`hhad` 具名字段——具名字段把「HAD/HHAD 必然存在」写进响应形状，混算风险从计算层转移到展示层。竞彩与亚盘分别请求（`predictionType`），首页固定亚盘。
-- **走盘进 Brier 样本、不进命中率分母**：`outcome = HIT 1 / HALF_WIN .75 / PUSH .5 / HALF_LOSS .25 / MISS 0`；`settled = hit+miss+halfWin+halfLoss`（不含 PUSH），另给 `weightedHitRate`。只给一个命中率会在走盘比例高时骗人。
-- **哈希结构只能追加不能修改**：`CanonicalPredictionV4` = V3 字段序 + 十列（6 位定标）。选版本只看事实：十列全非空 → v4、全空 → v3、部分为空抛错。`verifyStoredHash` 必须回落认「十列已填但哈希按 v3 算」的存量行，否则快照生成整批失败。manifest `schemaVersion` 取批次**最大值**，十列 `NON_NULL` 省略（纯 v3 批次字节不变）。
-- **批量写操作按 `(matchId, predictionId)` 升序串行 + 逐条独立事务**：同场多条都要更新 `matches` 行，并发批次反向拿锁会死锁；一条坏数据不能回滚已成功的。结果逐条返回，且前端必须按 ID 回填（服务端会重排顺序）。
+- **两种产品线统计不可混算**：响应用 `markets` 数组而**不是** `had`/`hhad` 具名字段——具名字段把「HAD/HHAD 必然存在」写进响应形状。竞彩与亚盘按 `predictionType` 分别请求，首页固定亚盘。
+- **走盘进 Brier 样本、不进命中率分母**：`outcome = HIT 1 / HALF_WIN .75 / PUSH .5 / HALF_LOSS .25 / MISS 0`；`settled` 不含 PUSH，另给 `weightedHitRate`。
+- **哈希结构只能追加不能修改**：V4 = V3 字段序 + 十列（6 位定标）。全非空 → v4、全空 → v3、部分为空抛错。`verifyStoredHash` 必须回落认「十列已填但哈希按 v3 算」的存量行。
+- **「部分为空抛错」会让单边方向的早期亚盘行永远发不出去**：只发布让球方向、大小球无方向时，`model_over_prob`/`market_over_prob`/`edge_over`/`totals_dispersion` 四列为空而其余六列有值 → 算不出 `prediction_hash` → 撞 `ck_predictions_publish_lifecycle`。实测 `predictions.id=41`（周三004）、`48`（周三013）属此形态。已发布的 10-22 那批（49~61）十列全填，说明生成侧现在会双边都算；**判一个 DRAFT 行能否合法发布，先查十列是否全填**。
+- **`ck_predictions_publish_lifecycle` 要求四样同时写**：`DRAFT` 时 `publish_time`/`lock_time`/`prediction_hash` 全为 NULL，`PUBLISHED`/`LOCKED` 时三者全非空且 `publish_time < lock_time`。所以「先补 `lock_time` 再改状态」必失败，唯一合法入口是 `PredictionMapper.publishDraft`。
+- **批量写操作按 `(matchId, predictionId)` 升序串行 + 逐条独立事务**：同场多条都要更新 `matches` 行，并发反向拿锁会死锁。前端必须按 ID 回填（服务端会重排）。
 - **`switch` 语句必须补 `default` 抛错**：Java 箭头 `switch` **语句**不要求穷尽、编译不报错，新增枚举值被静默丢弃。
-- **后台盘口阶梯必须复用生成侧的查询与聚合器**：自己取「最新一条快照」再算，看到的就不是模型当时用的数据，而这个页面的唯一用途就是核对它们。冻结行未必在主盘线上（只有一家报到的档位达不到最少家数）。
+- **后台盘口阶梯必须复用生成侧的查询与聚合器**，否则看到的不是模型当时用的数据。
+- **历史复盘不要写 `settlements`**：从未真实发布的行（`DRAFT`/`lock_time` 空/无发布审计）一旦进结算表，公开统计的命中率与 Brier 会把「文档里的模型输出」当成「已发布产品」计入，事后无法区分。正确做法是用生产纯函数算（`AsianMarketTermsResolver.resolve` → `MarketSettlementCalculatorRouter.calculate` → 净利按 `SettlementMarginSupport.netProfit` 同规则换算），结果落文档。注意 `SettlementMarginSupport` 是**包内私有**，`com.jingcaicompass.tools` 下的脚手架调不到，只能复述换算规则。
+- **10-21 那 8 场（id 41~48）实测复盘**：1 命中 / 2 走盘 / 7 未中，加权命中率 `0.2500`、净利 `-6.17`；唯一命中是周三008 的大球 3.50。两个走盘都在整数让球盘（008 主 -2.00 净胜 2、009 主 -1.00 净胜 1），是结构不是判对。8 场总进球均值 3.75 而 5 个大小球方向有 4 个小球 → 该读成「市场当天整体低估进球」。
 
-## 数据源现状（2026-10-21 核实，纠正一个常见误解）
+## NovaAPI 单源：接口字段的硬约束（抓包 + 官方文档双核实）
 
-- **NovaAPI 从未进入生产代码**。`grep -ril nova backend/src/main/java` 结果为 **0**；`AsianOddsProviderTypeEnum` 只有 `STUB` / `THE_ODDS_API`；`AsianOddsProvider` 的实现只有 `StubAsianOddsProvider` 与 `TheOddsApiProvider`；`application-local.yml` 的 `provider` 仍是 `THE_ODDS_API`。NovaAPI 只以三种形态存在：`tools/novaapi-probe/`（独立探测程序，不在构建路径）、`backend/src/test/resources/asianodds/novaapi-*.json` + `NovaApiOddsFixture`（离线夹具）、`tools/NovaAsianRunTest.java`（未入库、需环境变量的一次性实跑脚手架）。
-- **T613 覆盖的是「快照之后」的全部环节**：跨庄聚合选主盘 → λ 反解与投影 → 发布门 → 结算 → 统计与双 Brier。它**不涉及一行数据采集代码**。所谓「T613 用 3 场 NovaAPI 真实抓包验收」，验的是模型数学对不对（夹具喂纯计算类），不等于生产里会调 novaapi。
-- **在产数据链是三段拼起来的**：赛程 `sporttery.cn`（`SportteryPoolSyncJob` → `DataPipelineSyncJob`）、赛果 `sporttery.cn`（`MatchResultSyncJob` → `SportteryMatchResultPayloadMapper`）、亚盘赔率 `THE_ODDS_API`（`AsianOddsSyncJob`）。三者靠 `match_source_mappings` 人工缝合，这就是 `跑真实预测的前置条件` 里那条映射硬阻塞的来源。
-- **NovaAPI 是单源**：赛程 / 赔率 / 赛果共用同一个 `matchId`。一旦切过去，`match_source_mappings`、`provider_team_mappings`、`league_aliases`、`team_aliases`、归一化评审与 `name_key`（V4/V5/V14/V15/V16/V17/V19/V22）在业务上全部失去存在理由——用户 2026-10-21 明确表示要把这批关联去掉。
-- 判断原则：**下排（模型/结算/统计）不要动，上排（采集/映射）可以整体替换**。两者唯一契约是 `asian_odds_snapshots` 的行形状与「冻结行必须是真实报价」这条，换源不影响模型。
+1. **`matchStartDate` 才是实际开赛日期**，`matchDate` 是竞彩业务日。2026-10-21 抓包 13 场里 **10 场跨零点**。开赛时间必须 `matchStartDate + matchTime` 按 `Asia/Shanghai` 拼。
+2. **`matchStatus` 是销售状态不是比赛状态**（`Selling`/`SoldOut`/`Closed`）→ 映射 switch 必须显式处理 `SoldOut` 并带 `default` 抛错。赛程接口没有「比赛是否结束」字段，`matches.match_status=FINISHED` 只能由赛果写入方设置。
+3. **赛果有两套队名**：`allHomeTeam`/`allAwayTeam` = 全称、`homeTeam`/`awayTeam` = 简称。赛程 `homeTeamName` 对应**全称**，用简称会静默改写 `matches` 队名。
+4. **`poolStatus` 跨接口同名不同义**：赛程里是玩法销售状态、赛果里是奖池派奖状态。赛果 21 场里 **2 场 `poolStatus` 为空但 `sectionsNo999` 与 `matchResultStatus=2` 齐全** → 用它过滤结算会静默漏单。
+5. **字段类型会漂移**：`sellStatus` 是字符串 `"2"`；`leagueId` 文档写 String 实际是数字。一律 `asText()` 读——`asInt()` 读文本会静默变 0。
+6. **`sectionsNo999` = 竞彩 90 分钟比分（已实证）**。2026-10-21 解放者杯 `2042118`（`tfStatusShort=PEN`）：竞彩开奖 `0:1` = `soccer-events.ftHomeScore` `0:1`，≠ 点球 `5:3`。守卫在 `NovaApiMatchResultScoreScopeTest`。
+7. **赛果 `matchDate` 是开赛自然日，不是竞彩业务日**（与赛程 `matchDate` 同名不同义）。10-21 业务日 13 场里 10 场跨零点，赛果返回 `matchDate=10-22`。按 `(matchDate, matchNumStr)` 定位会**查不到**这 10 场（编号带业务日星期前缀，不会串场；但相差整数周的同名场次会撞）→ **定位只能用 `matchId`（= `matches.external_match_id`）**。
+8. **`/nova/text/match-results` 只返回已开奖场次**：未来日期返回 `results: []`，同日 13 场赛程只有 10 场已开奖。故「有记录」=「已开奖」，`matchResultStatus` 实测 31/31 为 `2`；非 `2` 时解析器**整体失败**（逐条跳过会让该场永久停在 PENDING）。
+9. **`etHomeScore/etAwayScore` 是加时阶段自身比分，不是累计**：`2042118` `ft=0:1` 而 `et=0:0`，若按累计理解不可能小于 `ft`。任何 `ft + et` 换算都会重复计入加时进球。
 
-## NovaAPI 单源改造：接口字段的硬约束（2026-10-21 抓包 + 官方文档双核实）
+- `/nova/tf/odds?matchId=` **一场一次调用**即返回全部机构×全部玩法（`marketId=4` 亚盘让球、`5` 大小球、`1` 胜平负）。`data.matchId` 就是竞彩 matchId，`data.idEvent` 是 Nova 内部 ID。
+- 让球 `line` = **主队让球数**（负=主让），同档 Home/Away 文本相同；`Over/Under` 大小球同 line。与 `AsianOddsLineDto.handicapLine`「主队让球为负」契约天然一致，直接用。
+- **文档读取方法**：`https://novaapi.tsgnkj.com/` 是 Vite SPA，字段说明内嵌在 `/assets/index-*.js` bundle 里，没有独立 API 端点。抓 bundle 按字段名定位明文描述。
 
-改造计划在 `~/.workbuddy/plans/quantum-thunder-einstein-9P5tHcJF.md`（6 阶段：V25 → 赛程 → 赔率+去JOIN → 自动发布 → 赛果结算 → 删映射层）。下面六条是抓真实响应 + 读官方文档交叉确认过的，**违反任意一条都不会报错，只会长期算错**：
+## 单源改造进度与事实
 
-1. **`matchStartDate` 才是「实际比赛日期」**（文档原话），`matchDate` 是竞彩业务日。2026-10-21 抓包 13 场里 **10 场跨零点**（业务日 10-21、开赛 10-22）。开赛时间必须 `matchStartDate + matchTime` 按 `Asia/Shanghai` 拼；用业务日会让 77% 的场次早 24 小时。
-2. **`matchStatus` 是销售状态不是比赛状态**，文档全集 `Selling`/`SoldOut`/`Closed`。当日只观测到 `Selling`(10)/`Closed`(3)，`SoldOut` 一次未出现 → 映射 switch 必须显式处理它**并带 `default` 抛错**（箭头 switch 语句漏取值不报错）。**赛程接口压根没有「比赛是否结束」字段**，真正的比赛状态只在 `/nova/text/live` 的 `matchStatus`/`matchStatusName`；故 `matches.match_status=FINISHED` 只能由赛果写入方设置。
-3. **赛果有两套队名**：文档明确 `allHomeTeam`/`allAwayTeam` = 全称、`homeTeam`/`awayTeam` = 简称。赛程 `homeTeamName` 对应**全称**（3/3 一致），简称 2/3 不一致（`大宫松鼠RB`→`大宫松鼠`、`神户胜利船`→`神户胜利`，主客两侧都可能差）。用简称会静默改写 `matches` 里的队名。
-4. **`poolStatus` 跨接口同名不同义**：赛程 `matchPoolList[].poolStatus` = 玩法销售状态（Selling/Closed/Suspended）；赛果 `poolStatus` = 奖池派奖状态。赛果 21 场里 **2 场 `poolStatus` 为空但 `sectionsNo999` 与 `matchResultStatus=2` 齐全** → 用它过滤结算会静默漏单，判据应是「`sectionsNo999` 合法 + `matchResultStatus`」。
-5. **字段类型会漂移**：`sellStatus` 是字符串 `"2"`（文档也是 String）；`leagueId` 文档写 String 但抓包实际是数字 `42`。一律 `asText()` 读取——用 `asInt()` 读文本会静默变 0。
-6. **`sectionsNo999` 是否含加时仍是未验证推断**：文档只写「全场比分」。判它 = 90 分钟的依据是「同响应带 `winFlag`/`oddsResults`（竞彩开奖明细）⇒ 与竞彩口径一致」。**阶段 4 收尾前必须用一场真实打过加时的杯赛样本复核**，否则长期污染 ROI/Brier。
+- 阶段 0（V25 迁移）、阶段 1（赛程）、阶段 2（赔率）、阶段 3（自动发布）、**阶段 4（赛果与结算，`600f3dc`）** 已完成并推送。**阶段 4 实跑 2026-10-22 通过**：首轮 `SUCCESS 23/23`（`appended=10/unchanged=13`）、次轮 `appended=0/unchanged=23`、13 条事实全 `FINAL/REGULATION_90/OFFICIAL`、13 场 `FINISHED` 且比分与开奖一致、跨零点 10 场全部按 `external_match_id` 命中。**阶段 2 实跑验收 2026-10-22 通过**：13 场真实同步 2052 行交叉积快照、两轮增量 `2052→0`、13 场预测全部冻结在 `pinnacle` 真实行、开赛后 `skippedLive=12` 且零新增。**阶段 3 实跑验收同日通过**：13 候选全发布、次轮 `NO_PENDING_MATCH` 短路、每场仅 1 条 PUBLISHED、审计操作者 `system:auto-publish`。
+- **`quota_cost` 曾恒为 0（已修）**：`ProviderHttpExecutor` 只按响应头解析额度（The Odds API 的 `x-requests-*` 约定），NovaAPI 不返回任何额度头 → 5000 次/日上限不可见。修法在 `NovaApiClient.get()` 单点按「请求 1 + 每次重试 1」计。**换源时要检查新源的额度口径是否也走响应头**，否则额度监控静默失效。
+- **赔率取数与落库的四条硬约束（阶段 2 建立）**：
+  1. `/nova/tf/odds?matchId=` **一场一次调用**即返回全部机构×玩法，额度 = 场次数；`data.matchId` 是竞彩 ID、`data.idEvent` 是 Nova 内部 ID。不要照搬 The Odds API 的「按联赛 sport key 批量拉」。
+  2. **`line` 是主队让球数，不取反**。The Odds API 的让球两侧互为相反数，NovaAPI 同档两侧 `line` **文本完全相等**；照搬旧配对逻辑会 100% 判 `INCONSISTENT_SPREAD_PAIR`（表现为「解析成功但零条 line」）。
+  3. **落库形态是交叉积**（让球线 × 大小球线），因为冻结行要求同一行同时具备两个市场。配套必须同时改 V25 唯一键与 `AsianOddsSnapshotWriter` 去重维度（含 `total_line` + `IS NULL`），否则每轮把整批重插一遍且数据库不报错。
+  4. **大小球保留档按「跨庄去水概率离 50/50 的距离」取前 4，不按报出家数**。按家数会选中 `1.5/2.5/3.5/4.5`（每家都报的稀疏整数盘），把真正的四分盘主盘 `2.75/3.0` 排掉 → 聚合器把主盘定到 2.5，一切看起来正常但共识已错。
+- **`code != 200` 必须整体失败**：NovaAPI 把「密钥过期」放在响应体而 HTTP 仍是 200，逐场降级会让同步记录显示成功、快照 0 条。单场 404 才降级为该场的 `parseError`。同理，`NovaApiOddsProvider` 遇到 HTTP 401/403 立即抛错，不把同一份凭据问题刷 N 遍。
+- **三条读查询不再 JOIN `match_source_mappings`，改按 `provider_code` 过滤**。这个过滤不是可选优化：聚合器去重键是 `(bookmaker, line)` 不含 provider，混源的同名庄会互相覆盖并一起进中位数。过滤值来自 `ActiveAsianOddsProvider`（构造自 `app.asian-odds.provider`）。
+- **NovaAPI 赔率响应没有「是否滚球」标志**，只能在同步侧用 `matches.kickoff_time` 判赛前；否则开赛后的赔率会被当成赛前共识写进快照，下游任何校验都发现不了。
+- **`NovaApiClient` 的装配条件是 OR**（`app.sporttery.provider=nova` 或 `app.asian-odds.provider=NOVA_API`），见 `NovaApiEnabledCondition`。限速（30 次/分 → 固定 2 秒间隔）也放在这个客户端里，因为赛程/赔率/赛果共用同一份额度。
+- **`matches` 必须写全 `league_id`/`home_team_id`/`away_team_id`**：联赛下拉由前端从 `match.leagueId !== null` 反推，不填会让筛选**静默消失**。字典解析由 `MatchReferenceDictionary` 负责（缓存只到一次 `writeAll`；名字为空时保留既有归属）。
+- **不给 `leagues.name_zh`/`teams.name_zh` 加唯一索引**：多处 IT 用固定名插入，本机无 Docker 跑不了 IT，加约束只会在 CI 才暴露。这是「本机验证能力决定迁移激进度」的一般原则。
+- **迁移类 IT 禁止 `flyway(null).migrate()` + 断言迁移数**：一律 `flyway("<target>")` 限定目标版本；全量末版本断言只留 `PostgresApplicationIT` 一处（加迁移必须同步改）。
+- `backend/src/main/java/db/migration/` 下有 Java 版 Flyway 迁移（V22），新建 SQL 前先 `ls` 避免撞号。当前最高 **V25**。
+- **赛果落库的三条约定（阶段 4 建立）**：
+  1. **`amended=true`**：单源之后比分变化只可能是竞彩改判，`amended` 守卫原本防的是跨源误读。仍生效的两条：终态不得回退 `PENDING`、官方事实不得被人工事实替代。
+  2. **`providerUpdatedAt` 取响应信封 `timestamp`**（该接口没有逐条更新时间）。用信封时间戳而非 `now()`，同一份载荷回放保持幂等，审计时间也不漂移。
+  3. **`score_scope` 不主动写**（保持 V25 的 DB 默认 `REGULATION_90`）：口径由「解析器只读 `sectionsNo999`」在边界保证，写常量不增加信息。
+- **赛果窗口按开赛自然日覆盖** → 业务日 D-1 的跨零点场次会出现在 D 的窗口里。D-1 赛程没采集过时这批会记 `match not found`（实测 `data_sync_runs.id=52/53`：`23/13/10`），**新库上线先补采前一天赛程**（补采后 `id=56/57` → `SUCCESS 23/23`）。
+- **`prediction_status` 有 DB 触发器只允许 `DRAFT → PUBLISHED`**，别想用 SQL 直接置 `LOCKED` 走捷径；发布服务同时校验「发布截止时间」与「比赛状态为 SCHEDULED/LOCKED」，所以**历史 DRAFT 永远补不回来**。
+- **生成是条件幂等**（阶段 3 修正）：`generatedAt` 取自已持久化特征快照，赔率快照没变时重跑命中同一 `generationBatchHash` → `reused=N / inserted=0`；只有赔率刷新后快照变了才插新批次、版本号按 `MAX(version)+1` 递增。所以 `regenerate-interval` 的真实价值是**省掉无谓的生成计算**，不是防批次爆炸。亚盘同步则是**追加快照**，重跑后方向/置信度可能翻转（不是 bug）。
 
-**文档读取方法**（下次不用再摸索）：`https://novaapi.tsgnkj.com/` 是 Vite SPA，字段说明全部内嵌在 `/assets/index-*.js` bundle 里，没有任何独立 API 端点（`/docs`、`/swagger` 等一律回落 200）。抓 bundle 后按字段名（如 `matchStatus`、`sectionsNo999`）定位明文 JSON 描述，比抓页面或猜路径可靠。
+## 已知待办 / 未收口
 
-**已落地的夹具**：`sporttery/novaapi-schedule-2026-10-21.json`（13 场）与 `sporttery/novaapi-match-results-2026-10-20-to-21.json`（21 场），配套 `NovaApiScheduleFixture`/`NovaApiMatchResultFixture` 与两个守卫测试（12 项），把上述规则钉成回归断言。`SportteryPoolSyncItemDto` 已有 `externalMatchId`、`SportteryMatchResultDto` 已有 `matchId`，阶段 1/4 的 DTO 改动量为 0。
-
-## 跑真实预测的前置条件（2026-10-21 实操确认）
-
-- **亚盘快照要求比赛映射已确认**：`AsianOddsSyncServiceImpl` 对 `!isConfirmed(mapped)` 直接 `skippedUnmapped++`，而自动确认要求 score ≥ 0.85，打分只做 id / 队名的**精确相等**比较 → 中英文队名永远拿不到分。**每次跑新比赛前必须人工写 `match_source_mappings`（`MANUAL_CONFIRMED` + `MANUAL_REVIEW`），目前没有 admin 接口，只能用 SQL 或一次性运行类。** 对应地，`provider_team_mappings` 里 68 条 THE_ODDS_API 记录全是 `PENDING`，不要指望复用。
-- **联赛 sport key 必须对得上赛季阶段**：`app.asian-odds.the-odds.league-sport-keys` 的欧冠要指向 `soccer_uefa_champs_league`（正赛），不是 `_qualification`；西甲需补 `soccer_spain_la_liga`。YAML 里 `"[欧冠]":` 的方括号是引号语法，map key 实际是 `欧冠`，与 `matches.league_name` 一致。
-- **生成不幂等**：`generationBatchHash` 含 `generatedAt`，重跑会插入新批次。要么先删当日 DRAFT，要么导出时按 `match_id` 取 `id` 最大的一条。
-- **亚盘同步是追加快照**：每次同步都写新行，冻结行会随最新报价变化，因此同一场比赛重跑后方向/置信度可能翻转。这不是 bug，但对比两次结果时必须先确认快照时间。
-
-## 迁移编号陷阱
-
-- `backend/src/main/java/db/migration/` 下有 **Java 版 Flyway 迁移**（`V22__RepairLegacyNameKeyIdentityCleanup`）。新建 SQL 迁移前先 `ls` 这个目录，否则会撞号并报 `Found more than one migration with version <n>`。
-- 当前最高版本：**V24**（亚盘模型概率输出 10 列）。V23 = 亚盘结算市场与 profit。
-- `PostgresApplicationIT` 会断言迁移总数与末版本号，**每次加迁移必须同步改**（阶段 A 加 V23 后它红了一整个阶段没人发现，因为只跑定向 IT）。
-
+- 邻线校验口径（整条阶梯取最大 vs 主盘 ±0.75）**本轮不改代码**，结论写进 `docs/asian-model-design.md`，待下一阶段连同 `neighbor-tolerance` 取窗口一起处理。
+- 一次性实跑脚手架 `backend/src/test/java/com/jingcaicompass/tools/` 下文件保持未跟踪（会让本地单测数比 CI 多 1~2，别误判）。已写入 `.gitignore`（连同含明文库凭据的 `tools/verify-stage2/`），不再依赖自觉。
+- 阶段 5：删映射层与旧数据源（`match_source_mappings` 结构保留、停止写入；`ChinaSportteryProvider`、`TheOddsApiProvider`、5 个映射/归一化服务、后台页面）。
+- 阶段 4 唯一欠的证据：**官方赛果 → 锁定 → 结算的全链真跑**。10-21 那批（41~48）已用结算纯函数补算并落文档（不落库，见上），但仍不算全链证据；10-22 的 13 条 `PUBLISHED`（开赛 10-23 00:45）次日自然锁定结算后补证据。
+- `docs/business-data-flow.md` 仍在描述映射层（阶段 5 一起改），阶段 4 没有动它。

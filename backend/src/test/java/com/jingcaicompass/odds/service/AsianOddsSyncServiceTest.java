@@ -102,7 +102,7 @@ class AsianOddsSyncServiceTest {
         service = new AsianOddsSyncServiceImpl(
                 asianOddsProvider,
                 providerSyncTemplate,
-                new AsianOddsPayloadMapper(objectMapper),
+                new AsianOddsPayloadMapper(objectMapper, new NovaApiOddsPayloadMapper()),
                 snapshotWriter,
                 matchMappingService,
                 leagueNormalizationService,
@@ -130,7 +130,7 @@ class AsianOddsSyncServiceTest {
         service = new AsianOddsSyncServiceImpl(
                 asianOddsProvider,
                 providerSyncTemplate,
-                new AsianOddsPayloadMapper(objectMapper),
+                new AsianOddsPayloadMapper(objectMapper, new NovaApiOddsPayloadMapper()),
                 snapshotWriter,
                 matchMappingService,
                 leagueNormalizationService,
@@ -199,7 +199,7 @@ class AsianOddsSyncServiceTest {
         service = new AsianOddsSyncServiceImpl(
                 asianOddsProvider,
                 providerSyncTemplate,
-                new AsianOddsPayloadMapper(objectMapper),
+                new AsianOddsPayloadMapper(objectMapper, new NovaApiOddsPayloadMapper()),
                 snapshotWriter,
                 matchMappingService,
                 leagueNormalizationService,
@@ -234,7 +234,7 @@ class AsianOddsSyncServiceTest {
                 new AsianOddsProviderProperties.RetryProperties(2, Duration.ofMillis(500)), 0,
                 new AsianOddsProviderProperties.TheOddsProperties(Map.of("英超", "soccer_epl"), 400));
         service = new AsianOddsSyncServiceImpl(asianOddsProvider, providerSyncTemplate,
-                new AsianOddsPayloadMapper(objectMapper), snapshotWriter, matchMappingService,
+                new AsianOddsPayloadMapper(objectMapper, new NovaApiOddsPayloadMapper()), snapshotWriter, matchMappingService,
                 leagueNormalizationService, teamNormalizationService, matchMapper, asianOddsSnapshotMapper,
                 dataSyncRunMapper, properties, objectMapper);
         MatchEntity lotteryMatch = new MatchEntity();
@@ -288,7 +288,8 @@ class AsianOddsSyncServiceTest {
         match.setLotteryDate(LocalDate.of(2026, 7, 22));
         match.setKickoffTime(Instant.parse("2026-07-22T11:30:00Z"));
         when(matchMapper.selectList(any(Wrapper.class))).thenReturn(List.of(match));
-        when(dataSyncRunMapper.selectList(any(Wrapper.class))).thenReturn(List.of());
+        // 额度累加只对 The Odds API 生效；STUB 路径不该去读历史 sync run，
+        // 这里刻意不 stub dataSyncRunMapper，用 UnnecessaryStubbing 反向守住这条分支。
         when(asianOddsSnapshotMapper.selectCount(any(Wrapper.class))).thenReturn(1L);
 
         when(matchMappingService.findConfirmed("STUB", "asian-stub-001")).thenReturn(

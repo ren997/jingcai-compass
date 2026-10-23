@@ -88,11 +88,17 @@
 - **生成是条件幂等**：`generatedAt` 取自已持久化特征快照，赔率没变时重跑命中同一 `generationBatchHash` → `reused=N / inserted=0`。`regenerate-interval` 的真实价值是省掉无谓计算，不是防批次爆炸。亚盘同步则是**追加快照**，重跑后方向/置信度可能翻转（不是 bug）。
 - `backend/src/main/java/db/migration/` 下有 Java 版 Flyway 迁移（V22），新建 SQL 前先 `ls` 避撞号。当前最高 **V25**。
 
-## NovaAPI 探针与凭据
+## NovaAPI 探针与本地实跑手法
 
-- 探针 `tools/novaapi-probe/NovaApiProbe.java`（单文件直接 `java` 跑），`raw <path> <query>` 模式可打任意端点，产物落 `novaapi-probe-out/<timestamp>/`。
-- 凭据经**环境变量**传入（`NOVA_API_KEY` / `NOVA_PRIVATE_KEY_B64`），**不落盘**；日卡会过期，过期后需用户重新下发。
+- 探针 `tools/novaapi-probe/NovaApiProbe.java`（单文件直接 `java` 跑），`raw <path> <query>` 可打任意端点，产物落 `novaapi-probe-out/<timestamp>/`（文件名把 `/` 和 `-` 都转成 `_`，别按字面猜）。
+- 赛程端点 `/nova/sports-lottery/all-list?date=`，`data` 是**数组**，每项含 `matchMain` / `matchOddsList` / `matchPoolList`。
+- 凭据经**环境变量**传入，**不落盘**：应用侧 `NOVA_API_KEY` / `NOVA_PRIVATE_KEY`，探针用 `NOVA_PRIVATE_KEY_B64`（值同为 base64 PKCS8）。日卡会过期，过期需用户重新下发。
+- **本地跑单源必须用 `@SpringBootTest(properties=...)` 覆盖 provider**：`application-local.yml` 里 `app.sporttery.provider` / `app.asian-odds.provider` 是硬编码字符串（非 `${ENV:default}`），yml 优先级高于 application.yml 占位符 → 环境变量 `SPORTTERY_PROVIDER` / `ASIAN_ODDS_PROVIDER` **无效**。
+- 全链路一步到位：`SportteryPoolSyncService.sync(new SportteryPoolSyncRequestDto(d))` → `AsianOddsSyncService.sync(new AsianOddsSyncRequestDto(d))` → `PredictionAutoPublishOrchestrator.run(d)`（内部含生成节流，且生成与发布分两次独立提交）。
 - 赛果抓包存档命名：`backend/src/test/resources/sporttery/novaapi-match-results-<start>-to-<end>.json`。
+- **本地 `app.tasks.enabled=false`，所有定时 Job 全关**：已发布预测开赛过后仍停在 `PUBLISHED`（`lock_time` 有值但不转 `LOCKED`），既不自动锁定/结算也不自动更新——**每天必须手动跑**。「锁定后首页 500」那个 P0 因此在本地从未触发，但上线前必须先确认它是否还在。
+- **修复后口径的线上形态（2026-10-23 首批验证）**：8 条已发布预测的让球与大小球 `edge` 全为 `0.000000`，模型概率与市场概率逐位相等。同时出现两种「不发」的正常形态：① 开赛后才同步赔率的场次直接丢弃；② 主盘档两侧水位在 `1.90~1.98` 平衡区的场次，两个市场都判 LOW → **整场跳过**（当天 12 场里 3 场属此类）。**「场场都有方向」才是异常。**
+- **导出盘口必须标明侧别**：让球写「主 X @y / 客 -X @z」，大小球写「线 大 @a / 小 @b」；只写 `(y/z)` 读者无法判断哪边是大球。
 
 ## 已知待办 / 未收口
 

@@ -5,14 +5,10 @@ import com.jingcaicompass.prediction.vo.PredictionAutoPublishVo;
 import com.jingcaicompass.system.observability.JobMetrics;
 import java.time.LocalDate;
 import java.time.ZoneId;
-import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 
 /**
  * 定时把当天的预测从 DRAFT 自动推进到 PUBLISHED。
@@ -22,10 +18,16 @@ import org.springframework.stereotype.Component;
  *
  * <p>「当天」按竞彩业务日（Asia/Shanghai）取，与赛程同步、赔率同步用的是同一个日期口径。
  * 用 UTC 或系统默认时区会让跨零点的场次错一天——实测 13 场里有 10 场开赛时间跨零点。</p>
+ *
+ * <p><b>本类刻意不加 {@code @Component}</b>：它由
+ * {@code PersistenceServicesAutoConfiguration} 以 {@code @Bean} + {@code @ConditionalOnProperty}
+ * 提供，与其他七个任务保持一致。历史上这里是 {@code @Component} 配
+ * {@code @ConditionalOnBean(PredictionAutoPublishOrchestrator.class)}，而编排器是配置类里的
+ * {@code @Bean}——组件扫描阶段该 bean 尚未注册，条件恒为 false，于是<b>这个任务从未被创建过</b>：
+ * 库里自 2026-10-23 之后没有任何新预测，首页永远显示「暂无已发布亚盘预测」，且完全没有任何
+ * 报错。{@code @ConditionalOnBean} 只对自动配置类可靠，用普通组件上时必须假设它按注册顺序
+ * 求值。</p>
  */
-@Component
-@ConditionalOnBean({DataSource.class, PredictionAutoPublishOrchestrator.class})
-@ConditionalOnExpression("${app.tasks.enabled:false} && ${app.tasks.prediction-auto-publish.enabled:false}")
 public class PredictionAutoPublishJob {
 
     private static final Logger log = LoggerFactory.getLogger(PredictionAutoPublishJob.class);

@@ -13,9 +13,21 @@ import java.time.ZoneId;
 import java.util.Map;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
 
-/** 自动发布 Job 的开关语义与「按竞彩业务日取当天」的日期口径。 */
+/**
+ * 自动发布 Job 的开关语义与「按竞彩业务日取当天」的日期口径。
+ *
+ * <p>开关不再写在 Job 类上：{@code @Component} + {@code @ConditionalOnBean} 在组件扫描阶段
+ * 会因编排器（配置类里的 {@code @Bean}）尚未注册而恒为 false，导致任务静默不创建。
+ * 现在开关由 {@code PersistenceServicesAutoConfiguration} 的 {@code @Bean} 承担，
+ * 这里用等价的内嵌配置复现同一组属性语义；生产配置的注解形态由
+ * {@link PredictionAutoPublishJobWiringTest} 单独锁住。</p>
+ */
 class PredictionAutoPublishJobTest {
 
     private static final ZoneId SHANGHAI = ZoneId.of("Asia/Shanghai");
@@ -24,7 +36,26 @@ class PredictionAutoPublishJobTest {
             .withBean(DataSource.class, () -> mock(DataSource.class))
             .withBean(PredictionAutoPublishOrchestrator.class, () -> mock(PredictionAutoPublishOrchestrator.class))
             .withBean(JobMetrics.class, JobMetrics::noop)
-            .withUserConfiguration(PredictionAutoPublishJob.class);
+            .withUserConfiguration(JobSwitches.class);
+
+    /** 与 {@code PersistenceServicesAutoConfiguration#predictionAutoPublishJob} 完全同形。 */
+    @Configuration(proxyBeanMethods = false)
+    static class JobSwitches {
+
+        @Bean
+        @ConditionalOnMissingBean
+        @ConditionalOnProperty(
+                prefix = "app.tasks",
+                name = {"enabled", "prediction-auto-publish.enabled"},
+                havingValue = "true"
+        )
+        PredictionAutoPublishJob predictionAutoPublishJob(
+                PredictionAutoPublishOrchestrator predictionAutoPublishOrchestrator,
+                JobMetrics jobMetrics
+        ) {
+            return new PredictionAutoPublishJob(predictionAutoPublishOrchestrator, jobMetrics);
+        }
+    }
 
     @Test
     void createsJobOnlyWhenGlobalAndAutoPublishSwitchesAreEnabled() {

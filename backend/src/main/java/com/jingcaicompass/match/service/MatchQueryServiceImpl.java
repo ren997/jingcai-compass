@@ -19,9 +19,12 @@ import com.jingcaicompass.match.vo.MatchListItemVo;
 import com.jingcaicompass.match.vo.MatchPredictionSummaryVo;
 import com.jingcaicompass.match.vo.MatchSummaryVo;
 import com.jingcaicompass.match.vo.SportteryMarketVo;
+import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
+import com.jingcaicompass.odds.service.AsianFreezeSnapshotSelector;
+import com.jingcaicompass.odds.service.AsianMarketConsensusAggregator;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
@@ -60,6 +63,9 @@ public class MatchQueryServiceImpl implements MatchQueryService {
     private final RawDataPayloadMapper rawDataPayloadMapper;
     private final PaginationProperties paginationProperties;
     private final ActiveAsianOddsProvider activeAsianOddsProvider;
+    /** 与生成侧同一套跨庄聚合与选行规则，保证首页展示的「主盘」就是模型真正用的那条线。 */
+    private final AsianMarketConsensusAggregator consensusAggregator;
+    private final AsianFreezeSnapshotSelector freezeSnapshotSelector;
 
     public MatchQueryServiceImpl(
             MatchMapper matchMapper,
@@ -70,6 +76,28 @@ public class MatchQueryServiceImpl implements MatchQueryService {
             PaginationProperties paginationProperties,
             ActiveAsianOddsProvider activeAsianOddsProvider
     ) {
+        this(
+                matchMapper,
+                sportterySnapshotMapper,
+                asianOddsSnapshotMapper,
+                predictionMapper,
+                rawDataPayloadMapper,
+                paginationProperties,
+                activeAsianOddsProvider,
+                AsianOddsAggregationProperties.defaults()
+        );
+    }
+
+    public MatchQueryServiceImpl(
+            MatchMapper matchMapper,
+            SportteryPoolSnapshotMapper sportterySnapshotMapper,
+            AsianOddsSnapshotMapper asianOddsSnapshotMapper,
+            PredictionMapper predictionMapper,
+            RawDataPayloadMapper rawDataPayloadMapper,
+            PaginationProperties paginationProperties,
+            ActiveAsianOddsProvider activeAsianOddsProvider,
+            AsianOddsAggregationProperties aggregationProperties
+    ) {
         this.matchMapper = matchMapper;
         this.sportterySnapshotMapper = sportterySnapshotMapper;
         this.asianOddsSnapshotMapper = asianOddsSnapshotMapper;
@@ -77,6 +105,11 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         this.rawDataPayloadMapper = rawDataPayloadMapper;
         this.paginationProperties = paginationProperties;
         this.activeAsianOddsProvider = activeAsianOddsProvider;
+        AsianOddsAggregationProperties effective = aggregationProperties == null
+                ? AsianOddsAggregationProperties.defaults()
+                : aggregationProperties;
+        this.consensusAggregator = new AsianMarketConsensusAggregator(effective);
+        this.freezeSnapshotSelector = new AsianFreezeSnapshotSelector(effective);
     }
 
     @Override
@@ -191,15 +224,76 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         return result;
     }
 
+    /**
+     * 装配每场的「当前亚盘主盘」。
+     *
+     * <p><b>不能再取「最新一条快照」</b>：落库是 (让球线 × 大小球线) 的交叉积，同一次同步里
+     * 最后写入的那一行只是表里的最大 {@code id}，与哪条线最平衡无关。此前用
+     * {@code selectLatestCompleteLinesByMatchIds + DISTINCT ON (match_id) ORDER BY captured_at DESC}
+     * 取单行，首页因此长期显示错误的档位——2026-10-25 实测：福图纳锡塔德 vs SBV 精英
+     * 真实主盘是 0（主 1.87 / 客 1.80），首页显示 +0.5（主 1.48 / 客 2.41）；国际米兰 vs
+     * 佛罗伦萨真实主盘 -1.5，首页显示 -2.5。两场都恰好是 betvictor 在交叉积里最后写入的那一行。</p>
+     *
+     * <p>这里复用生成侧的 {@link AsianMarketConsensusAggregator} 与
+     * {@link AsianFreezeSnapshotSelector}，而不是另写一套「挑最平衡的线」：首页展示的主盘必须是
+     * 模型实际决策并结算的那一行，否则用户看到的盘口与预测绑定的盘口会是两条线。</p>
+     *
+     * @return 每场的主盘快照行；共识线上没有任何机构报出完整水位时该场缺席（宁可显示「无亚盘」，
+     *         也不显示一条不会用于决策的线）
+     */
     private Map<Long, AsianOddsSnapshot> loadLatestAsianMainMarkets(Collection<MatchEntity> matches) {
         List<Long> matchIds = matchIds(matches);
         if (matchIds.isEmpty()) {
             return Map.of();
         }
-        return asianOddsSnapshotMapper
-                .selectLatestCompleteLinesByMatchIds(matchIds, activeAsianOddsProvider.providerCode())
-                .stream()
-                .collect(Collectors.toMap(AsianOddsSnapshot::getMatchId, snapshot -> snapshot));
+        List<AsianOddsSnapshot> rows = asianOddsSnapshotMapper.selectLatestCrossProductLinesByMatchIds(
+                matchIds, activeAsianOddsProvider.providerCode());
+        if (rows.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, List<AsianOddsSnapshot>> byMatch = rows.stream()
+                .filter(row -> row.getMatchId() != null)
+                .collect(Collectors.groupingBy(
+                        AsianOddsSnapshot::getMatchId, java.util.LinkedHashMap::new, Collectors.toList()));
+        Map<Long, AsianOddsSnapshot> mainMarkets = new HashMap<>();
+        for (Map.Entry<Long, List<AsianOddsSnapshot>> entry : byMatch.entrySet()) {
+            selectMainMarket(entry.getValue())
+                    .ifPresent(row -> mainMarkets.put(entry.getKey(), row));
+        }
+        return mainMarkets;
+    }
+
+    /** 跨庄聚合定共识线，再落到真实报出该线的某一行上。 */
+    private java.util.Optional<AsianOddsSnapshot> selectMainMarket(List<AsianOddsSnapshot> rows) {
+        List<AsianMarketConsensusAggregator.Quote> handicapQuotes = rows.stream()
+                .filter(row -> row.getHandicapLine() != null)
+                .map(row -> new AsianMarketConsensusAggregator.Quote(
+                        row.getProviderCode(),
+                        row.getBookmakerCode(),
+                        row.getHandicapLine(),
+                        row.getHomeOdds(),
+                        row.getAwayOdds(),
+                        row.getCapturedAt(),
+                        row.getId()))
+                .toList();
+        AsianMarketConsensusAggregator.MarketAggregate handicap = consensusAggregator.aggregate(handicapQuotes);
+        AsianMarketConsensusAggregator.LineConsensus handicapBest = handicap.best().orElse(null);
+        if (handicapBest == null) {
+            return java.util.Optional.empty();
+        }
+        List<AsianMarketConsensusAggregator.Quote> totalsQuotes = rows.stream()
+                .filter(row -> row.getTotalLine() != null)
+                .map(row -> new AsianMarketConsensusAggregator.Quote(
+                        row.getProviderCode(),
+                        row.getBookmakerCode(),
+                        row.getTotalLine(),
+                        row.getOverOdds(),
+                        row.getUnderOdds(),
+                        row.getCapturedAt(),
+                        row.getId()))
+                .toList();
+        AsianMarketConsensusAggregator.MarketAggregate totals = consensusAggregator.aggregate(totalsQuotes);
+        return freezeSnapshotSelector.select(rows, handicapBest, totals.best());
     }
 
     private Map<Long, List<MatchPredictionSummaryVo>> loadCurrentPublishedPredictions(Collection<MatchEntity> matches) {

@@ -78,6 +78,7 @@ import com.jingcaicompass.odds.service.AsianOddsSnapshotWriter;
 import com.jingcaicompass.odds.service.AsianOddsSyncService;
 import com.jingcaicompass.odds.service.AsianOddsSyncServiceImpl;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
+import com.jingcaicompass.prediction.job.PredictionAutoPublishJob;
 import com.jingcaicompass.prediction.job.PredictionLockJob;
 import com.jingcaicompass.prediction.service.BaselinePredictionGenerationService;
 import com.jingcaicompass.prediction.service.PredictionAutoPublishOrchestrator;
@@ -241,7 +242,8 @@ public class PersistenceServicesAutoConfiguration {
             PredictionMapper predictionMapper,
             RawDataPayloadMapper rawDataPayloadMapper,
             PaginationProperties paginationProperties,
-            ActiveAsianOddsProvider activeAsianOddsProvider
+            ActiveAsianOddsProvider activeAsianOddsProvider,
+            AsianOddsAggregationProperties asianOddsAggregationProperties
     ) {
         return new MatchQueryServiceImpl(
                 matchMapper,
@@ -250,7 +252,8 @@ public class PersistenceServicesAutoConfiguration {
                 predictionMapper,
                 rawDataPayloadMapper,
                 paginationProperties,
-                activeAsianOddsProvider
+                activeAsianOddsProvider,
+                asianOddsAggregationProperties
         );
     }
 
@@ -943,6 +946,20 @@ public class PersistenceServicesAutoConfiguration {
             JobMetrics jobMetrics
     ) {
         return new SnapshotPublishJob(predictionSnapshotService, predictionImportClock, jobMetrics);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnProperty(
+            prefix = "app.tasks",
+            name = {"enabled", "prediction-auto-publish.enabled"},
+            havingValue = "true"
+    )
+    PredictionAutoPublishJob predictionAutoPublishJob(
+            PredictionAutoPublishOrchestrator predictionAutoPublishOrchestrator,
+            JobMetrics jobMetrics
+    ) {
+        return new PredictionAutoPublishJob(predictionAutoPublishOrchestrator, jobMetrics);
     }
 
     @Bean

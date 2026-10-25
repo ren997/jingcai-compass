@@ -96,7 +96,7 @@ class MatchQueryServiceTest {
         when(matchMapper.selectPublicPage(any())).thenReturn(List.of(match));
         when(sportterySnapshotMapper.selectLatestByMatchIds(anyCollection())).thenReturn(List.of(snapshot));
         when(rawDataPayloadMapper.selectList(any())).thenReturn(List.of());
-        when(asianOddsSnapshotMapper.selectLatestCompleteLinesByMatchIds(anyCollection(), anyString())).thenReturn(List.of());
+        when(asianOddsSnapshotMapper.selectLatestCrossProductLinesByMatchIds(anyCollection(), anyString())).thenReturn(List.of());
         when(predictionMapper.selectCurrentPublishedByMatchIds(anyCollection())).thenReturn(List.of());
 
         var page = matchQueryService.list(new MatchListQueryDto(
@@ -149,6 +149,16 @@ class MatchQueryServiceTest {
         asianMain.setTotalLine(BigDecimal.valueOf(2.5));
         asianMain.setOverOdds(BigDecimal.valueOf(1.82));
         asianMain.setUnderOdds(BigDecimal.valueOf(2.02));
+        // 主盘由跨庄聚合选出，聚合要求同一线至少 2 家报价（min-bookmakers=2），
+        // 只喂一家的用例会走到「家数不足」分支并返回空主盘，那是另一条语义。
+        AsianOddsSnapshot asianSecondary = asianOddsSnapshot("BOOK_B", "0", "2026-07-22T10:00:00Z");
+        asianSecondary.setId(9002L);
+        asianSecondary.setMatchId(105L);
+        asianSecondary.setHomeOdds(BigDecimal.valueOf(1.75));
+        asianSecondary.setAwayOdds(BigDecimal.valueOf(2.15));
+        asianSecondary.setTotalLine(BigDecimal.valueOf(2.5));
+        asianSecondary.setOverOdds(BigDecimal.valueOf(1.88));
+        asianSecondary.setUnderOdds(BigDecimal.valueOf(1.96));
         Prediction prediction = publishedPrediction(105L, "baseline-v1");
         prediction.setAsianOddsSnapshotId(9001L);
         prediction.setAsianHandicapPick(AsianHandicapPickEnum.HOME_COVER);
@@ -161,8 +171,8 @@ class MatchQueryServiceTest {
         when(matchMapper.selectPublicPage(any())).thenReturn(List.of(match));
         when(sportterySnapshotMapper.selectLatestByMatchIds(anyCollection())).thenReturn(List.of(sporttery));
         when(rawDataPayloadMapper.selectList(any())).thenReturn(List.of());
-        when(asianOddsSnapshotMapper.selectLatestCompleteLinesByMatchIds(anyCollection(), anyString()))
-                .thenReturn(List.of(asianMain));
+        when(asianOddsSnapshotMapper.selectLatestCrossProductLinesByMatchIds(anyCollection(), anyString()))
+                .thenReturn(List.of(asianMain, asianSecondary));
         when(asianOddsSnapshotMapper.selectBatchIds(List.of(9001L))).thenReturn(List.of(asianMain));
         when(predictionMapper.selectCurrentPublishedByMatchIds(anyCollection()))
                 .thenReturn(List.of(prediction, lockedPrediction, draftPrediction));
@@ -189,7 +199,7 @@ class MatchQueryServiceTest {
                 assertThat(summary.asianMarket().bookmakerCode()).isEqualTo("BOOK_A");
             });
         });
-        verify(asianOddsSnapshotMapper).selectLatestCompleteLinesByMatchIds(anyCollection(), anyString());
+        verify(asianOddsSnapshotMapper).selectLatestCrossProductLinesByMatchIds(anyCollection(), anyString());
         verify(predictionMapper).selectCurrentPublishedByMatchIds(anyCollection());
     }
 

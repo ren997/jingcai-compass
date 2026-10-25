@@ -13,11 +13,11 @@ import lombok.Getter;
 public enum AsianOddsProviderTypeEnum {
     /** 本地 Stub，不访问外部供应商 */
     STUB("STUB", "Stub 演示数据"),
-    /** The Odds API 验证候选源 */
-    THE_ODDS_API("THE_ODDS_API", "The Odds API");
+    /** NovaAPI 单源：一场一次调用即返回全部机构与玩法 */
+    NOVA_API("NOVA_API", "NovaAPI");
 
     public static final String DESC =
-            "亚盘 Provider 类型: STUB-Stub 演示数据, THE_ODDS_API-The Odds API";
+            "亚盘 Provider 类型: STUB-Stub 演示数据, NOVA_API-NovaAPI";
 
     private static final Map<String, AsianOddsProviderTypeEnum> CODE_MAP = Stream.of(values())
             .collect(Collectors.toMap(AsianOddsProviderTypeEnum::getCode, Function.identity()));

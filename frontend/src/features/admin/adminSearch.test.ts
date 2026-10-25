@@ -1,11 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  parseMappingSearch,
   parseDraftPredictionSearch,
   parsePredictionLockSearch,
   parseSettlementStatusSearch,
   parseSyncRunSearch,
-  toMappingQuery,
   toDraftPredictionQuery,
   toPredictionLockQuery,
   toSettlementStatusQuery,
@@ -23,14 +21,6 @@ describe('admin URL search state', () => {
     expect(parsed.syncStatuses).toEqual(['FAILED']);
     expect(parsed.pageNo).toBe(1);
     expect(toSyncRunQuery(parsed)).toMatchObject({ pageSize: 20, pageNo: 1 });
-  });
-
-  it('defaults mapping review to pending and preserves supported filters', () => {
-    expect(parseMappingSearch(new URLSearchParams('status=BAD&page=-1'))).toMatchObject({
-      mappingStatus: 'PENDING', reviewScope: 'ACTIVE', pageNo: 1,
-    });
-    expect(toMappingQuery(parseMappingSearch(new URLSearchParams('providerCode=THE_ODDS_API&status=REJECTED&scope=HISTORY&page=2'))))
-      .toEqual({ providerCode: 'THE_ODDS_API', mappingStatus: 'REJECTED', reviewScope: 'HISTORY', pageNo: 2, pageSize: 20 });
   });
 
   it('restores safe prediction and settlement operation filters from URLs', () => {

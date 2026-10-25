@@ -43,29 +43,14 @@ app:
     storage:
       type: ${SNAPSHOT_STORAGE_TYPE:local}
       path: ${SNAPSHOT_STORAGE_PATH:./runtime/snapshots}
+  # nova | stub。体彩官网（china）已随单源改造删除。
   sporttery:
-    provider: ${SPORTTERY_PROVIDER:china}
-    base-url: ${SPORTTERY_BASE_URL:https://webapi.sporttery.cn}
-    connect-timeout: ${SPORTTERY_CONNECT_TIMEOUT:5s}
-    read-timeout: ${SPORTTERY_READ_TIMEOUT:10s}
-    retry:
-      max-attempts: ${SPORTTERY_RETRY_MAX_ATTEMPTS:2}
-      delay: ${SPORTTERY_RETRY_DELAY:500ms}
+    provider: ${SPORTTERY_PROVIDER:nova}
     quota-warning-threshold: ${SPORTTERY_QUOTA_WARNING_THRESHOLD:0}
   asian-odds:
+    # stub | NOVA_API；凭据、限速、超时与重试统一在 app.nova。
     provider: ${ASIAN_ODDS_PROVIDER:stub}
-    base-url: ${ASIAN_ODDS_BASE_URL:https://api.the-odds-api.com}
-    api-key: ${ASIAN_ODDS_API_KEY:}
-    connect-timeout: ${ASIAN_ODDS_CONNECT_TIMEOUT:5s}
-    read-timeout: ${ASIAN_ODDS_READ_TIMEOUT:10s}
-    retry:
-      max-attempts: ${ASIAN_ODDS_RETRY_MAX_ATTEMPTS:2}
-      delay: ${ASIAN_ODDS_RETRY_DELAY:500ms}
     quota-warning-threshold: ${ASIAN_ODDS_QUOTA_WARNING_THRESHOLD:0}
-    the-odds:
-      # 验证节点用外部 application-validation.yml 或 SPRING_APPLICATION_JSON 提供联赛映射。
-      league-sport-keys: {}
-      quota-budget: ${ASIAN_ODDS_QUOTA_BUDGET:400}
     # 跨庄聚合范围：低抽水白名单按线判定，家数不足回退全量中位数。
     aggregation:
       bookmaker-whitelist: ${ASIAN_ODDS_AGGREGATION_BOOKMAKER_WHITELIST:pinnacle,matchbook,betfair}
@@ -110,6 +95,5 @@ app:
     asian-odds-max-sync-age: ${ASIAN_ODDS_MAX_SYNC_AGE:13h}
     coverage-minimum-rate: ${ASIAN_ODDS_COVERAGE_MINIMUM_RATE:0.90}
     failed-run-streak-threshold: ${SYNC_FAILED_RUN_STREAK_THRESHOLD:3}
-    pending-mapping-threshold: ${PENDING_MAPPING_THRESHOLD:20}
     prediction-lock-overdue-grace: ${PREDICTION_LOCK_OVERDUE_GRACE:1m}
     settlement-backlog-grace: ${SETTLEMENT_BACKLOG_GRACE:10m}

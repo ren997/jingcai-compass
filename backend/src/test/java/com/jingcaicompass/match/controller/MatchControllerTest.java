@@ -112,7 +112,7 @@ class MatchControllerTest {
                 OffsetDateTime.parse("2026-07-22T19:30:00+08:00"), MatchStatusEnum.SCHEDULED,
                 null, null, null,
                 com.jingcaicompass.match.enums.MatchDataAvailabilityEnum.NO_ASIAN_ODDS_SNAPSHOT,
-                List.of(), com.jingcaicompass.match.enums.MatchDataAvailabilityEnum.NO_SOURCE_MAPPING, List.of()
+                List.of()
         );
         when(matchQueryService.list(org.mockito.ArgumentMatchers.any())).thenReturn(
                 new PageResult<>(List.of(listItem), 1, 20, 1)

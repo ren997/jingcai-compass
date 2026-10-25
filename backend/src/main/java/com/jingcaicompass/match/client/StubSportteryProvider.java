@@ -7,7 +7,9 @@ import com.jingcaicompass.data.dto.ProviderFetchResult;
 import com.jingcaicompass.match.dto.SportteryMatchDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultDto;
 import com.jingcaicompass.match.dto.SportteryMatchResultPayloadDto;
+import com.jingcaicompass.match.dto.SportteryPoolSyncItemDto;
 import com.jingcaicompass.match.service.SportteryMatchResultPayloadMapper;
+import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.system.stub.StubFixtureLoader;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -104,6 +106,11 @@ public class StubSportteryProvider implements SportteryProvider {
                 0,
                 0
         );
+    }
+
+    @Override
+    public List<SportteryPoolSyncItemDto> parseMatchPool(String rawJson, LocalDate businessDate) {
+        return new SportteryPoolPayloadMapper(objectMapper).parseItems(rawJson, businessDate);
     }
 
     @Override

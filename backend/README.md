@@ -52,7 +52,8 @@ Credentials can also be supplied by environment variables instead of `applicatio
 
 - `DB_*`: PostgreSQL connection
 - `REDIS_*`: Redis connection
-- `SPORTTERY_*`: Provider selection, base URL, timeout and retry settings
+- `SPORTTERY_PROVIDER` / `ASIAN_ODDS_PROVIDER`: which provider to wire (`nova`|`stub` and `NOVA_API`|`stub`)
+- `NOVA_*`: NovaAPI credentials (API key + Ed25519 private key), base URL, timeout, retry and quota warning threshold
 - `SYNC_TASKS_ENABLED` and `SPORTTERY_POOL_*`: synchronization task switches and intervals
 - `PREDICTION_LOCK_*`: prediction lock switch, interval, initial delay and batch size
 - `MAX_PAGE_SIZE`: maximum records returned by a MyBatis-Plus page query (default `100`)
@@ -72,7 +73,7 @@ npm run backend:test
 GET http://localhost:8080/api/public/matches?lotteryDate=2026-07-22
 ```
 
-The response uses the common `ApiResponse<T>` envelope with `code`, `message`, `data` and `traceId`; match fields are modeled by `MatchSummaryVo`. The same trace ID is returned in the `X-Trace-Id` response header and written to the server log context. The default `china` Provider reads the public China Sport Lottery football pool; set `SPORTTERY_PROVIDER=stub` to use clearly labelled synthetic data. PostgreSQL must exist before startup; the application does not create databases.
+The response uses the common `ApiResponse<T>` envelope with `code`, `message`, `data` and `traceId`; match fields are modeled by `MatchSummaryVo`. The same trace ID is returned in the `X-Trace-Id` response header and written to the server log context. The default `nova` Provider reads schedules, odds and results from NovaAPI (one `matchId` for all three); set `SPORTTERY_PROVIDER=stub` to use clearly labelled synthetic data. PostgreSQL must exist before startup; the application does not create databases.
 
 ## Development endpoints
 

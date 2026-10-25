@@ -8,23 +8,20 @@ import com.jingcaicompass.match.dto.MatchDetailQueryDto;
 import com.jingcaicompass.match.dto.MatchListCriteriaDto;
 import com.jingcaicompass.match.dto.MatchListQueryDto;
 import com.jingcaicompass.match.entity.MatchEntity;
-import com.jingcaicompass.match.entity.MatchSourceMapping;
 import com.jingcaicompass.match.entity.SportteryPoolSnapshot;
-import com.jingcaicompass.match.enums.MappingStatusEnum;
 import com.jingcaicompass.match.enums.MatchDataAvailabilityEnum;
 import com.jingcaicompass.match.enums.MatchListSortEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
-import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import com.jingcaicompass.match.vo.AsianOddsMarketVo;
 import com.jingcaicompass.match.vo.MatchDetailVo;
 import com.jingcaicompass.match.vo.MatchListItemVo;
 import com.jingcaicompass.match.vo.MatchPredictionSummaryVo;
-import com.jingcaicompass.match.vo.MatchSourceMappingVo;
 import com.jingcaicompass.match.vo.MatchSummaryVo;
 import com.jingcaicompass.match.vo.SportteryMarketVo;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.PredictionStatusEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
@@ -49,7 +46,7 @@ import javax.sql.DataSource;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 
-/** 从 PostgreSQL 比赛、快照和映射表装配公开比赛查询结果。 */
+/** 从 PostgreSQL 比赛与快照装配公开比赛查询结果。 */
 @Service
 @ConditionalOnBean(DataSource.class)
 public class MatchQueryServiceImpl implements MatchQueryService {
@@ -60,26 +57,26 @@ public class MatchQueryServiceImpl implements MatchQueryService {
     private final SportteryPoolSnapshotMapper sportterySnapshotMapper;
     private final AsianOddsSnapshotMapper asianOddsSnapshotMapper;
     private final PredictionMapper predictionMapper;
-    private final MatchSourceMappingMapper matchSourceMappingMapper;
     private final RawDataPayloadMapper rawDataPayloadMapper;
     private final PaginationProperties paginationProperties;
+    private final ActiveAsianOddsProvider activeAsianOddsProvider;
 
     public MatchQueryServiceImpl(
             MatchMapper matchMapper,
             SportteryPoolSnapshotMapper sportterySnapshotMapper,
             AsianOddsSnapshotMapper asianOddsSnapshotMapper,
             PredictionMapper predictionMapper,
-            MatchSourceMappingMapper matchSourceMappingMapper,
             RawDataPayloadMapper rawDataPayloadMapper,
-            PaginationProperties paginationProperties
+            PaginationProperties paginationProperties,
+            ActiveAsianOddsProvider activeAsianOddsProvider
     ) {
         this.matchMapper = matchMapper;
         this.sportterySnapshotMapper = sportterySnapshotMapper;
         this.asianOddsSnapshotMapper = asianOddsSnapshotMapper;
         this.predictionMapper = predictionMapper;
-        this.matchSourceMappingMapper = matchSourceMappingMapper;
         this.rawDataPayloadMapper = rawDataPayloadMapper;
         this.paginationProperties = paginationProperties;
+        this.activeAsianOddsProvider = activeAsianOddsProvider;
     }
 
     @Override
@@ -128,17 +125,11 @@ public class MatchQueryServiceImpl implements MatchQueryService {
             throw new BusinessException(ErrorCode.MATCH_NOT_FOUND);
         }
 
-        // 2) 读取当前体彩、全部当前亚盘线与映射解释，不调用任何外部 Provider。
+        // 2) 读取当前体彩与全部当前亚盘线，不调用任何外部 Provider。
         SportteryPresentation sporttery = loadLatestSporttery(List.of(match)).get(match.getId());
         List<AsianOddsSnapshot> asianSnapshots = asianOddsSnapshotMapper
                 .selectLatestPublicLinesByMatchId(match.getId());
-        List<MatchSourceMapping> mappings = matchSourceMappingMapper.selectList(
-                new LambdaQueryWrapper<MatchSourceMapping>()
-                        .eq(MatchSourceMapping::getMatchId, match.getId())
-                        .orderByAsc(MatchSourceMapping::getProviderCode)
-                        .orderByAsc(MatchSourceMapping::getId)
-        );
-        return toDetailVo(match, sporttery, asianSnapshots, mappings);
+        return toDetailVo(match, sporttery, asianSnapshots);
     }
 
     @Override
@@ -205,7 +196,9 @@ public class MatchQueryServiceImpl implements MatchQueryService {
         if (matchIds.isEmpty()) {
             return Map.of();
         }
-        return asianOddsSnapshotMapper.selectLatestCompleteConfirmedLinesByMatchIds(matchIds).stream()
+        return asianOddsSnapshotMapper
+                .selectLatestCompleteLinesByMatchIds(matchIds, activeAsianOddsProvider.providerCode())
+                .stream()
                 .collect(Collectors.toMap(AsianOddsSnapshot::getMatchId, snapshot -> snapshot));
     }
 
@@ -302,12 +295,10 @@ public class MatchQueryServiceImpl implements MatchQueryService {
     private MatchDetailVo toDetailVo(
             MatchEntity match,
             SportteryPresentation sporttery,
-            List<AsianOddsSnapshot> asianSnapshots,
-            List<MatchSourceMapping> mappings
+            List<AsianOddsSnapshot> asianSnapshots
     ) {
         SportteryMarketVo sportteryMarket = toSportteryMarketVo(sporttery);
         List<AsianOddsMarketVo> asianMarkets = asianSnapshots.stream().map(this::toAsianOddsMarketVo).toList();
-        List<MatchSourceMappingVo> sourceMappings = mappings.stream().map(this::toSourceMappingVo).toList();
         return new MatchDetailVo(
                 match.getId(),
                 match.getLotteryDate(),
@@ -322,9 +313,7 @@ public class MatchQueryServiceImpl implements MatchQueryService {
                 match.getAwayScore(),
                 sportteryMarket,
                 asianMarkets.isEmpty() ? MatchDataAvailabilityEnum.NO_ASIAN_ODDS_SNAPSHOT : MatchDataAvailabilityEnum.AVAILABLE,
-                asianMarkets,
-                mappingAvailability(mappings),
-                sourceMappings
+                asianMarkets
         );
     }
 
@@ -400,28 +389,6 @@ public class MatchQueryServiceImpl implements MatchQueryService {
                 snapshot.getCapturedAt(),
                 snapshot.getProviderUpdatedAt()
         );
-    }
-
-    private MatchSourceMappingVo toSourceMappingVo(MatchSourceMapping mapping) {
-        return new MatchSourceMappingVo(
-                mapping.getProviderCode(),
-                mapping.getExternalMatchId(),
-                mapping.getMappingStatus(),
-                mapping.getMappingConfidence(),
-                mapping.getMappingMethod(),
-                mapping.getMappingExplanation(),
-                toShanghaiTime(mapping.getUpdatedAt())
-        );
-    }
-
-    private MatchDataAvailabilityEnum mappingAvailability(List<MatchSourceMapping> mappings) {
-        if (mappings.isEmpty()) {
-            return MatchDataAvailabilityEnum.NO_SOURCE_MAPPING;
-        }
-        boolean hasConfirmed = mappings.stream().map(MatchSourceMapping::getMappingStatus)
-                .anyMatch(status -> status == MappingStatusEnum.AUTO_CONFIRMED
-                        || status == MappingStatusEnum.MANUAL_CONFIRMED);
-        return hasConfirmed ? MatchDataAvailabilityEnum.AVAILABLE : MatchDataAvailabilityEnum.MAPPING_UNCONFIRMED;
     }
 
     private OffsetDateTime toShanghaiTime(Instant value) {

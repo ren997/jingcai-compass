@@ -79,7 +79,7 @@ class PublicMatchQueryApplicationIT {
         }
         jdbcTemplate.execute("""
                 TRUNCATE TABLE raw_data_payloads, asian_odds_snapshots, sporttery_pool_snapshots,
-                match_source_mappings, matches, leagues RESTART IDENTITY CASCADE
+                matches, leagues RESTART IDENTITY CASCADE
                 """);
     }
 
@@ -142,7 +142,7 @@ class PublicMatchQueryApplicationIT {
     }
 
     @Test
-    void returnsEveryCurrentAsianLineWithMappingAndExplicitAbsenceStatus() {
+    void returnsEveryCurrentAsianLineWithExplicitAbsenceStatus() {
         long leagueId = insertLeague("T501 详情联赛");
         long matchId = insertMatch(leagueId, "T501-DETAIL", "SCHEDULED", "2026-07-22T10:00:00Z");
         insertRawSportteryPayload("b");
@@ -150,7 +150,6 @@ class PublicMatchQueryApplicationIT {
         insertAsianSnapshot(matchId, "BOOK_A", "-0.5", "2026-07-22T08:00:00Z", "1.80");
         insertAsianSnapshot(matchId, "BOOK_A", "-0.5", "2026-07-22T09:00:00Z", "1.92");
         insertAsianSnapshot(matchId, "BOOK_A", "-0.25", "2026-07-22T09:00:00Z", "1.85");
-        insertMapping(matchId, "ASIAN_TEST", "match-detail", "MANUAL_CONFIRMED");
 
         var detail = matchQueryService.detail(new MatchDetailQueryDto(matchId));
 
@@ -161,14 +160,11 @@ class PublicMatchQueryApplicationIT {
         assertThat(detail.asianOddsMarkets().stream()
                 .filter(item -> item.handicapLine().compareTo(new BigDecimal("-0.5")) == 0)
                 .findFirst().orElseThrow().homeOdds()).isEqualByComparingTo("1.92");
-        assertThat(detail.mappingAvailability()).isEqualTo(MatchDataAvailabilityEnum.AVAILABLE);
-        assertThat(detail.sourceMappings()).singleElement()
-                .satisfies(item -> assertThat(item.mappingExplanation()).isEqualTo("T501 integration mapping"));
         verifyNoInteractions(sportteryProvider);
     }
 
     @Test
-    void distinguishesMissingMarketsAndMappingsFromAnAbsentMatch() {
+    void distinguishesMissingMarketsFromAnAbsentMatch() {
         long leagueId = insertLeague("T501 缺失联赛");
         long matchId = insertMatch(leagueId, "T501-MISSING", "SCHEDULED", "2026-07-22T10:00:00Z");
 
@@ -176,7 +172,6 @@ class PublicMatchQueryApplicationIT {
 
         assertThat(detail.sportteryMarket().availability()).isEqualTo(MatchDataAvailabilityEnum.NO_SPORTTERY_SNAPSHOT);
         assertThat(detail.asianOddsAvailability()).isEqualTo(MatchDataAvailabilityEnum.NO_ASIAN_ODDS_SNAPSHOT);
-        assertThat(detail.mappingAvailability()).isEqualTo(MatchDataAvailabilityEnum.NO_SOURCE_MAPPING);
     }
 
     private long insertLeague(String name) {
@@ -233,15 +228,6 @@ class PublicMatchQueryApplicationIT {
                 ) VALUES (?, 'ASIAN_TEST', ?, ?, ?, 2.10, 'PRE_KICKOFF', ?, ?)
                 """, matchId, bookmaker, new BigDecimal(handicap), new BigDecimal(homeOdds),
                 Timestamp.from(Instant.parse(capturedAt)), hash("asian-" + bookmaker + handicap + capturedAt));
-    }
-
-    private void insertMapping(long matchId, String providerCode, String externalMatchId, String status) {
-        jdbcTemplate.update("""
-                INSERT INTO match_source_mappings (
-                    match_id, provider_code, external_match_id, mapping_status, mapping_confidence,
-                    mapping_method, mapping_explanation
-                ) VALUES (?, ?, ?, ?, 1.0000, 'MANUAL', 'T501 integration mapping')
-                """, matchId, providerCode, externalMatchId, status);
     }
 
     private void insertAsianPrediction(long matchId, long asianSnapshotId, String status, String seed) {

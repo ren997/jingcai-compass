@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -20,7 +21,8 @@ public record SyncTaskProperties(
         @Valid @NotNull DataPipelineTaskProperties dataPipeline,
         @Valid @NotNull PredictionLockTaskProperties predictionLock,
         @Valid @NotNull SnapshotPublishTaskProperties snapshotPublish,
-        @Valid @NotNull SettlementTaskProperties settlement
+        @Valid @NotNull SettlementTaskProperties settlement,
+        @Valid @NotNull PredictionAutoPublishTaskProperties predictionAutoPublish
 ) {
 
     @AssertTrue(message = "app.tasks.data-pipeline.enabled cannot be combined with individual sync tasks")
@@ -154,6 +156,36 @@ public record SyncTaskProperties(
         @AssertTrue(message = "app.tasks.settlement.initial-delay must not be negative")
         public boolean isInitialDelayValid() {
             return initialDelay != null && !initialDelay.isNegative();
+        }
+    }
+
+    /**
+     * 自动发布任务配置。
+     *
+     * @param regenerateInterval 两次重新生成之间的最小间隔；{@code 0} 表示不节流（每轮都生成）
+     * @param operator 自动发布写入审计日志的操作者标识，不能用空值——发布服务会拒绝空操作者
+     */
+    public record PredictionAutoPublishTaskProperties(
+            boolean enabled,
+            @NotNull Duration fixedDelay,
+            @NotNull Duration initialDelay,
+            @NotNull Duration regenerateInterval,
+            @NotBlank String operator
+    ) {
+
+        @AssertTrue(message = "app.tasks.prediction-auto-publish.fixed-delay must be at least 1 second")
+        public boolean isFixedDelayValid() {
+            return fixedDelay != null && fixedDelay.compareTo(Duration.ofSeconds(1)) >= 0;
+        }
+
+        @AssertTrue(message = "app.tasks.prediction-auto-publish.initial-delay must not be negative")
+        public boolean isInitialDelayValid() {
+            return initialDelay != null && !initialDelay.isNegative();
+        }
+
+        @AssertTrue(message = "app.tasks.prediction-auto-publish.regenerate-interval must not be negative")
+        public boolean isRegenerateIntervalValid() {
+            return regenerateInterval != null && !regenerateInterval.isNegative();
         }
     }
 }

@@ -9,12 +9,16 @@ import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.jingcaicompass.match.dto.SportteryPoolSyncItemDto;
+import com.jingcaicompass.match.entity.League;
 import com.jingcaicompass.match.entity.MatchEntity;
 import com.jingcaicompass.match.entity.SportteryPoolSnapshot;
+import com.jingcaicompass.match.entity.Team;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
+import com.jingcaicompass.match.mapper.LeagueMapper;
 import com.jingcaicompass.match.mapper.MatchMapper;
 import com.jingcaicompass.match.mapper.MatchResultFactMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
+import com.jingcaicompass.match.mapper.TeamMapper;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -38,11 +42,23 @@ class SportteryPoolSyncMatchWriterTest {
     @Mock
     private MatchResultFactMapper matchResultFactMapper;
 
+    @Mock
+    private LeagueMapper leagueMapper;
+
+    @Mock
+    private TeamMapper teamMapper;
+
     private SportteryPoolMatchWriter writer;
 
     @BeforeEach
     void setUp() {
-        writer = new SportteryPoolMatchWriter(matchMapper, snapshotMapper, matchResultFactMapper);
+        writer = new SportteryPoolMatchWriter(
+                matchMapper,
+                snapshotMapper,
+                matchResultFactMapper,
+                leagueMapper,
+                teamMapper
+        );
     }
 
     @Test
@@ -127,6 +143,89 @@ class SportteryPoolSyncMatchWriterTest {
     }
 
     @Test
+    void fillsLeagueAndTeamIdsFromDictionary() {
+        when(matchMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(matchMapper.insert(any(MatchEntity.class))).thenAnswer(invocation -> {
+            MatchEntity entity = invocation.getArgument(0);
+            entity.setId(11L);
+            return 1;
+        });
+        when(snapshotMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(leagueMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(league(7L, "演示联赛"));
+        when(teamMapper.selectOne(any(LambdaQueryWrapper.class)))
+                .thenReturn(team(71L, "演示主队"), team(72L, "演示客队"));
+
+        writer.writeAll(List.of(sampleItem("周三001", "2.10", "Selling")), "a".repeat(64));
+
+        ArgumentCaptor<MatchEntity> captor = ArgumentCaptor.forClass(MatchEntity.class);
+        verify(matchMapper).insert(captor.capture());
+        assertThat(captor.getValue().getLeagueId()).isEqualTo(7L);
+        assertThat(captor.getValue().getHomeTeamId()).isEqualTo(71L);
+        assertThat(captor.getValue().getAwayTeamId()).isEqualTo(72L);
+    }
+
+    /**
+     * 字典 id 必须写进 matches，否则公开列表的联赛筛选会空掉。
+     *
+     * <p>联赛下拉是前端从列表里按 {@code leagueId != null} 反推出来的，
+     * 这里一旦不写，下拉就只剩「全部联赛」——功能静默消失，接口不报错。</p>
+     */
+    @Test
+    void dictionaryIdIsCachedWithinOneWriteSoRepeatedNamesResolveOnce() {
+        when(matchMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(matchMapper.insert(any(MatchEntity.class))).thenAnswer(invocation -> {
+            MatchEntity entity = invocation.getArgument(0);
+            entity.setId(11L);
+            return 1;
+        });
+        when(snapshotMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(leagueMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(league(7L, "演示联赛"));
+        when(teamMapper.selectOne(any(LambdaQueryWrapper.class)))
+                .thenReturn(team(71L, "演示主队"), team(72L, "演示客队"));
+
+        writer.writeAll(
+                List.of(
+                        sampleItem("周三001", "2.10", "Selling"),
+                        sampleItem("周三002", "2.10", "Selling")
+                ),
+                "b".repeat(64)
+        );
+
+        // 两场比赛同联赛同主客队名 → 每个名字只查一次字典
+        verify(leagueMapper, times(1)).selectOne(any(LambdaQueryWrapper.class));
+        verify(teamMapper, times(2)).selectOne(any(LambdaQueryWrapper.class));
+    }
+
+    @Test
+    void createsDictionaryRowWhenNameIsUnknown() {
+        when(matchMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(matchMapper.insert(any(MatchEntity.class))).thenAnswer(invocation -> {
+            MatchEntity entity = invocation.getArgument(0);
+            entity.setId(11L);
+            return 1;
+        });
+        when(snapshotMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(leagueMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+        when(leagueMapper.insert(any(League.class))).thenAnswer(invocation -> {
+            League created = invocation.getArgument(0);
+            created.setId(8L);
+            return 1;
+        });
+        when(teamMapper.selectOne(any(LambdaQueryWrapper.class))).thenReturn(null);
+
+        writer.writeAll(List.of(sampleItem("周三001", "2.10", "Selling")), "c".repeat(64));
+
+        ArgumentCaptor<League> leagueCaptor = ArgumentCaptor.forClass(League.class);
+        verify(leagueMapper).insert(leagueCaptor.capture());
+        assertThat(leagueCaptor.getValue().getNameZh()).isEqualTo("演示联赛");
+        verify(teamMapper, times(2)).insert(any(Team.class));
+
+        ArgumentCaptor<MatchEntity> matchCaptor = ArgumentCaptor.forClass(MatchEntity.class);
+        verify(matchMapper).insert(matchCaptor.capture());
+        assertThat(matchCaptor.getValue().getLeagueId()).isEqualTo(8L);
+    }
+
+    @Test
     void singleFailureStillPersistsOthers() {
         when(matchMapper.selectOne(any(LambdaQueryWrapper.class)))
                 .thenThrow(new IllegalStateException("db down"))
@@ -181,6 +280,20 @@ class SportteryPoolSyncMatchWriterTest {
                 new BigDecimal("3.45"),
                 new BigDecimal("3.90")
         );
+    }
+
+    private League league(Long id, String nameZh) {
+        League league = new League();
+        league.setId(id);
+        league.setNameZh(nameZh);
+        return league;
+    }
+
+    private Team team(Long id, String nameZh) {
+        Team team = new Team();
+        team.setId(id);
+        team.setNameZh(nameZh);
+        return team;
     }
 
     private SportteryPoolSnapshot baseSnapshot(Long matchId, String hadHomeSp, String sellStatus) {

@@ -30,3 +30,8 @@ runtime/
 .DS_Store
 .env
 backend/src/main/resources/application-local.yml
+
+# 一次性实跑脚手架与本地核对脚本：只用于验收，不入库
+# tools/verify-stage2/Sql.java 内含明文库凭据，务必保持未跟踪
+backend/src/test/java/com/jingcaicompass/tools/
+tools/verify-stage2/

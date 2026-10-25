@@ -44,15 +44,16 @@ class SportteryPoolSyncServiceTest {
     private SportteryPoolMatchWriter matchWriter;
 
     private SportteryPoolSyncServiceImpl service;
+    private SportteryPoolPayloadMapper payloadMapper;
     private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
         objectMapper = new ObjectMapper().findAndRegisterModules();
+        payloadMapper = new SportteryPoolPayloadMapper(objectMapper);
         service = new SportteryPoolSyncServiceImpl(
                 sportteryProvider,
                 providerSyncTemplate,
-                new SportteryPoolPayloadMapper(objectMapper),
                 matchWriter,
                 objectMapper
         );
@@ -62,6 +63,8 @@ class SportteryPoolSyncServiceTest {
     void syncDelegatesToTemplateAndReturnsCounts() throws Exception {
         LocalDate businessDate = LocalDate.of(2026, 7, 22);
         when(sportteryProvider.providerCode()).thenReturn("STUB");
+        when(sportteryProvider.parseMatchPool(any(), eq(businessDate)))
+                .thenAnswer(invocation -> payloadMapper.parseItems(invocation.getArgument(0), businessDate));
         when(matchWriter.writeAll(any(), any())).thenReturn(
                 new SportteryPoolMatchWriter.WriteResult(new ProviderParseResult(2, 0, null), 2, 2)
         );
@@ -114,6 +117,8 @@ class SportteryPoolSyncServiceTest {
     void emptyPoolReturnsZeroCounts() throws Exception {
         LocalDate businessDate = LocalDate.of(2026, 7, 22);
         when(sportteryProvider.providerCode()).thenReturn("STUB");
+        when(sportteryProvider.parseMatchPool(any(), eq(businessDate)))
+                .thenAnswer(invocation -> payloadMapper.parseItems(invocation.getArgument(0), businessDate));
         when(matchWriter.writeAll(any(), any())).thenReturn(SportteryPoolMatchWriter.WriteResult.empty());
 
         when(providerSyncTemplate.execute(

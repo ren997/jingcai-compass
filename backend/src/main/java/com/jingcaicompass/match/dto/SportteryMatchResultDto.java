@@ -11,7 +11,13 @@ import java.time.OffsetDateTime;
 public record SportteryMatchResultDto(
         /** 供应商侧比赛 ID。 */
         String matchId,
-        /** 竞彩销售日。 */
+        /**
+         * 供应商侧赛果所属日期。
+         *
+         * <p>竞彩（{@code CHINA_SPORTTERY}）返回的是<b>销售日</b>；NovaAPI 返回的是
+         * <b>开赛自然日</b>——跨零点场次会比销售日晚一天。因此它<b>不能</b>当作
+         * {@code matches.lottery_date} 使用，赛果定位一律靠 {@link #matchId()}。</p>
+         */
         LocalDate lotteryDate,
         /** 竞彩场次编号，例如周三001。 */
         String lotteryMatchNo,

@@ -84,7 +84,14 @@ class SettlementJobTest {
                 new SyncTaskProperties.DataPipelineTaskProperties(false, Duration.ofMinutes(20), Duration.ofSeconds(45)),
                 new SyncTaskProperties.PredictionLockTaskProperties(false, Duration.ofSeconds(30), Duration.ofSeconds(15), 100),
                 new SyncTaskProperties.SnapshotPublishTaskProperties(false, Duration.ofMinutes(5), Duration.ofSeconds(60)),
-                new SyncTaskProperties.SettlementTaskProperties(false, Duration.ofMinutes(5), Duration.ofSeconds(75), 7)
+                new SyncTaskProperties.SettlementTaskProperties(false, Duration.ofMinutes(5), Duration.ofSeconds(75), 7),
+                new SyncTaskProperties.PredictionAutoPublishTaskProperties(
+                        false,
+                        Duration.ofMinutes(15),
+                        Duration.ofMinutes(3),
+                        Duration.ofHours(3),
+                        "system:auto-publish"
+                )
         );
     }
 }

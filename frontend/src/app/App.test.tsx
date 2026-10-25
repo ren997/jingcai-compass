@@ -112,16 +112,6 @@ const detail: MatchDetailVo = {
     capturedAt: '2026-07-22T10:01:00+08:00',
     providerUpdatedAt: '2026-07-22T10:00:00+08:00',
   }],
-  mappingAvailability: 'AVAILABLE',
-  sourceMappings: [{
-    providerCode: 'ODDS_API',
-    externalMatchId: 'external-42',
-    mappingStatus: 'AUTO_CONFIRMED',
-    mappingConfidence: 0.98,
-    mappingMethod: 'TEAM_AND_TIME',
-    mappingExplanation: '球队和开赛时间一致。',
-    mappingUpdatedAt: '2026-07-22T09:00:00+08:00',
-  }],
 };
 
 const predictionDetail: PredictionDetailVo = {
@@ -523,21 +513,18 @@ describe('App routes', () => {
     expect(screen.getByText('比赛不存在（追踪号：trace-match-404）')).toBeInTheDocument();
   });
 
-  it('explains missing markets and mappings and allows a detail refresh', async () => {
+  it('explains missing markets and allows a detail refresh', async () => {
     const user = userEvent.setup();
     mockPublicMatches({ detail: {
       ...detail,
       sportteryMarket: { ...detail.sportteryMarket, availability: 'NO_SPORTTERY_SNAPSHOT' },
       asianOddsAvailability: 'NO_ASIAN_ODDS_SNAPSHOT',
       asianOddsMarkets: [],
-      mappingAvailability: 'NO_SOURCE_MAPPING',
-      sourceMappings: [],
     } });
     renderApp('/matches/42');
 
     expect(await screen.findByText('暂无体彩快照，暂不展示 SP 或官方让球。')).toBeInTheDocument();
     expect(screen.getByText('暂无亚盘快照。')).toBeInTheDocument();
-    expect(screen.getByText('暂无来源映射。')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '刷新' }));
 
@@ -621,99 +608,6 @@ describe('App routes', () => {
     expect(await screen.findByRole('heading', { name: '预测锁定' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '预测锁定' })).toHaveAttribute('href', '/admin/predictions');
     expect(screen.getByRole('link', { name: '结算状态' })).toHaveAttribute('href', '/admin/settlements');
-  });
-
-  it('lazy loads protected provider normalization review with its scoped identity', async () => {
-    setAdminSession({
-      accessToken: 'signed-jwt', tokenType: 'Bearer', expiresAt: '2099-01-01T00:00:00Z',
-      adminId: 7, username: 'operator', role: 'ADMIN',
-    });
-    vi.mocked(fetch).mockResolvedValue(apiResponse({
-      records: [{
-        mappingId: 7, entityType: 'LEAGUE', providerCode: 'THE_ODDS_API', externalId: 'soccer_epl',
-        externalScope: 'soccer_epl', externalDisplayName: 'soccer_epl', externalNormalizedKey: 'soccerepl',
-        mappingStatus: 'PENDING', mappingConfidence: 0.5, mappingMethod: 'NAME_CANDIDATE',
-        currentEntity: { entityId: 70, nameZh: 'soccer_epl', nameEn: 'soccer_epl' }, updatedAt: '2026-07-30T01:00:00Z',
-      }], pageNo: 1, pageSize: 20, total: 1,
-    }));
-    renderApp('/admin/normalizations/leagues?providerCode=THE_ODDS_API&mappingStatus=PENDING&page=1');
-
-    expect(await screen.findByRole('heading', { name: '联赛标准化复核' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '联赛复核' })).toHaveAttribute('href', '/admin/normalizations/leagues');
-    expect(screen.getByRole('link', { name: '球队复核' })).toHaveAttribute('href', '/admin/normalizations/teams');
-    expect(await screen.findByText('共 1 项')).toBeInTheDocument();
-    expect(screen.getByText('作用域')).toBeInTheDocument();
-    expect(screen.getAllByText('soccer_epl').length).toBeGreaterThan(1);
-    expect(fetch).toHaveBeenCalledWith('/api/admin/provider/normalizations/list', expect.objectContaining({
-      body: JSON.stringify({ entityType: 'LEAGUE', providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING', pageNo: 1, pageSize: 20 }),
-    }));
-  });
-
-  it('shows readable The Odds API team names in protected mapping review', async () => {
-    setAdminSession({
-      accessToken: 'signed-jwt', tokenType: 'Bearer', expiresAt: '2099-01-01T00:00:00Z',
-      adminId: 7, username: 'operator', role: 'ADMIN',
-    });
-    vi.mocked(fetch).mockResolvedValue(apiResponse({
-      mappingId: 12,
-      matchId: 42,
-      providerCode: 'THE_ODDS_API',
-      externalMatchId: 'event-12',
-      externalLeagueId: 'soccer_epl',
-      externalHomeTeamId: 'NAME:home-hash',
-      externalAwayTeamId: 'NAME:away-hash',
-      externalHomeTeamName: 'Manchester United',
-      externalAwayTeamName: 'Chelsea',
-      mappingStatus: 'PENDING',
-      mappingConfidence: 0.5,
-      mappingMethod: 'SCORE_PENDING',
-      mappingExplanation: 'TIME_LE_180; PENDING',
-      candidates: [{
-        matchId: 42, score: 0.5, reasons: ['TIME_LE_180'], match: {
-          matchId: 42, lotteryMatchNo: '周三042', lotteryDate: '2026-07-22', leagueName: '英超',
-          homeTeamName: '曼彻斯特联', awayTeamName: '切尔西', kickoffTime: '2026-07-22T19:30:00+08:00',
-        },
-      }],
-      confirmedBy: null,
-      match: {
-        matchId: 42, lotteryMatchNo: '周三042', lotteryDate: '2026-07-22', leagueName: '英超',
-        homeTeamName: '曼彻斯特联', awayTeamName: '切尔西', kickoffTime: '2026-07-22T19:30:00+08:00',
-      },
-      updatedAt: '2026-07-22T10:00:00+08:00',
-    }));
-    renderApp('/admin/mappings/12');
-
-    expect(await screen.findByText('Manchester United')).toBeInTheDocument();
-    expect(screen.getByText('Chelsea')).toBeInTheDocument();
-    expect(screen.getByText(/稳定来源键：主队 NAME:home-hash/)).toBeInTheDocument();
-    expect(screen.getByText('候选竞彩比赛已开赛，仅保留历史证据，不可确认关联。')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '确认所选比赛' })).toBeDisabled();
-  });
-
-  it('shows lottery and external kickoff times in the lottery-match mapping detail', async () => {
-    setAdminSession({
-      accessToken: 'signed-jwt', tokenType: 'Bearer', expiresAt: '2099-01-01T00:00:00Z',
-      adminId: 7, username: 'operator', role: 'ADMIN',
-    });
-    vi.mocked(fetch).mockResolvedValue(apiResponse({
-      match: {
-        matchId: 42, lotteryMatchNo: '周三042', lotteryDate: '2026-07-29', leagueName: '欧冠',
-        homeTeamName: '阿拉木图', awayTeamName: '奥莫尼亚', kickoffTime: '2026-07-29T12:00:00Z',
-      },
-      externalCandidates: [{
-        mappingId: 12, providerCode: 'THE_ODDS_API', externalMatchId: 'event-12', externalLeagueId: 'soccer_uefa_champs_league',
-        externalHomeTeamName: 'Kairat Almaty', externalAwayTeamName: 'Omonia Nicosia', externalKickoffTime: '2026-07-29T12:05:00Z',
-        mappingStatus: 'PENDING', score: 0.8, reasons: ['KICKOFF_TIME'], mappingExplanation: 'PENDING', updatedAt: '2026-07-29T10:00:00Z',
-      }],
-    }));
-    renderApp('/admin/mappings/matches/42?providerCode=THE_ODDS_API&mappingStatus=PENDING');
-
-    expect(await screen.findByRole('heading', { name: /周三042.*阿拉木图.*奥莫尼亚/ })).toBeInTheDocument();
-    expect(screen.getByText('Kairat Almaty vs Omonia Nicosia')).toBeInTheDocument();
-    expect(screen.getByText(/外部开赛：/)).toBeInTheDocument();
-    expect(fetch).toHaveBeenCalledWith('/api/admin/provider/mappings/matches/detail', expect.objectContaining({
-      body: JSON.stringify({ matchId: 42, providerCode: 'THE_ODDS_API', mappingStatus: 'PENDING' }),
-    }));
   });
 
   it('renders a stable 404 page for unmatched routes', async () => {

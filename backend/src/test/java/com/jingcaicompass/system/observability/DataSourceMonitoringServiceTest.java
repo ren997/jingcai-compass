@@ -11,7 +11,6 @@ import com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum;
 import com.jingcaicompass.odds.service.AsianOddsProvider;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -23,7 +22,7 @@ class DataSourceMonitoringServiceTest {
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
-    void faultInjectionRefreshesCoverageQuotaMappingAndFailureAlertStates() {
+    void faultInjectionRefreshesCoverageQuotaAndFailureAlertStates() {
         JdbcTemplate jdbcTemplate = org.mockito.Mockito.mock(JdbcTemplate.class, invocation -> {
             String method = invocation.getMethod().getName();
             if ("query".equals(method)) {
@@ -40,9 +39,6 @@ class DataSourceMonitoringServiceTest {
                 String sql = invocation.getArgument(0, String.class);
                 if (sql.contains("COUNT(DISTINCT odds.match_id)")) {
                     return 5;
-                }
-                if (sql.contains("match_source_mappings")) {
-                    return 20;
                 }
                 if (sql.contains("SUM(quota_cost)")) {
                     return 50;
@@ -62,7 +58,7 @@ class DataSourceMonitoringServiceTest {
                     jdbcTemplate,
                     registry,
                     new ObservabilityProperties(true, Duration.ofMinutes(1), Duration.ofMinutes(30),
-                            Duration.ofMinutes(40), new java.math.BigDecimal("0.90"), 3, 20,
+                            Duration.ofMinutes(40), new java.math.BigDecimal("0.90"), 3,
                             Duration.ofMinutes(1), Duration.ofMinutes(10)),
                     activeTasks(),
                     sportteryProvider,
@@ -74,7 +70,6 @@ class DataSourceMonitoringServiceTest {
             service.refresh();
 
             assertThat(gauge(registry, "THE_ODDS_API", "coverage_low")).isEqualTo(1.0);
-            assertThat(gauge(registry, "THE_ODDS_API", "mapping_backlog")).isEqualTo(1.0);
             assertThat(gauge(registry, "THE_ODDS_API", "quota_threshold_reached")).isEqualTo(1.0);
             assertThat(gauge(registry, "THE_ODDS_API", "sync_failure_streak")).isEqualTo(1.0);
             assertThat(registry.get("jingcai.datasource.asian_odds.coverage")
@@ -101,30 +96,18 @@ class DataSourceMonitoringServiceTest {
                 new SyncTaskProperties.DataPipelineTaskProperties(false, delay, Duration.ZERO),
                 new SyncTaskProperties.PredictionLockTaskProperties(false, delay, Duration.ZERO, 1),
                 new SyncTaskProperties.SnapshotPublishTaskProperties(false, delay, Duration.ZERO),
-                new SyncTaskProperties.SettlementTaskProperties(false, delay, Duration.ZERO, 1)
+                new SyncTaskProperties.SettlementTaskProperties(false, delay, Duration.ZERO, 1),
+                new SyncTaskProperties.PredictionAutoPublishTaskProperties(
+                        false, delay, Duration.ZERO, Duration.ofHours(3), "system:auto-publish"
+                )
         );
     }
 
     private SportteryProviderProperties sportteryProperties() {
-        return new SportteryProviderProperties(
-                SportteryProviderType.CHINA,
-                URI.create("https://sporttery.example.test"),
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                new SportteryProviderProperties.RetryProperties(1, Duration.ofMillis(100)),
-                0
-        );
+        return new SportteryProviderProperties(SportteryProviderType.NOVA, 0);
     }
 
     private AsianOddsProviderProperties asianOddsProperties() {
-        return new AsianOddsProviderProperties(
-                AsianOddsProviderTypeEnum.THE_ODDS_API,
-                URI.create("https://odds.example.test"),
-                "api-key-not-logged",
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                new AsianOddsProviderProperties.RetryProperties(1, Duration.ofMillis(100)),
-                40
-        );
+        return new AsianOddsProviderProperties(AsianOddsProviderTypeEnum.NOVA_API, 40);
     }
 }

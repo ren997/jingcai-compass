@@ -34,15 +34,6 @@ export default function AdminLayout() {
           <NavLink to="/admin/sync-runs">
             同步运行
           </NavLink>
-          <NavLink to="/admin/mappings">
-            映射复核
-          </NavLink>
-          <NavLink to="/admin/normalizations/leagues">
-            联赛复核
-          </NavLink>
-          <NavLink to="/admin/normalizations/teams">
-            球队复核
-          </NavLink>
           <NavLink to="/admin/predictions">
             预测锁定
           </NavLink>

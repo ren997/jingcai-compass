@@ -24,6 +24,15 @@ public class MatchEntity {
     /** 竞彩业务日期（Asia/Shanghai） */
     private LocalDate lotteryDate;
 
+    /**
+     * 供应商侧比赛 ID。
+     *
+     * <p>单源后这是 upsert 的权威键：NovaAPI 的赛程、赔率、赛果共用同一个
+     * {@code matchId}，因此它能直接贯通三段而无需任何映射表。
+     * 可空是为了兼容历史数据与手工造数据的测试，非空时由部分唯一索引保证唯一。</p>
+     */
+    private String externalMatchId;
+
     /** 标准联赛 ID，标准化前可为空 */
     private Long leagueId;
 

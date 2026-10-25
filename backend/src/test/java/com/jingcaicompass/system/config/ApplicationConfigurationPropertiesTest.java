@@ -19,7 +19,6 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Configuration;
 
-import java.net.URI;
 import java.nio.file.Path;
 import java.time.Duration;
 
@@ -31,23 +30,10 @@ class ApplicationConfigurationPropertiesTest {
             .withConfiguration(AutoConfigurations.of(ValidationAutoConfiguration.class))
             .withUserConfiguration(PropertiesConfiguration.class)
             .withPropertyValues(
-                    "app.sporttery.provider=china",
-                    "app.sporttery.base-url=https://webapi.sporttery.cn",
-                    "app.sporttery.connect-timeout=5s",
-                    "app.sporttery.read-timeout=10s",
-                    "app.sporttery.retry.max-attempts=2",
-                    "app.sporttery.retry.delay=500ms",
+                    "app.sporttery.provider=nova",
                     "app.sporttery.quota-warning-threshold=0",
                     "app.asian-odds.provider=stub",
-                    "app.asian-odds.base-url=https://api.the-odds-api.com",
-                    "app.asian-odds.api-key=secret-key",
-                    "app.asian-odds.connect-timeout=5s",
-                    "app.asian-odds.read-timeout=10s",
-                    "app.asian-odds.retry.max-attempts=2",
-                    "app.asian-odds.retry.delay=500ms",
                     "app.asian-odds.quota-warning-threshold=0",
-                    "app.asian-odds.the-odds.league-sport-keys[英超]=soccer_epl",
-                    "app.asian-odds.the-odds.quota-budget=400",
                     "app.asian-odds.aggregation.bookmaker-whitelist=pinnacle,matchbook",
                     "app.asian-odds.aggregation.min-bookmakers=2",
                     "app.asian-odds.aggregation.min-whitelist-bookmakers=2",
@@ -83,7 +69,12 @@ class ApplicationConfigurationPropertiesTest {
                     "app.tasks.settlement.enabled=false",
                     "app.tasks.settlement.fixed-delay=5m",
                     "app.tasks.settlement.initial-delay=75s",
-                    "app.tasks.settlement.batch-size=100"
+                    "app.tasks.settlement.batch-size=100",
+                    "app.tasks.prediction-auto-publish.enabled=false",
+                    "app.tasks.prediction-auto-publish.fixed-delay=15m",
+                    "app.tasks.prediction-auto-publish.initial-delay=2m",
+                    "app.tasks.prediction-auto-publish.regenerate-interval=3h",
+                    "app.tasks.prediction-auto-publish.operator=system:auto-publish"
             );
 
     @Test
@@ -91,21 +82,12 @@ class ApplicationConfigurationPropertiesTest {
         contextRunner.run(context -> {
             assertThat(context).hasNotFailed();
             SportteryProviderProperties sporttery = context.getBean(SportteryProviderProperties.class);
-            assertThat(sporttery.provider()).isEqualTo(SportteryProviderType.CHINA);
-            assertThat(sporttery.baseUrl()).isEqualTo(URI.create("https://webapi.sporttery.cn"));
-            assertThat(sporttery.connectTimeout()).isEqualTo(Duration.ofSeconds(5));
-            assertThat(sporttery.readTimeout()).isEqualTo(Duration.ofSeconds(10));
-            assertThat(sporttery.retry().maxAttempts()).isEqualTo(2);
-            assertThat(sporttery.retry().delay()).isEqualTo(Duration.ofMillis(500));
+            assertThat(sporttery.provider()).isEqualTo(SportteryProviderType.NOVA);
+            assertThat(sporttery.quotaWarningThreshold()).isZero();
 
             AsianOddsProviderProperties asianOdds = context.getBean(AsianOddsProviderProperties.class);
             assertThat(asianOdds.provider()).isEqualTo(AsianOddsProviderTypeEnum.STUB);
-            assertThat(asianOdds.baseUrl()).isEqualTo(URI.create("https://api.the-odds-api.com"));
-            assertThat(asianOdds.apiKey()).isEqualTo("secret-key");
-            assertThat(asianOdds.toString()).doesNotContain("secret-key");
-            assertThat(asianOdds.toString()).contains("apiKey=***");
-            assertThat(asianOdds.theOdds().leagueSportKeys()).containsEntry("英超", "soccer_epl");
-            assertThat(asianOdds.theOdds().quotaBudget()).isEqualTo(400);
+            assertThat(asianOdds.quotaWarningThreshold()).isZero();
 
             AsianOddsAggregationProperties aggregation =
                     context.getBean(AsianOddsAggregationProperties.class);
@@ -145,6 +127,10 @@ class ApplicationConfigurationPropertiesTest {
             assertThat(tasks.settlement().fixedDelay()).isEqualTo(Duration.ofMinutes(5));
             assertThat(tasks.settlement().initialDelay()).isEqualTo(Duration.ofSeconds(75));
             assertThat(tasks.settlement().batchSize()).isEqualTo(100);
+            assertThat(tasks.predictionAutoPublish().enabled()).isFalse();
+            assertThat(tasks.predictionAutoPublish().fixedDelay()).isEqualTo(Duration.ofMinutes(15));
+            assertThat(tasks.predictionAutoPublish().regenerateInterval()).isEqualTo(Duration.ofHours(3));
+            assertThat(tasks.predictionAutoPublish().operator()).isEqualTo("system:auto-publish");
 
             SyncTaskSchedule schedule = new SyncTaskSchedule(tasks);
             assertThat(schedule.sportteryPoolFixedDelayMillis()).isEqualTo(900_000L);
@@ -166,42 +152,6 @@ class ApplicationConfigurationPropertiesTest {
             PaginationProperties pagination = context.getBean(PaginationProperties.class);
             assertThat(pagination.maxPageSize()).isEqualTo(100);
         });
-    }
-
-    @Test
-    void rejectsConnectTimeoutBelowOneSecond() {
-        contextRunner
-                .withPropertyValues("app.sporttery.connect-timeout=0s")
-                .run(context -> {
-                    assertThat(context).hasFailed();
-                    assertThat(context.getStartupFailure())
-                            .rootCause()
-                            .hasMessageContaining("app.sporttery.connect-timeout");
-                });
-    }
-
-    @Test
-    void rejectsAsianOddsConnectTimeoutBelowOneSecond() {
-        contextRunner
-                .withPropertyValues("app.asian-odds.connect-timeout=0s")
-                .run(context -> {
-                    assertThat(context).hasFailed();
-                    assertThat(context.getStartupFailure())
-                            .rootCause()
-                            .hasMessageContaining("app.asian-odds.connect-timeout");
-                });
-    }
-
-    @Test
-    void rejectsRetryAttemptsBelowOne() {
-        contextRunner
-                .withPropertyValues("app.sporttery.retry.max-attempts=0")
-                .run(context -> {
-                    assertThat(context).hasFailed();
-                    assertThat(context.getStartupFailure())
-                            .rootCause()
-                            .hasMessageContaining("app.sporttery.retry.max-attempts");
-                });
     }
 
     @Test
@@ -254,6 +204,27 @@ class ApplicationConfigurationPropertiesTest {
                             .rootCause()
                             .hasMessageContaining("app.tasks.prediction-lock.fixed-delay");
                 });
+    }
+
+    @Test
+    void rejectsAutoPublishRegenerateIntervalBelowZero() {
+        contextRunner
+                .withPropertyValues("app.tasks.prediction-auto-publish.regenerate-interval=-1s")
+                .run(context -> {
+                    assertThat(context).hasFailed();
+                    assertThat(context.getStartupFailure())
+                            .rootCause()
+                            .hasMessageContaining("app.tasks.prediction-auto-publish.regenerate-interval");
+                });
+    }
+
+    @Test
+    void rejectsAutoPublishBlankOperator() {
+        // 空操作者会让发布服务对每一条候选都抛 AUTH_UNAUTHORIZED，
+        // 表现是「自动发布每轮全失败」，比启动期报错难查得多
+        contextRunner
+                .withPropertyValues("app.tasks.prediction-auto-publish.operator= ")
+                .run(context -> assertThat(context).hasFailed());
     }
 
     @Test

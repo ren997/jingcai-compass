@@ -2,7 +2,6 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { ApiClientError } from '../../services/http';
 import {
   predictionSnapshotDownloadUrl,
-  type MatchSourceMappingVo,
   type PredictionVersionVo,
 } from '../../services/public';
 import NotFoundPage from '../../pages/NotFoundPage';
@@ -40,23 +39,13 @@ function parseMatchId(value: string | undefined) {
   return Number.isSafeInteger(matchId) && matchId > 0 ? matchId : undefined;
 }
 
-function mappingStatusLabel(mapping: MatchSourceMappingVo) {
-  const labels = {
-    PENDING: '待确认',
-    AUTO_CONFIRMED: '自动确认',
-    MANUAL_CONFIRMED: '人工确认',
-    REJECTED: '已拒绝',
-  } as const;
-  return labels[mapping.mappingStatus];
-}
-
 function predictionHashLabel(prediction: PredictionVersionVo) {
   return prediction.predictionHash.length > 20
     ? `${prediction.predictionHash.slice(0, 20)}…`
     : prediction.predictionHash;
 }
 
-/** T501 市场和来源透明信息的公共详情页。 */
+/** T501 比赛详情的公开页。 */
 /** 亚盘模型概率四行：方向概率、edge、λ、σ。十列为空时整块不渲染。 */
 function AsianModelProbabilityRows({ prediction }: { prediction: PredictionVersionVo }) {
   const model = prediction.asianModel;
@@ -317,27 +306,6 @@ export default function MatchDetailPage() {
                   <div><dt>快照类型</dt><dd>{snapshotTypeLabel(market.snapshotType)}</dd></div>
                   <div><dt>采集 / 更新</dt><dd>{formatTimestamp(market.capturedAt)} / {formatTimestamp(market.providerUpdatedAt)}</dd></div>
                 </dl>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="detail-section" aria-labelledby="mapping-title">
-        <div className="section-heading">
-          <div><p className="eyebrow">Source Mapping</p><h2 id="mapping-title">来源映射</h2></div>
-          <span className="availability-badge">{availabilityLabel(detail.mappingAvailability)}</span>
-        </div>
-        {detail.sourceMappings.length === 0 ? (
-          <p className="missing-data">{availabilityLabel(detail.mappingAvailability)}。</p>
-        ) : (
-          <div className="mapping-list">
-            {detail.sourceMappings.map((mapping) => (
-              <article className="mapping-card" key={`${mapping.providerCode}-${mapping.externalMatchId}`}>
-                <strong>{mapping.providerCode}</strong>
-                <span>{mappingStatusLabel(mapping)} · {mapping.mappingMethod ?? '方法暂缺'}</span>
-                <p>{mapping.mappingExplanation ?? '暂无映射解释。'}</p>
-                <small>更新时间：{formatTimestamp(mapping.mappingUpdatedAt)}</small>
               </article>
             ))}
           </div>

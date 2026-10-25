@@ -41,7 +41,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V24 与数据库原生行为。
+ * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V26 与数据库原生行为。
  */
 @Testcontainers
 @ActiveProfiles("integration")
@@ -116,8 +116,8 @@ class PostgresApplicationIT {
                 .filter(info -> info.getVersion() != null)
                 .toArray(MigrationInfo[]::new);
 
-        assertThat(applied).hasSize(24);
-        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("24");
+        assertThat(applied).hasSize(26);
+        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("26");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
@@ -137,13 +137,8 @@ class PostgresApplicationIT {
                 "leagues",
                 "teams",
                 "matches",
-                "provider_league_mappings",
-                "provider_team_mappings",
-                "match_source_mappings",
                 "sporttery_pool_snapshots",
                 "asian_odds_snapshots",
-                "league_aliases",
-                "team_aliases",
                 "audit_logs",
                 "predictions",
                 "prediction_snapshots",
@@ -152,39 +147,14 @@ class PostgresApplicationIT {
                 "settlements"
         );
 
-        List<String> mappingColumns = jdbcTemplate.queryForList(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'match_source_mappings'
-                """,
-                String.class
+        // V26 把映射层五张表物理删除：单源之后它们既无写入方也无读取方。
+        assertThat(tables).doesNotContain(
+                "match_source_mappings",
+                "provider_league_mappings",
+                "provider_team_mappings",
+                "league_aliases",
+                "team_aliases"
         );
-        assertThat(mappingColumns).contains("mapping_explanation", "mapping_candidates", "external_kickoff_time");
-
-        List<String> providerLeagueMappingColumns = jdbcTemplate.queryForList(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'provider_league_mappings'
-                """,
-                String.class
-        );
-        List<String> providerTeamMappingColumns = jdbcTemplate.queryForList(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'provider_team_mappings'
-                """,
-                String.class
-        );
-        assertThat(providerLeagueMappingColumns).contains(
-                "external_display_name", "external_normalized_key", "external_scope");
-        assertThat(providerTeamMappingColumns).contains(
-                "external_display_name", "external_normalized_key", "external_scope");
 
         List<String> predictionColumns = jdbcTemplate.queryForList(
                 """
@@ -201,8 +171,161 @@ class PostgresApplicationIT {
                 "lambda_home", "lambda_away",
                 "model_cover_prob", "market_cover_prob", "edge_cover",
                 "model_over_prob", "market_over_prob", "edge_over",
-                "handicap_dispersion", "totals_dispersion"
+                "handicap_dispersion", "totals_dispersion",
+                "publish_attempt_count", "last_publish_error"
         );
+
+        // V25：单源改造依赖的三处结构。缺任何一处，阶段 1/2/4 都会在真库上才暴露。
+        assertThat(columnsOf("matches")).contains("external_match_id");
+        assertThat(columnsOf("match_result_facts")).contains("score_scope");
+        assertThat(columnsOf("asian_odds_snapshots")).contains("total_line");
+    }
+
+    private List<String> columnsOf(String tableName) {
+        return jdbcTemplate.queryForList(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = ?
+                """,
+                String.class,
+                tableName
+        );
+    }
+
+    /**
+     * V25 的三条结构承诺，逐条验证——它们都属于「错了不报错、只会长期静默跑偏」的类型。
+     *
+     * <ol>
+     *   <li>{@code matches.external_match_id} 是<b>部分</b>唯一索引：多行 NULL 必须共存
+     *       （仓库内上百处测试直接插入 matches 且不带该列），非空值必须唯一。
+     *       若误建成普通唯一索引，PostgreSQL 允许 NULL 并存，行为碰巧一致，
+     *       但换成 NOT NULL 就会让整批存量测试同时变红。</li>
+     *   <li>{@code publish_attempt_count} / {@code last_publish_error} 在 PUBLISHED 之后
+     *       <b>必须仍可更新</b>。它们是发布动作的副产品，不是预测内容。若被误加入
+     *       {@code protect_published_prediction()} 的 ROW 列表，第一次自动发布就会失败，
+     *       而且要到阶段 3 才会暴露。</li>
+     *   <li>{@code score_scope} 必须拒绝加时与点球口径——亚盘结算只认 90 分钟，
+     *       靠「源里恰好没有加时比分」来保证是概率，不是约束。</li>
+     * </ol>
+     */
+    @Test
+    void enforcesNovaSingleSourceStructures() {
+        long matchId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO matches (
+                    lottery_match_no, lottery_date, league_name, home_team_name, away_team_name,
+                    kickoff_time, match_status, external_match_id
+                )
+                VALUES ('T613-NOVA-001', DATE '2036-02-01', 'V25 League', 'V25 Home', 'V25 Away',
+                        TIMESTAMPTZ '2036-02-01 12:00:00+08', 'SCHEDULED', '2042108')
+                RETURNING id
+                """,
+                Long.class
+        );
+
+        // 1a) 同一个 external_match_id 不能出现第二次。
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO matches (
+                    lottery_match_no, lottery_date, league_name, home_team_name, away_team_name,
+                    kickoff_time, match_status, external_match_id
+                )
+                VALUES ('T613-NOVA-002', DATE '2036-02-01', 'V25 League', 'V25 Home 2', 'V25 Away 2',
+                        TIMESTAMPTZ '2036-02-01 13:00:00+08', 'SCHEDULED', '2042108')
+                """))
+                .isInstanceOf(DataAccessException.class);
+
+        // 1b) 不带 external_match_id 的存量写法必须还能插入（部分唯一索引允许 NULL 并存）。
+        jdbcTemplate.update(
+                """
+                INSERT INTO matches (
+                    lottery_match_no, lottery_date, league_name, home_team_name, away_team_name,
+                    kickoff_time, match_status
+                )
+                VALUES ('T613-NOVA-003', DATE '2036-02-01', 'V25 League', 'V25 Home 3', 'V25 Away 3',
+                        TIMESTAMPTZ '2036-02-01 14:00:00+08', 'SCHEDULED')
+                """);
+
+        // 2) 发布诊断列在 PUBLISHED 之后必须可写。
+        insertPublishedPrediction(
+                matchId,
+                "t613-v25-model",
+                "t613-v25-batch",
+                "c".repeat(64),
+                "2036-02-01 10:00:00+08",
+                "2036-02-01 11:00:00+08"
+        );
+        int updated = jdbcTemplate.update(
+                """
+                UPDATE predictions
+                SET publish_attempt_count = publish_attempt_count + 1,
+                    last_publish_error = 'sample diagnostic'
+                WHERE match_id = ?
+                """,
+                matchId
+        );
+        assertThat(updated).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT publish_attempt_count FROM predictions WHERE match_id = ?",
+                Integer.class,
+                matchId
+        )).isEqualTo(1);
+
+        // 3) score_scope 拒绝非 90 分钟口径。赛果事实需要合法的 raw payload，
+        //    这里只验证 CHECK 约束本身，用 VOID 事实（不要求比分）走最小路径。
+        long payloadId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO raw_data_payloads (
+                    provider_code, data_type, request_key, requested_at, payload, payload_hash, parse_status
+                )
+                VALUES ('NOVA_API', 'SPORTTERY_RESULT', 'v25-score-scope', TIMESTAMPTZ '2036-02-01 12:00:00+08',
+                        '{}'::jsonb, ?, 'SUCCESS')
+                RETURNING id
+                """,
+                Long.class,
+                "d".repeat(64)
+        );
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO match_result_facts (
+                    match_id, fact_version, fact_status, match_status,
+                    raw_data_payload_id, provider_updated_at, score_scope
+                )
+                VALUES (?, 1, 'VOID', 'CANCELLED', ?, TIMESTAMPTZ '2036-02-01 12:00:00+08', 'INCLUDING_EXTRA_TIME')
+                """,
+                matchId,
+                payloadId))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_match_result_facts_score_scope");
+
+        // 3b) 同一份非 SPORTTERY_RESULT 来源的载荷仍然必须被拒（V18 的口径未被放宽）。
+        //     用 fact_version = 1：上一条已被 CHECK 拒绝、没有落库，版本链仍是空的。
+        long wrongPayloadId = jdbcTemplate.queryForObject(
+                """
+                INSERT INTO raw_data_payloads (
+                    provider_code, data_type, request_key, requested_at, payload, payload_hash, parse_status
+                )
+                VALUES ('NOVA_API', 'ASIAN_ODDS', 'v25-wrong-source', TIMESTAMPTZ '2036-02-01 12:00:00+08',
+                        '{}'::jsonb, ?, 'SUCCESS')
+                RETURNING id
+                """,
+                Long.class,
+                "e".repeat(64)
+        );
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                """
+                INSERT INTO match_result_facts (
+                    match_id, fact_version, fact_status, match_status,
+                    raw_data_payload_id, provider_updated_at
+                )
+                VALUES (?, 1, 'VOID', 'CANCELLED', ?, TIMESTAMPTZ '2036-02-01 13:00:00+08')
+                """,
+                matchId,
+                wrongPayloadId))
+                .isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("ck_match_result_facts_source_payload");
     }
 
     @Test

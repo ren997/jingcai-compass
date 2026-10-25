@@ -33,7 +33,9 @@ public class AsianFreezeSnapshotSelector {
     /**
      * 选出冻结行。
      *
-     * @param handicapRows     同场全部让球快照行（调用方已按每家每线取最新）
+     * @param handicapRows     同场完整交叉积行（每家 × 让球线 × 大小球线，各取最新）。
+     *                         <b>必须是完整交叉积</b>，不能传「每家每档让球线只留一行」的聚合取数结果，
+     *                         否则大小球维度已被压成单档，对齐主盘的排序键失效
      * @param handicapConsensus 让球市场共识
      * @param totalsConsensus  大小球市场共识，可为空
      * @return 落在共识线上、让球与大小球四个水位齐全的那一行
@@ -51,15 +53,27 @@ public class AsianFreezeSnapshotSelector {
                 .min(ranking(handicapConsensus, totalsConsensus));
     }
 
+    /**
+     * 排序键依次是：对齐大小球主盘 → 白名单 → 与共识同向 → 抽水低 → 最新。
+     *
+     * <p><b>「对齐大小球主盘」必须排第一，不能排在白名单后面。</b>它不是「更好」而是「正确」：
+     * 大小球方向由 λ 投影回判定线得出，而 λ 正是由主盘去水概率反解出来的。判定线与主盘不是
+     * 同一条线时，投影出的模型概率不再复现市场，{@code edge_over} 会凭空出现——那不是 alpha，
+     * 是「投影线 ≠ 反解线」的形状偏差。排在白名单之后意味着只要白名单庄没报主盘那一档，
+     * 就会静默退回到错误线上，而这正是 2026-10-22 那批 13/13 全小球的成因。</p>
+     *
+     * <p>代价要认：为了选到正确的线，可能落到一个非白名单庄上，冻结行的报价抽水更高、
+     * 置信度因此更粗。这是有意的取舍——线错会污染方向与结算，抽水高只损失一点分辨率。</p>
+     */
     private Comparator<AsianOddsSnapshot> ranking(
             AsianMarketConsensusAggregator.LineConsensus handicapConsensus,
             Optional<AsianMarketConsensusAggregator.LineConsensus> totalsConsensus
     ) {
         return Comparator
-                .comparing((AsianOddsSnapshot row) -> isWhitelisted(row.getBookmakerCode()),
+                .comparing((AsianOddsSnapshot row) -> alignedWithTotalsLine(row, totalsConsensus),
                         Comparator.reverseOrder())
+                .thenComparing(row -> isWhitelisted(row.getBookmakerCode()), Comparator.reverseOrder())
                 .thenComparing(row -> agreesOnSide(row, handicapConsensus), Comparator.reverseOrder())
-                .thenComparing(row -> alignedWithTotalsLine(row, totalsConsensus), Comparator.reverseOrder())
                 .thenComparing(row -> priceGap(row, handicapConsensus))
                 .thenComparing(AsianOddsSnapshot::getCapturedAt,
                         Comparator.nullsLast(Comparator.reverseOrder()))

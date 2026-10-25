@@ -14,7 +14,7 @@
 | 亚盘让球 | ✅ | 平博 18 个选项、Bet365 30 个选项，多档盘口 |
 | 四分之一盘 | ✅ | 实测出现 `-0.25 / +0.75 / -1.25 / 2.75 / 3.25` 等 |
 | 大小球 | ✅ | 平博 20 个选项，盘口 1.75~4.0 |
-| 赛果（90 分钟） | ✅ | `sectionsNo999` + `ftHomeScore`，与加时/点球字段分离 |
+| 赛果（90 分钟） | ✅ | `sectionsNo999` = `ftHomeScore`，已用**真实加时+点球样本**复核（解放者杯 `2042118`：开奖 0:1 = ft 0:1 ≠ 点球 5:3） |
 | 赛果回溯 | ✅ | 至少回溯到 2026-01（9 个月前），单次查询上限 30 天 |
 | 历史赔率 | ✅ | 29 天前赛事仍有 2907 个 `points` 数据点 |
 | 事件流 | ✅ | `fixture-detail` 返回 10 条事件（含 `elapsedMin`） |
@@ -42,7 +42,7 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 | `/nova/sports-lottery/list` | 无 | 当日竞彩赛程 + 竞彩赔率 + 奖池 |
 | `/nova/sports-lottery/all-list` | `date` | 按日期查赛程（推荐） |
 | `/nova/tf/odds` | `matchId` / `idEvent` / `bdMatchId` + 可选 `providerId` / `marketId` | 赛前机构赔率 |
-| `/nova/tf/odds-history` | 同上 | 每个选项带 `points` 赔率时间序列 |
+| `/nova/tf/odds-history` | 同上 | 每个选项带 `points` 赔率时间序列；可回溯约 4 个月（见 §3） |
 | `/nova/tf/bookmakers` | 无 | 机构字典（实测 11 家） |
 | `/nova/tf/bet-types` | 无 | 玩法字典（实测 14 种） |
 | `/nova/tf/fixture-detail` | `idEvent`（**不接受 matchId**，传 matchId 报 404） | 比赛事件流 |
@@ -76,13 +76,13 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 2. 庄家名必须映射成稳定 ASCII 编码（平博→`pinnacle`、必发→`betfair`、威廉希尔→`williamhill`、Bet365→`bet365`、1xBet→`1xbet`、韦德→`betvictor`、利记→`liji`）。白名单按编码匹配，直接写中文会永远不命中并**静默回退全量中位数**。
 3. 主盘判定以「去水概率最接近 50/50」为准，`argmin |odd_home - odd_away|` 只是它在对称盘口下的近似。2026-10-21 用仓库内 3 场抓包（events 2492881 / 2407136 / 2594567）复核，6 个市场两种口径结论一致，实现取去水口径。
 
-### 2. 赛果口径：四层比分分离
+### 2. 赛果口径：四层比分分离（90 分钟口径已用加时样本实测复核）
 
 | 字段 | 口径 |
 |---|---|
 | `htHomeScore / htAwayScore` | 半场 |
 | `ftHomeScore / ftAwayScore` | **常规 90 分钟** |
-| `etHomeScore / etAwayScore` | 含加时 |
+| `etHomeScore / etAwayScore` | **加时阶段自身比分**（不是「含加时的累计」，见下方实测） |
 | `penHomeScore / penAwayScore` | 点球 |
 | `tfStatusShort` | `FT` / `AET` / `PEN` |
 
@@ -91,15 +91,77 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 
 **注意**：`soccer-events` 的 `intHomeScore / intAwayScore` 是"实时累计"，**含加时**，不可用于结算。
 
-### 3. 赔率历史是「变化快照」，不是定时快照
+#### 90 分钟口径复核（2026-10-22，真实加时 + 点球样本，已固化为回归测试）
 
-实测点数很少：当天比赛平博亚盘仅 **2 个点**（10-18 19:38、10-19 11:04），29 天前的赛事 7 个点。
+样本：南美解放者杯 帕尔梅拉斯 vs 弗鲁米嫩塞（`matchId=2042118`，竞彩周三013），
+`tfStatusShort=PEN`。两份真实响应互相印证：
 
-这意味着：
+| 来源 | 字段 | 值 |
+|---|---|---|
+| `/nova/text/match-results` | `sectionsNo999` | **0:1** |
+| `/nova/tsd/soccer-events` | `ftHomeScore/ftAwayScore` | **0:1** |
+| 同上 | `etHomeScore/etAwayScore` | 0:0 |
+| 同上 | `penHomeScore/penAwayScore` | 5:3 |
 
-- ✅ CLV / 收盘价可算（取最后一个点）
-- ⚠️ **无法精确取"开赛前 3 小时"的价格**，只能取"≤T-3h 的最后一个点"，早期时段样本会稀疏
-- 若模型强依赖定时刻赔率，需要在接入后自行定时快照（这反而是自建数据资产的起点）
+结论两条：
+
+1. **`sectionsNo999` = 常规 90 分钟比分**，与 `ft*` 逐字相等，且不等于点球比分。
+   可以直接用于亚盘结算，不需要从 `soccer-events` 二次换算。
+2. **`et*` 不是累计值**。本场 `ft=0:1` 而 `et=0:0`——若 `et` 是「含加时」，它不可能小于 `ft`。
+   任何「`ft + et`」的换算都会重复计入加时进球。仓库不读 `et*`，并有断言守着。
+
+夹具与守卫：`backend/src/test/resources/sporttery/novaapi-soccer-events-2042118.json`、
+`NovaApiMatchResultScoreScopeTest`。
+
+#### 赛果的 `matchDate` 是**开赛自然日**，不是竞彩业务日（与赛程同名不同义）
+
+实测 2026-10-21 业务日的 13 场里 10 场跨零点：赛程 `matchDate=2026-10-21`、
+`matchStartDate=2026-10-22`，而赛果返回的 `matchDate` 是 **2026-10-22**。
+
+因此赛果**不能**用 `(matchDate, matchNumStr)` 去定位 `matches`：
+
+- 跨零点场次会「查不到」→ 10/13 场整批记失败（实测 `data_sync_runs.id=52/53`：`fetched=23
+  success=13 failure=10`，10 条 `match not found`；补采 10-20 赛程后 `id=56/57`
+  变为 `SUCCESS 23/23`）
+- 场次编号带着业务日的星期前缀（`周三004` vs `周四004`），所以**不会串场**；
+  但**相差整数周**的同名场次会撞，写入器为此加了「自然键命中但外部 ID 不同就拒绝」的闸
+
+正确做法只有一个：**用 `matchId` 定位**（= `matches.external_match_id`）。这也是单源化之后
+唯一可靠的关联方式——它是这次改造真正的收益，而不是「少写几个 SQL」。
+
+#### 该接口只返回**已开奖**场次
+
+对未来日期查询（`startDate=endDate=2026-10-25`）返回 `results: []`；同日 13 场赛程里
+只有 10 场已开奖。因此「有记录」本身就等于「已开奖」，`matchResultStatus` 实测 31/31 为 `2`。
+解析器把它当硬前置：出现其它取值即整体失败（逐条跳过会让那场比赛永久停在 PENDING 且无人察觉）。
+
+## 3. 赔率历史是「变化快照」，不是定时快照
+
+`/nova/tf/odds-history` 返回 `providers[].markets[].options[].points[]`，
+每个 point 是 `{odd, updateTime}`，**按时间升序**。这是「赔率变动点序列」，不是等间隔采样。
+
+**单选项点数少、全场累计多**（2026-10-23 实测）：
+
+| 样本 | 单选项变动点 | 让球+大小球累计点数 | 记录跨度 |
+|---|---|---|---|
+| 今日场（周五001，2042155） | 3~7 个 | — | 10-21 19:58 → 10-23 15:14 |
+| 2026-09-15 场（2041514） | 2~7 个 | **1,300** | 09-13 11:45 → 09-15 17:33（开赛前） |
+| 2026-07-01 场（2040339） | — | —（432KB 原始体） | — |
+
+要点：
+
+- ✅ **取「≤T 的最后一条」就是 T 时刻的精确价格，不是近似。**
+  变动快照本质是分段常值函数——没变就说明价格确实还是那个值。
+  早前版本这里写的「无法精确取开赛前 3 小时的价格」**是错的**，已修正。
+- ✅ CLV / 收盘价可算（取最后一个点）。
+- ⚠️ 真正的限制是**记录起点由上游决定**，不由开盘时间决定：今日场从 10-21 19:58 起，
+  9-15 那场从 09-13 11:45 起（约 T-2 天）。开盘更早的时段取不到，而非取不准。
+- ⚠️ 变动次数少意味着**无法观测「两次变动之间的价格漂移」**，只能观测离散变动点。
+- **回溯深度**（2026-10-23 实测）：`/nova/sports-lottery/all-list?date=` 可查 2026-06-01；
+  `odds-history` 在 2026-06-20 / 07-01 / 07-15 / 08-01 / 08-15 / 09-01 / 09-15 / 10-20 均有数据
+  （150KB~432KB），2026-06-02 返回空体（106B）。**实际可用回溯约 4 个月。**
+- 结论：历史赔率**不需要自己攒**，回测样本可按日期枚举历史赛程后逐场拉取。
+  自建定时快照仍有价值，但价值在「留痕取证」而非「补数据」。
 
 ## 额度核算
 
@@ -116,19 +178,54 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 ## 风险与待办
 
 1. **机构覆盖偏少**：日职仅 5 家（平博/威廉希尔/Bet365/1xBet/韦德），欧冠 7 家。若后续要用必发（交易所）做真实概率基准，只在大场次可用。
-2. **`main` / `suspended` 恒为 null**：主盘、停盘需自算；停盘判断只能靠 `odds` 缺失或异常。入库解析必须显式丢弃 `suspended = true` 的 option（阶段 B 已在文档层面登记，代码侧等 NovaAPI Provider 接入时落地）。
+2. **`main` / `suspended` 恒为 null**：主盘需自算；停盘判断只能靠 `odds` 缺失或异常。**解析器已落地**（`NovaApiOddsPayloadMapper`）：`suspended` 为 `true` 的 option 直接丢弃——留着会把「不可交易」当成报价写进快照，而冻结行正是按快照报价计账的。
 3. **单次赛果查询 30 天上限**：回测取数要按月分页，一年约 12 次请求，可接受。
 4. **日卡仅验证了单日**：跨日行为（赛程滚动、赛果出现时延、跨日赔率延续）仍需 3~5 天观察。
-5. **数据保留总深度未定**：已验证到 2026-01，再往前未测；若做多赛季训练集，需补测。
+5. **数据保留总深度**：赛程可查到更早；**赔率历史实测约 4 个月**——2026-06-20 有数据（397KB）、
+   2026-06-02 返回空体（106B），边界在 6 月上旬。做多赛季训练集必须自建快照，靠不了回溯。
+6. **`/nova/tf/odds-history` 偶发上游 500**：返回 `{"code":500,"msg":"网络请求异常：Failed to connect to /112.126.29.186:8080"}`。
+   非参数问题——同一场换 `idEvent` 参数即 200，且同时段 `/nova/tf/odds` 与 `/nova/tf/bookmakers` 均正常。
+   **重试或换 idEvent 可恢复**，接入侧应按可重试错误处理，不要当成「该场无历史」。
+7. **多参数请求的签名顺序**：探针传 `matchId=...&marketId=...` 时返回 401「服务端参与验签的键：[marketId, matchId]」。
+   业务参数须按**字典序**全部参与签名；单参 `matchId` / `providerId` 组合正常。
+   （生产侧 `NovaApiClient` 已按字典序签，未受影响。）
+
+## 接口文档在哪、怎么读
+
+`https://novaapi.tsgnkj.com/` 是 Vite SPA，**没有独立的 OpenAPI/Swagger 端点**，但字段定义是
+**内嵌在前端 bundle** 里的，可离线挖：
+
+1. `curl -s https://novaapi.tsgnkj.com/ | grep assets/index-` 拿到 bundle 名；
+2. 下载 `/assets/index-*.js`；
+3. `grep -bo '__name:"tf-odds-history"'` 取**字节偏移**（不是字符偏移，文件含中文）；
+4. 按字节切片后用 `\b(n|o|a|r)=V\(\[(.*?)\]\)` 提取：
+   - `n=V([...])` = 入参（`param/type/required/desc`）
+   - `o=V([...])` = 顶层返回字段，后续 `a`、`r` 是逐层嵌套字段（`options`、`points` 内层）
+
+同一份 bundle 里还有完整接口清单（`/nova/basketball/*`、`/nova/zc/*`、`/nova/lottery/*` 等 30+ 端点），
+以及每个端点的中文说明。**查新接口前先做这一步，不要凭记忆断言"没有某接口"。**
 
 ## 接入建议（对应现有代码）
 
 | 改动 | 位置 | 说明 |
 |---|---|---|
 | 新增 `NovaApiProvider` | `match/client` | Ed25519 签名 + 上述 5 个端点 |
-| 补实赛果同步 | `ChinaSportteryProvider.fetchMatchResultsRaw()` 现为抛异常 | 用 `/nova/text/match-results` 替代，90 分钟口径天然正确 |
-| 亚盘赔率适配 | `odds/client` | `providers → markets → options` 映射；每家每档一行完整入库（不要只留主盘）、中文庄名归一为 ASCII、丢弃 `suspended`。主盘由 `AsianMarketConsensusAggregator` 跨庄算，不在适配层决定 |
-| 新增 `score_scope` 字段 | `market_result_facts` | `REGULATION_90` / `FINAL`，防止口径污染 |
-| 阶段 A 结算闭环 | `SettlementWriter` / `MarketTypeEnum` | 与数据源无关，仍需先做 |
+| 补实赛果同步 | `NovaSportteryProvider.fetchMatchResultsRaw()` | **已落地**：`/nova/text/match-results` + `NovaMatchResultPayloadMapper`。只读 `sectionsNo999`；按 `matchId` 定位比赛（**不要用 `matchDate`**，那是开赛自然日） |
+| 亚盘赔率适配 | `odds/client`、`odds/service` | **已落地**：`NovaApiOddsProvider`（一场一次调用）+ `NovaApiOddsPayloadMapper`（`providers → markets → options`；中文庄名归一为 ASCII；丢弃 `suspended`）。主盘仍由 `AsianMarketConsensusAggregator` 跨庄算，适配层不做决定 —— 它只负责把「一条让球线 + 一条大小球线」展开成同一行，因为冻结行要求同一行同时具备两个市场 |
+| `score_scope` 字段 | `match_result_facts` | V25 已加，默认 `REGULATION_90`；执行侧不改写它——口径由「只读 `sectionsNo999`」这一条在解析边界保证 |
+| 阶段 A 结算闭环 | `SettlementWriter` / `MarketTypeEnum` | 已完成（T613），赛果接进来即可结算 |
 
 **顺序建议**：先补阶段 A 的结算闭环（纯本地数学），再接数据源。否则数据接进来预测依然停在 `LOCKED`。
+
+## 落库形态：为什么是交叉积
+
+NovaAPI 的让球档与大小球档是两条独立阶梯（平博 9 档 × 16 档，1xBet 15 档 × 42 档）。
+而 `asian_odds_snapshots` 一行要同时承载两个市场，`AsianFreezeSnapshotSelector.freezable()`
+又要求冻结行在**同一行**里既有共识让球线、又有齐全的大小球四字段。因此只能展开成
+(让球线 × 大小球线) 的交叉积。
+
+全量交叉积会失控（一场四家庄上千行、每 20 分钟一轮），所以大小球侧只保留
+**跨庄去水概率最平衡的 4 档**。判据刻意不是「报出家数」：按家数会系统性选中
+`1.5/2.5/3.5/4.5` 这类档位稀疏但每家都报的整数盘，把真正的四分盘主盘 `2.75/3.0` 排掉，
+结果是聚合器把主盘定到 2.5 —— 一切看起来正常，但共识已不是市场共识。
+真实抓包下每场约 110~160 行，且这 4 档必然包含各庄自己的主盘线。

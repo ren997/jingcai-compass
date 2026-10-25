@@ -30,8 +30,6 @@ export type MatchDataAvailability =
 
 export type OddsSnapshotType = 'FIRST_SEEN' | 'PRE_KICKOFF' | 'OTHER';
 
-export type MappingStatus = 'PENDING' | 'AUTO_CONFIRMED' | 'MANUAL_CONFIRMED' | 'REJECTED';
-
 export type PredictionStatus = 'PUBLISHED' | 'LOCKED';
 
 export type HandicapPick = 'HOME_WIN' | 'DRAW' | 'AWAY_WIN';
@@ -226,16 +224,6 @@ export type PredictionAsianMarketVo = {
   providerUpdatedAt: string | null;
 };
 
-export type MatchSourceMappingVo = {
-  providerCode: string;
-  externalMatchId: string;
-  mappingStatus: MappingStatus;
-  mappingConfidence: number | null;
-  mappingMethod: string | null;
-  mappingExplanation: string | null;
-  mappingUpdatedAt: string | null;
-};
-
 /** T501 公开比赛基础详情。 */
 export type MatchDetailVo = {
   matchId: number;
@@ -252,8 +240,6 @@ export type MatchDetailVo = {
   sportteryMarket: SportteryMarketVo;
   asianOddsAvailability: MatchDataAvailability;
   asianOddsMarkets: AsianOddsMarketVo[];
-  mappingAvailability: MatchDataAvailability;
-  sourceMappings: MatchSourceMappingVo[];
 };
 
 /** 可公开校验和下载的预测快照元数据，不包含内部存储地址。 */

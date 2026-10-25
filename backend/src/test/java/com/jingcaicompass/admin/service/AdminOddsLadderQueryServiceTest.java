@@ -9,6 +9,7 @@ import com.jingcaicompass.admin.vo.AdminOddsLadderVo;
 import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
+import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
 import com.jingcaicompass.prediction.entity.Prediction;
 import com.jingcaicompass.prediction.enums.PredictionTypeEnum;
 import com.jingcaicompass.prediction.mapper.PredictionMapper;
@@ -34,7 +35,8 @@ class AdminOddsLadderQueryServiceTest {
         service = new AdminOddsLadderQueryService(
                 predictionMapper,
                 snapshotMapper,
-                AsianOddsAggregationProperties.defaults()
+                AsianOddsAggregationProperties.defaults(),
+                new ActiveAsianOddsProvider("NOVA_API")
         );
     }
 
@@ -75,9 +77,9 @@ class AdminOddsLadderQueryServiceTest {
                 "1.98", "1.92", null, null);
         AsianOddsSnapshot totalsOnly = snapshot(902L, "williamhill", null, "2.5",
                 null, null, "1.85", "2.00");
-        when(snapshotMapper.selectLatestConfirmedHandicapLinesByMatchIds(List.of(101L)))
+        when(snapshotMapper.selectLatestHandicapLinesByMatchIds(List.of(101L), "NOVA_API"))
                 .thenReturn(List.of(shared, handicapOnly));
-        when(snapshotMapper.selectLatestConfirmedTotalsLinesByMatchIds(List.of(101L)))
+        when(snapshotMapper.selectLatestTotalsLinesByMatchIds(List.of(101L), "NOVA_API"))
                 .thenReturn(List.of(shared, totalsOnly));
 
         AdminOddsLadderVo ladder = service.query(11L);
@@ -104,14 +106,14 @@ class AdminOddsLadderQueryServiceTest {
     void putsFrozenRowFirstEvenWhenItSortsLaterByLine() {
         Prediction prediction = asianPrediction(12L, 102L, 905L);
         when(predictionMapper.selectById(12L)).thenReturn(prediction);
-        when(snapshotMapper.selectLatestConfirmedHandicapLinesByMatchIds(List.of(102L)))
+        when(snapshotMapper.selectLatestHandicapLinesByMatchIds(List.of(102L), "NOVA_API"))
                 .thenReturn(List.of(
                         snapshot(903L, "a-book", "-0.25", null, "1.90", "2.00", null, null),
                         snapshot(904L, "b-book", "-0.25", null, "1.92", "1.98", null, null),
                         // 冻结行单独在 0.75：只有一家报到该线，达不到最少家数，不参与主盘竞争
                         snapshot(905L, "z-book", "0.75", null, "2.05", "1.85", null, null)
                 ));
-        when(snapshotMapper.selectLatestConfirmedTotalsLinesByMatchIds(List.of(102L)))
+        when(snapshotMapper.selectLatestTotalsLinesByMatchIds(List.of(102L), "NOVA_API"))
                 .thenReturn(List.of());
 
         AdminOddsLadderVo ladder = service.query(12L);
@@ -129,8 +131,8 @@ class AdminOddsLadderQueryServiceTest {
     void returnsEmptyLaddersInsteadOfFailingWhenNoConfirmedQuotesExist() {
         Prediction prediction = asianPrediction(13L, 103L, null);
         when(predictionMapper.selectById(13L)).thenReturn(prediction);
-        when(snapshotMapper.selectLatestConfirmedHandicapLinesByMatchIds(List.of(103L))).thenReturn(List.of());
-        when(snapshotMapper.selectLatestConfirmedTotalsLinesByMatchIds(List.of(103L))).thenReturn(List.of());
+        when(snapshotMapper.selectLatestHandicapLinesByMatchIds(List.of(103L), "NOVA_API")).thenReturn(List.of());
+        when(snapshotMapper.selectLatestTotalsLinesByMatchIds(List.of(103L), "NOVA_API")).thenReturn(List.of());
 
         AdminOddsLadderVo ladder = service.query(13L);
 

@@ -16,6 +16,16 @@ public interface MatchMapper extends BaseMapper<MatchEntity> {
     @Select("SELECT * FROM matches WHERE id = #{id} FOR UPDATE")
     MatchEntity selectByIdForUpdate(@Param("id") Long id);
 
+    /** 按供应商比赛 ID 锁定赛果投影，供单源赛果写入使用。 */
+    @Select("""
+            SELECT * FROM matches
+            WHERE external_match_id = #{externalMatchId}
+            FOR UPDATE
+            """)
+    MatchEntity selectByExternalMatchIdForUpdate(
+            @Param("externalMatchId") String externalMatchId
+    );
+
     /** 按体彩自然键锁定赛果投影，串行化同场事实版本写入。 */
     @Select("""
             SELECT * FROM matches
@@ -104,71 +114,4 @@ public interface MatchMapper extends BaseMapper<MatchEntity> {
             """)
     List<MatchEntity> selectPublicDailyMatches(@Param("lotteryDate") LocalDate lotteryDate);
 
-    /** 按映射候选关系分页读取待复核的竞彩比赛。 */
-    @Select("""
-            <script>
-            SELECT DISTINCT m.*
-            FROM matches m
-            INNER JOIN match_source_mappings mapping
-              ON mapping.match_id = m.id
-                 OR EXISTS (
-                    SELECT 1
-                    FROM jsonb_array_elements(COALESCE(mapping.mapping_candidates, '[]'::jsonb)) candidate
-                    WHERE candidate -&gt;&gt; 'matchId' = m.id::text
-                 )
-            WHERE mapping.mapping_status = #{mappingStatus}
-            <choose>
-              <when test="reviewScope == 'HISTORY'">
-                AND m.kickoff_time IS NOT NULL AND m.kickoff_time &lt;= CURRENT_TIMESTAMP
-              </when>
-              <otherwise>
-                AND (m.kickoff_time IS NULL OR m.kickoff_time &gt; CURRENT_TIMESTAMP)
-              </otherwise>
-            </choose>
-            <if test="providerCode != null and providerCode != ''">
-              AND mapping.provider_code = #{providerCode}
-            </if>
-            ORDER BY m.lottery_date DESC, m.kickoff_time ASC NULLS LAST, m.id ASC
-            LIMIT #{pageSize} OFFSET #{offset}
-            </script>
-            """)
-    List<MatchEntity> selectMappingReviewMatchPage(
-            @Param("providerCode") String providerCode,
-            @Param("mappingStatus") String mappingStatus,
-            @Param("reviewScope") String reviewScope,
-            @Param("offset") long offset,
-            @Param("pageSize") long pageSize
-    );
-
-    /** 统计至少拥有一个该状态外部候选的竞彩比赛数。 */
-    @Select("""
-            <script>
-            SELECT COUNT(DISTINCT m.id)
-            FROM matches m
-            INNER JOIN match_source_mappings mapping
-              ON mapping.match_id = m.id
-                 OR EXISTS (
-                    SELECT 1
-                    FROM jsonb_array_elements(COALESCE(mapping.mapping_candidates, '[]'::jsonb)) candidate
-                    WHERE candidate -&gt;&gt; 'matchId' = m.id::text
-                 )
-            WHERE mapping.mapping_status = #{mappingStatus}
-            <choose>
-              <when test="reviewScope == 'HISTORY'">
-                AND m.kickoff_time IS NOT NULL AND m.kickoff_time &lt;= CURRENT_TIMESTAMP
-              </when>
-              <otherwise>
-                AND (m.kickoff_time IS NULL OR m.kickoff_time &gt; CURRENT_TIMESTAMP)
-              </otherwise>
-            </choose>
-            <if test="providerCode != null and providerCode != ''">
-              AND mapping.provider_code = #{providerCode}
-            </if>
-            </script>
-            """)
-    long countMappingReviewMatches(
-            @Param("providerCode") String providerCode,
-            @Param("mappingStatus") String mappingStatus,
-            @Param("reviewScope") String reviewScope
-    );
 }

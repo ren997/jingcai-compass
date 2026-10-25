@@ -7,8 +7,6 @@ import com.jingcaicompass.admin.service.AdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
 import com.jingcaicompass.admin.service.NoOpAdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.NoOpAdminSyncRunQueryService;
-import com.jingcaicompass.match.service.MatchMappingReviewService;
-import com.jingcaicompass.match.service.NoOpMatchMappingReviewService;
 import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
@@ -24,13 +22,10 @@ class NoPersistenceAdminAutoConfigurationTest {
         contextRunner.run(context -> {
             assertThat(context).hasSingleBean(AdminSyncRunQueryService.class);
             assertThat(context).hasSingleBean(AdminPredictionStatusQueryService.class);
-            assertThat(context).hasSingleBean(MatchMappingReviewService.class);
             assertThat(context.getBean(AdminSyncRunQueryService.class))
                     .isInstanceOf(NoOpAdminSyncRunQueryService.class);
             assertThat(context.getBean(AdminPredictionStatusQueryService.class))
                     .isInstanceOf(NoOpAdminPredictionStatusQueryService.class);
-            assertThat(context.getBean(MatchMappingReviewService.class))
-                    .isInstanceOf(NoOpMatchMappingReviewService.class);
         });
     }
 
@@ -39,7 +34,6 @@ class NoPersistenceAdminAutoConfigurationTest {
         contextRunner.withBean(DataSource.class, () -> mock(DataSource.class)).run(context -> {
             assertThat(context).doesNotHaveBean(AdminSyncRunQueryService.class);
             assertThat(context).doesNotHaveBean(AdminPredictionStatusQueryService.class);
-            assertThat(context).doesNotHaveBean(MatchMappingReviewService.class);
         });
     }
 }

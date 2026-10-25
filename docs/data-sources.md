@@ -316,6 +316,10 @@ T106/T107 启动自动每日采集后，在 `dev-tasks.md` 标记为 `MONITORING
 
 ### 10.1 验证节点启动手册
 
+> **2026-10-25 更新（阶段 5 收口）**：体彩官网（`china`）与 The Odds API 两个采集源已随单源改造删除——代码层的 `ChinaSportteryProvider` / `TheOddsApiProvider` 与数据库层的五张映射表（`V26`）都不再存在。本节以下内容**保留为历史记录**，仅供追溯验证节点当时如何配置；当前可用的启动配置只有 `SPORTTERY_PROVIDER=nova` / `ASIAN_ODDS_PROVIDER=NOVA_API`，凭据用 `NOVA_API_KEY` / `NOVA_PRIVATE_KEY`，连接与限速统一在 `app.nova` 下。
+>
+> 单源之后的同步拓扑见 `docs/business-data-flow.md`（v0.3）。
+
 只有取得节点负责人与 The Odds API 验证 Key，且完成一次受控冒烟采集后，才能把 T106/T107 改为 `MONITORING` 并记录首日和第 14 天决策日。当前没有此记录，不能填充上表中的连续观测数据。
 
 验证节点仅使用仓库外的配置和 Secret：

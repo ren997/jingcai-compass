@@ -338,7 +338,9 @@ class PostgresApplicationIT {
                 matchId,
                 wrongPayloadId))
                 .isInstanceOf(DataAccessException.class)
-                .hasMessageContaining("ck_match_result_facts_source_payload");
+                // 触发器用 RAISE ... USING CONSTRAINT 声明约束名，但那个字段不会进
+                // JDBC 的 message（与真正的 CHECK 违例不同），能断言的是主消息文本。
+                .hasMessageContaining("match result fact source does not match its raw payload");
     }
 
     @Test

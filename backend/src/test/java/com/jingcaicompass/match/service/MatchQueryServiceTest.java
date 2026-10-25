@@ -15,14 +15,11 @@ import com.jingcaicompass.match.dto.MatchDetailQueryDto;
 import com.jingcaicompass.match.dto.MatchListCriteriaDto;
 import com.jingcaicompass.match.dto.MatchListQueryDto;
 import com.jingcaicompass.match.entity.MatchEntity;
-import com.jingcaicompass.match.entity.MatchSourceMapping;
 import com.jingcaicompass.match.entity.SportteryPoolSnapshot;
-import com.jingcaicompass.match.enums.MappingStatusEnum;
 import com.jingcaicompass.match.enums.MatchDataAvailabilityEnum;
 import com.jingcaicompass.match.enums.MatchListSortEnum;
 import com.jingcaicompass.match.enums.MatchStatusEnum;
 import com.jingcaicompass.match.mapper.MatchMapper;
-import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import com.jingcaicompass.odds.entity.AsianOddsSnapshot;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
@@ -51,7 +48,6 @@ class MatchQueryServiceTest {
     private SportteryPoolSnapshotMapper sportterySnapshotMapper;
     private AsianOddsSnapshotMapper asianOddsSnapshotMapper;
     private PredictionMapper predictionMapper;
-    private MatchSourceMappingMapper matchSourceMappingMapper;
     private RawDataPayloadMapper rawDataPayloadMapper;
     private MatchQueryService matchQueryService;
 
@@ -61,14 +57,12 @@ class MatchQueryServiceTest {
         sportterySnapshotMapper = mock(SportteryPoolSnapshotMapper.class);
         asianOddsSnapshotMapper = mock(AsianOddsSnapshotMapper.class);
         predictionMapper = mock(PredictionMapper.class);
-        matchSourceMappingMapper = mock(MatchSourceMappingMapper.class);
         rawDataPayloadMapper = mock(RawDataPayloadMapper.class);
         matchQueryService = new MatchQueryServiceImpl(
                 matchMapper,
                 sportterySnapshotMapper,
                 asianOddsSnapshotMapper,
                 predictionMapper,
-                matchSourceMappingMapper,
                 rawDataPayloadMapper,
                 new PaginationProperties(50),
                 new ActiveAsianOddsProvider("NOVA_API")
@@ -200,19 +194,13 @@ class MatchQueryServiceTest {
     }
 
     @Test
-    void exposesLatestAsianLinePerProviderBookmakerAndHandicapWithMappingStatus() {
+    void exposesLatestAsianLinePerProviderBookmakerAndHandicap() {
         MatchEntity match = match(103L, "周三203");
         AsianOddsSnapshot first = asianOddsSnapshot("BOOK_A", "-0.5", "2026-07-22T10:00:00Z");
         AsianOddsSnapshot secondLine = asianOddsSnapshot("BOOK_A", "-0.25", "2026-07-22T10:01:00Z");
-        MatchSourceMapping mapping = new MatchSourceMapping();
-        mapping.setProviderCode("ASIAN_TEST");
-        mapping.setExternalMatchId("provider-match-103");
-        mapping.setMappingStatus(MappingStatusEnum.MANUAL_CONFIRMED);
-        mapping.setUpdatedAt(Instant.parse("2026-07-22T10:02:00Z"));
         when(matchMapper.selectById(103L)).thenReturn(match);
         when(sportterySnapshotMapper.selectLatestByMatchIds(anyCollection())).thenReturn(List.of());
         when(asianOddsSnapshotMapper.selectLatestPublicLinesByMatchId(103L)).thenReturn(List.of(first, secondLine));
-        when(matchSourceMappingMapper.selectList(any())).thenReturn(List.of(mapping));
 
         var detail = matchQueryService.detail(new MatchDetailQueryDto(103L));
 
@@ -220,23 +208,18 @@ class MatchQueryServiceTest {
         assertThat(detail.asianOddsAvailability()).isEqualTo(MatchDataAvailabilityEnum.AVAILABLE);
         assertThat(detail.asianOddsMarkets()).extracting(item -> item.handicapLine())
                 .containsExactly(BigDecimal.valueOf(-0.5), BigDecimal.valueOf(-0.25));
-        assertThat(detail.mappingAvailability()).isEqualTo(MatchDataAvailabilityEnum.AVAILABLE);
-        assertThat(detail.sourceMappings()).singleElement()
-                .satisfies(item -> assertThat(item.mappingStatus()).isEqualTo(MappingStatusEnum.MANUAL_CONFIRMED));
     }
 
     @Test
-    void distinguishesMissingAsianOddsAndMissingMappings() {
+    void distinguishesMissingAsianOddsFromPresentOnes() {
         MatchEntity match = match(104L, "周三204");
         when(matchMapper.selectById(104L)).thenReturn(match);
         when(sportterySnapshotMapper.selectLatestByMatchIds(anyCollection())).thenReturn(List.of());
         when(asianOddsSnapshotMapper.selectLatestPublicLinesByMatchId(104L)).thenReturn(List.of());
-        when(matchSourceMappingMapper.selectList(any())).thenReturn(List.of());
 
         var detail = matchQueryService.detail(new MatchDetailQueryDto(104L));
 
         assertThat(detail.asianOddsAvailability()).isEqualTo(MatchDataAvailabilityEnum.NO_ASIAN_ODDS_SNAPSHOT);
-        assertThat(detail.mappingAvailability()).isEqualTo(MatchDataAvailabilityEnum.NO_SOURCE_MAPPING);
     }
 
     @Test

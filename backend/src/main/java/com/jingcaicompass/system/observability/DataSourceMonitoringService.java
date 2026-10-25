@@ -125,22 +125,14 @@ public class DataSourceMonitoringService {
                   AND odds.provider_code = ?
                 """, businessDate, provider);
         double coverage = poolCount == 0 ? 0.0 : (double) coveredCount / poolCount;
-        int pendingMappings = queryInt("""
-                SELECT COUNT(*)
-                FROM match_source_mappings
-                WHERE provider_code = ?
-                  AND mapping_status = 'PENDING'
-                """, provider);
 
         gauge("jingcai.datasource.asian_odds.coverage", coverage, "provider", provider);
-        gauge("jingcai.mapping.pending", pendingMappings, "provider", provider);
         recordSyncState(provider, ProviderDataTypeEnum.ASIAN_ODDS, state, age, properties.asianOddsMaxSyncAge());
         alert(provider, "sync_stale", active && stale(age, properties.asianOddsMaxSyncAge()));
         boolean successfulOddsSeen = "SUCCESS".equals(state.latestStatus()) && !stale(age, properties.asianOddsMaxSyncAge());
         alert(provider, "coverage_low", active && successfulOddsSeen && poolCount > 0
                 && coverage < properties.coverageMinimumRate().doubleValue());
         alert(provider, "sync_failure_streak", active && state.failedStreak() >= properties.failedRunStreakThreshold());
-        alert(provider, "mapping_backlog", active && pendingMappings >= properties.pendingMappingThreshold());
         recordQuota(provider, ProviderDataTypeEnum.ASIAN_ODDS, businessDate, asianOddsProperties.quotaWarningThreshold(), active);
     }
 

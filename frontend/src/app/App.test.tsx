@@ -112,16 +112,6 @@ const detail: MatchDetailVo = {
     capturedAt: '2026-07-22T10:01:00+08:00',
     providerUpdatedAt: '2026-07-22T10:00:00+08:00',
   }],
-  mappingAvailability: 'AVAILABLE',
-  sourceMappings: [{
-    providerCode: 'ODDS_API',
-    externalMatchId: 'external-42',
-    mappingStatus: 'AUTO_CONFIRMED',
-    mappingConfidence: 0.98,
-    mappingMethod: 'TEAM_AND_TIME',
-    mappingExplanation: '球队和开赛时间一致。',
-    mappingUpdatedAt: '2026-07-22T09:00:00+08:00',
-  }],
 };
 
 const predictionDetail: PredictionDetailVo = {
@@ -523,21 +513,18 @@ describe('App routes', () => {
     expect(screen.getByText('比赛不存在（追踪号：trace-match-404）')).toBeInTheDocument();
   });
 
-  it('explains missing markets and mappings and allows a detail refresh', async () => {
+  it('explains missing markets and allows a detail refresh', async () => {
     const user = userEvent.setup();
     mockPublicMatches({ detail: {
       ...detail,
       sportteryMarket: { ...detail.sportteryMarket, availability: 'NO_SPORTTERY_SNAPSHOT' },
       asianOddsAvailability: 'NO_ASIAN_ODDS_SNAPSHOT',
       asianOddsMarkets: [],
-      mappingAvailability: 'NO_SOURCE_MAPPING',
-      sourceMappings: [],
     } });
     renderApp('/matches/42');
 
     expect(await screen.findByText('暂无体彩快照，暂不展示 SP 或官方让球。')).toBeInTheDocument();
     expect(screen.getByText('暂无亚盘快照。')).toBeInTheDocument();
-    expect(screen.getByText('暂无来源映射。')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '刷新' }));
 

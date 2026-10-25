@@ -2454,7 +2454,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T614 单源 NovaAPI 改造（赛程 + 赔率 + 赛果 + 自动发布）
 
-- 状态：`IN_PROGRESS`（阶段 0~4 已完成且实跑验收通过；阶段 5 未开始）
+- 状态：`IN_PROGRESS`（阶段 0~4 已完成且实跑验收通过；阶段 5 进行中，B0 已完成）
 - 分支：`feat/nova-single-source`
 - 背景：核心诉求是「每天拉数据 → 生成预测 → 次日结算」。但当前在产数据链是三段不同来源拼起来的（赛程/赛果 `sporttery.cn`、赔率 `THE_ODDS_API`），靠 `match_source_mappings` 人工缝合：自动确认要求队名精确匹配 ≥0.85，中英文永远不达标，**每跑一批新比赛都必须手写 SQL**。更硬的一条是 `ChinaSportteryProvider.fetchMatchResultsRaw()` 直接抛错——「第二天结算」今天根本跑不通。
 - 决策：NovaAPI 成为唯一数据源。赛程、赔率、赛果共用同一个 `matchId`，因此映射/归一化层（`match_source_mappings`、`provider_team_mappings`、别名表、归一化评审、`name_key` 系列）在业务上失去存在理由。数据库可清空重建；迁移不重写历史（V1~V25 全部保留），只新增。
@@ -2467,7 +2467,16 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 阶段 2：单源赔率 + 删 3 处 `INNER JOIN match_source_mappings`（单 commit `9c6f616`）。**实跑验收已于 2026-10-22 全部通过**：真实同步 13 场 → 2052 行交叉积快照（`total_line` 非空率 100%）、两轮增量 `2052→0`、13 场预测全部冻结在 `pinnacle` 行、开赛后零新增；顺带修掉 `quota_cost` 恒为 0 的额度盲区
   - [x] 阶段 3：自动发布编排（`PredictionAutoPublishOrchestrator` + `PredictionAutoPublishJob`，生成 DRAFT 后自动过发布门）。**实跑验收 2026-10-22 通过**：首轮 13 候选全发布、次轮 `NO_PENDING_MATCH` 短路、每场仅 1 条 PUBLISHED、13 条审计记录操作者为 `system:auto-publish`
   - [x] 阶段 4：赛果同步与结算打通。`sectionsNo999` 为唯一权威比分，**90 分钟口径已用一场真实加时+点球样本复核**；比赛定位改用 `external_match_id`（`matchDate` 是开赛自然日，不是业务日）；真库首轮 `SUCCESS 23/23`、次轮 `unchanged=23`、13 条事实全为 `FINAL/REGULATION_90/OFFICIAL`
-  - [ ] 阶段 5：删除映射层与旧数据源
+  - [ ] 阶段 5：删除映射层与旧数据源（**进行中**：B0 行为改造已完成，B1~B6 未开始）
+    分七批，每批独立可编译、可单独回滚；**先改行为、再删代码、最后删表**：
+    - [x] **B0 行为改造**：公开比赛详情与数据源监控停止读写映射表。`MatchQueryServiceImpl` 删除 `MatchSourceMappingMapper` 依赖与逐场映射查询，`MatchDetailVo` 移除 `mappingAvailability` / `sourceMappings`；`DataSourceMonitoringService` 删除 `match_source_mappings` 的 `PENDING` 计数、`jingcai.mapping.pending` 指标与 `mapping_backlog` 告警；`ObservabilityProperties.pendingMappingThreshold` 与两个 profile 的 `pending-mapping-threshold` 一并移除。前端 `public.ts` / `MatchDetailPage.tsx` 同步去掉「来源映射」区块
+    - [ ] **B1** 前端后台：删 5 个映射/标准化页面 + 路由/导航/API 层
+    - [ ] **B2** 删 3 个后台 Controller（映射复核 / 标准化复核 / 数据管道）
+    - [ ] **B3** 删复核与归一化 8 服务 + NoOp 实现 + 装配；**同批处理** `DataPipelineServiceImpl` 的映射计数与 `MatchNormalizationBackfillService` 依赖
+    - [ ] **B4** 删 `MatchMappingService` 链路、`MappingMetrics`、`MatchMappingScoreSupport`
+    - [ ] **B5** 删 5 Mapper + 5 实体 + `MatchMapper` 两条复核 JOIN + DTO/VO/枚举
+    - [ ] **B6** 删旧 Provider 与旧源分支（含 `AsianOddsSyncServiceImpl` 的映射 `else` 分支与 The Odds 额度门禁）→ 新增 `V26` 删 5 张表 → 走 Draft PR 由 CI 验证
+    - 顺序依据：`match_source_mappings` 上还有 4 处**运行时**读路径，先删表会导致公开详情 500、监控每分钟报错；其中赔率同步的映射分支只在旧源 provider 下可达，故与旧 Provider 一并放 B6
 
 - 阶段 1 补做（原计划留到阶段 5，本轮提前收口）：`matches.league_id` / `home_team_id` / `away_team_id` 填充。
   - 理由：联赛下拉是前端从列表里按 `leagueId != null` 反推的（`useLeagueOptionsQuery`），不填就只剩「全部联赛」——单源一上线这个筛选就静默消失。它属于阶段 1 的写库完整性，不是阶段 5 才暴露的问题。
@@ -2486,6 +2495,10 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
     3. **`amended=true` 是单源下的正确取值**。比分变化只可能是竞彩改判，而写入器 `amended` 守卫原本防的是**跨源误读**；单源后由 `raw_data_payloads` 原文 + 事实版本链承担审计。另外两条硬约束不变：终态不得回退 `PENDING`、官方事实不得被人工事实替代
     4. **`score_scope` 不主动写**（保持 V25 的 DB 默认 `REGULATION_90`）。口径由「解析器只读 `sectionsNo999`」在边界保证，写一个常量不会增加任何信息；若将来接加时来源，应在解析器里显式设值
   - 阶段 4 的一个**运维事实**：赛果窗口按开赛自然日覆盖，因此**业务日 D-1 的跨零点场次会出现在 D 的窗口里**。若 D-1 的赛程没采集过，这批会比 `match not found`（实测 `data_sync_runs.id=52/53`：`fetched=23 success=13 failure=10`），补采 D-1 赛程后变为 `SUCCESS 23/23`（`id=56/57`）。这不是 bug，但会让首轮看起来「失败」——新库上线时先补采前一天赛程
+  - [x] 阶段 5 / B0（2026-10-25）：行为改造。**改动面**：`MatchQueryServiceImpl`（删 `MatchSourceMappingMapper` 注入与 `detail()` 的映射查询）、`MatchDetailVo`（删 2 字段）、`DataSourceMonitoringService`（删 PENDING 计数 + `jingcai.mapping.pending` + `mapping_backlog`）、`ObservabilityProperties` 与 `application.yml` / `application-prod.yml`（删 `pending-mapping-threshold`）、`PersistenceServicesAutoConfiguration` 装配签名、前端 `public.ts` / `MatchDetailPage.tsx` / `App.test.tsx`。
+    **为什么先改这里**：改前 `match_source_mappings` 仍有 4 处运行时读路径——公开详情逐场查（删表即 500）、监控每分钟 `SELECT COUNT(*) WHERE mapping_status='PENDING'`（删表即每分钟报错）、数据管道映射计数、赔率同步旧源 `else` 分支。前三处本次处理；第四处只在非 NOVA provider 下可达，随旧 Provider 放到 B6。
+    **验证**：后端 `mvn -o test` **812 项 0 失败 / 11 跳过**（跳过项为本地实跑脚手架）；前端 `tsc -b` 通过、`vitest run` **81 项全过**、`vite build` 成功。
+    **顺带修掉一处监控盲区**：原 `mapping_backlog` 按 `provider=当前赔率源` 过滤，而库里 45 条映射全部属于 `THE_ODDS_API`（27 `MANUAL_CONFIRMED` + 18 `PENDING`）、`NOVA_API` 一条没有，所以该告警实际上永远是 0——与阈值 `20` 只差 2 行的「定时炸弹」并不存在，删它是删死逻辑而不是删有效监控。
 
 - 阶段 2 的关键取舍（未实跑也要先钉住的四条）：
   1. **`line` 是主队让球数，不取反**。The Odds API 的让球两侧互为相反数（`homePoint + awayPoint == 0`），NovaAPI 同档两侧 `line` 文本完全相等。照搬旧配对逻辑会 100% 判 `INCONSISTENT_SPREAD_PAIR`，表现为「解析成功但零条 line」。

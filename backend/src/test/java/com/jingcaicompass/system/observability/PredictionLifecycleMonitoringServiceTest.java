@@ -102,7 +102,6 @@ class PredictionLifecycleMonitoringServiceTest {
                 Duration.ofMinutes(40),
                 new BigDecimal("0.90"),
                 3,
-                20,
                 Duration.ofMinutes(1),
                 Duration.ofMinutes(10)
         );

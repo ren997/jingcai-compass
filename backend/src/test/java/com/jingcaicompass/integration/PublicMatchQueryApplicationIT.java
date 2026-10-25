@@ -142,7 +142,7 @@ class PublicMatchQueryApplicationIT {
     }
 
     @Test
-    void returnsEveryCurrentAsianLineWithMappingAndExplicitAbsenceStatus() {
+    void returnsEveryCurrentAsianLineWithExplicitAbsenceStatus() {
         long leagueId = insertLeague("T501 详情联赛");
         long matchId = insertMatch(leagueId, "T501-DETAIL", "SCHEDULED", "2026-07-22T10:00:00Z");
         insertRawSportteryPayload("b");
@@ -161,14 +161,11 @@ class PublicMatchQueryApplicationIT {
         assertThat(detail.asianOddsMarkets().stream()
                 .filter(item -> item.handicapLine().compareTo(new BigDecimal("-0.5")) == 0)
                 .findFirst().orElseThrow().homeOdds()).isEqualByComparingTo("1.92");
-        assertThat(detail.mappingAvailability()).isEqualTo(MatchDataAvailabilityEnum.AVAILABLE);
-        assertThat(detail.sourceMappings()).singleElement()
-                .satisfies(item -> assertThat(item.mappingExplanation()).isEqualTo("T501 integration mapping"));
         verifyNoInteractions(sportteryProvider);
     }
 
     @Test
-    void distinguishesMissingMarketsAndMappingsFromAnAbsentMatch() {
+    void distinguishesMissingMarketsFromAnAbsentMatch() {
         long leagueId = insertLeague("T501 缺失联赛");
         long matchId = insertMatch(leagueId, "T501-MISSING", "SCHEDULED", "2026-07-22T10:00:00Z");
 
@@ -176,7 +173,6 @@ class PublicMatchQueryApplicationIT {
 
         assertThat(detail.sportteryMarket().availability()).isEqualTo(MatchDataAvailabilityEnum.NO_SPORTTERY_SNAPSHOT);
         assertThat(detail.asianOddsAvailability()).isEqualTo(MatchDataAvailabilityEnum.NO_ASIAN_ODDS_SNAPSHOT);
-        assertThat(detail.mappingAvailability()).isEqualTo(MatchDataAvailabilityEnum.NO_SOURCE_MAPPING);
     }
 
     private long insertLeague(String name) {

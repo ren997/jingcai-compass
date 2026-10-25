@@ -23,7 +23,7 @@ class DataSourceMonitoringServiceTest {
 
     @Test
     @SuppressWarnings({"unchecked", "rawtypes"})
-    void faultInjectionRefreshesCoverageQuotaMappingAndFailureAlertStates() {
+    void faultInjectionRefreshesCoverageQuotaAndFailureAlertStates() {
         JdbcTemplate jdbcTemplate = org.mockito.Mockito.mock(JdbcTemplate.class, invocation -> {
             String method = invocation.getMethod().getName();
             if ("query".equals(method)) {
@@ -40,9 +40,6 @@ class DataSourceMonitoringServiceTest {
                 String sql = invocation.getArgument(0, String.class);
                 if (sql.contains("COUNT(DISTINCT odds.match_id)")) {
                     return 5;
-                }
-                if (sql.contains("match_source_mappings")) {
-                    return 20;
                 }
                 if (sql.contains("SUM(quota_cost)")) {
                     return 50;
@@ -62,7 +59,7 @@ class DataSourceMonitoringServiceTest {
                     jdbcTemplate,
                     registry,
                     new ObservabilityProperties(true, Duration.ofMinutes(1), Duration.ofMinutes(30),
-                            Duration.ofMinutes(40), new java.math.BigDecimal("0.90"), 3, 20,
+                            Duration.ofMinutes(40), new java.math.BigDecimal("0.90"), 3,
                             Duration.ofMinutes(1), Duration.ofMinutes(10)),
                     activeTasks(),
                     sportteryProvider,
@@ -74,7 +71,6 @@ class DataSourceMonitoringServiceTest {
             service.refresh();
 
             assertThat(gauge(registry, "THE_ODDS_API", "coverage_low")).isEqualTo(1.0);
-            assertThat(gauge(registry, "THE_ODDS_API", "mapping_backlog")).isEqualTo(1.0);
             assertThat(gauge(registry, "THE_ODDS_API", "quota_threshold_reached")).isEqualTo(1.0);
             assertThat(gauge(registry, "THE_ODDS_API", "sync_failure_streak")).isEqualTo(1.0);
             assertThat(registry.get("jingcai.datasource.asian_odds.coverage")

@@ -19,7 +19,6 @@ public record ObservabilityProperties(
         @NotNull Duration asianOddsMaxSyncAge,
         @NotNull @DecimalMin("0.0") @DecimalMax("1.0") BigDecimal coverageMinimumRate,
         @Min(1) int failedRunStreakThreshold,
-        @Min(1) int pendingMappingThreshold,
         @NotNull Duration predictionLockOverdueGrace,
         @NotNull Duration settlementBacklogGrace
 ) {

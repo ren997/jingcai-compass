@@ -5,7 +5,7 @@
 - 文档版本：v0.6
 - 最后更新：2026-10-21
 - 作用：本项目唯一的开发顺序、任务状态和验收记录入口
-- 当前活动任务：`T614 单源 NovaAPI 改造`（分支 `feat/nova-single-source`，阶段 0~5 代码侧全部落地：赛程/赔率/赛果/自动发布/删映射层与旧源；**下一步是建 Draft PR 让 CI 跑 `-Pintegration`**，本机无 Docker 故 V26 与 18 个 `*IT` 从未真库验证）。亚盘模型交付线（`T610`/`T611`/`T612`/`T613`）已全部收口并合入 master（PR #26，merge commit `2885739`），master 主干 CI 全绿。
+- 当前活动任务：`T614 单源 NovaAPI 改造` 已全部收口并合入 master（merge commit `9ab9d0d`）。阶段 0~5 完成：赛程/赔率/赛果/自动发布/删映射层与旧源。V26 于 2026-10-25 由本地真实启动触发 Flyway v25→v26，已对生产库生效；删表前五张表已用 JDBC 备份到 `.workbuddy/tmp/mapping-backup-20261025-145650/`。合并推送命中 `backend/**`，已自动触发 `backend-integration` 的 `-Pintegration`（Testcontainers PG 16）。下一步：重启上线链 T106/T107 两周观测 → T108 Go/No-Go → T604/T605。
 - 下一任务：`T614 阶段 5`（删除 `match_source_mappings` 写入、`ChinaSportteryProvider`、`TheOddsApiProvider`、映射/归一化服务与后台页面）。`T614` 全部阶段收口后，数据源与上线链才能重启：`T106`/`T107`（两周连续观测，`PARTIAL`）→ `T108`（Go/No-Go，`BLOCKED`）→ `T604`（Docker 部署，`BLOCKED`）→ `T605`（MVP 验收，`TODO`）——单源改造直接决定了这条链还有没有人工映射阻塞。产品打磨侧仍可选 `T208`（联赛与球队标准化复核闭环，`PARTIAL`），但其价值随映射层删除而下降。
   - **阶段 2 的实跑验收已于 2026-10-22 完成**（日卡恢复可用）：13 场真实同步 2052 行、两轮增量收敛到 0、13 场预测全部冻结在 `pinnacle` 真实快照行、开赛后零新增。过程中修掉一个额度盲区——NovaAPI 不返回额度响应头，导致 `quota_cost` 恒为 0，已改为按请求数计（`NovaApiClient.get()` 单点）。下一阶段（3 自动发布）可以开工。
 - 最近完成增量：`T614 阶段 4 赛果同步与结算`（`NovaSportteryProvider` 接 `/nova/text/match-results`：`sectionsNo999` 为唯一比分源、`matchId` 为唯一定位键、`amended=true` 承担官方改判；**90 分钟口径已用真实加时+点球样本复核**；真库首轮 `SUCCESS 23/23`（13 appended + 10 补采赛程后命中）、次轮 `unchanged=23` 完全幂等、13 条事实全为 `FINAL/REGULATION_90/OFFICIAL`）；`T614 阶段 2 单源赔率`（NovaAPI 成为赔率唯一来源：一场一次 `/nova/tf/odds?matchId=` + 交叉积落库 + 三条读查询去 `match_source_mappings` JOIN；**验收降级为离线夹具回放**，日卡密钥已过期）；`T614 阶段 1 补做`（`matches` 的 `league_id`/`home_team_id`/`away_team_id` 由展示名派生填充，修掉单源切换后联赛下拉静默变空；真库回填 13/13/13，字典 12/64 且两次回放幂等）；`T614 阶段 1 单源赛程`（NovaAPI 成为 `matches` 唯一写入者：Ed25519 签名客户端 + `external_match_id` 优先 upsert + 解析下沉到 Provider，真库 13 场连续两次 `SUCCESS 13/13`）；`T614 阶段 0 V25`（单源结构前置五处，含 `matches.external_match_id` 部分唯一索引与 `score_scope` 90 分钟口径）；`T610/T611/T612 收档`（T610、T611 缺口由 PR #26 的真覆盖补齐；T612 经核对确认「CI 证据」是伪缺口——仓库 CI 只跑后端 `mvn -Pintegration verify`、无前端步骤，按「本地可完整验收」口径收档）；`T613 收口并合入 master`（PR #26 merge commit `2885739`，164 文件 +13728/−701，25 个提交；PR CI 与 master push CI 均全绿：单测 698 项 + 集成 68 项 + 24 个迁移 apply；顺带修掉 CI 首轮抓出的迁移 IT 版本号硬编码回归）；`T613 阶段 E 概率落库与统计`（统计口径按产品线隔离 + `PUSH`/`HALF_*` 连续化 + 双 Brier + 前端 tab 与亚盘展示 + 十列进哈希/快照 v4 + 批量发布 + 后台盘口阶梯）；`T613 阶段 D 选择性发布`（σ 跨庄分歧硬过滤 + edge 影子门槛，实测确认 edge 在让球主盘上结构性为 0，版本升至 v6）；`T613 阶段 C λ 反解模型`（统一概率口径 / 两段一维二分 / 邻线回投校验，3 场真实抓包 λ 与独立 Decimal 原型一致）；`T613 阶段 B 跨庄聚合与共识主盘`（逐家去水 / 中位数 / 最平衡线 / 冻结行，3 场 NovaAPI 真实抓包验收）；`T613 阶段 A 结算闭环`（V23 迁移、亚盘结算候选查询、真实 PostgreSQL 16 验证）
@@ -2454,7 +2454,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T614 单源 NovaAPI 改造（赛程 + 赔率 + 赛果 + 自动发布）
 
-- 状态：`IN_PROGRESS`（阶段 0~4 已完成且实跑验收通过；阶段 5 代码侧 B0~B7 已全部完成，`V26` 删表待 CI 集成验证）
+- 状态：`IN_PROGRESS`（阶段 0~4 已完成且实跑验收通过；阶段 5 全部完成并合入 master `9ab9d0d`，`V26` 已对生产库真实应用）
 - 分支：`feat/nova-single-source`
 - 背景：核心诉求是「每天拉数据 → 生成预测 → 次日结算」。但当前在产数据链是三段不同来源拼起来的（赛程/赛果 `sporttery.cn`、赔率 `THE_ODDS_API`），靠 `match_source_mappings` 人工缝合：自动确认要求队名精确匹配 ≥0.85，中英文永远不达标，**每跑一批新比赛都必须手写 SQL**。更硬的一条是 `ChinaSportteryProvider.fetchMatchResultsRaw()` 直接抛错——「第二天结算」今天根本跑不通。
 - 决策：NovaAPI 成为唯一数据源。赛程、赔率、赛果共用同一个 `matchId`，因此映射/归一化层（`match_source_mappings`、`provider_team_mappings`、别名表、归一化评审、`name_key` 系列）在业务上失去存在理由。数据库可清空重建；迁移不重写历史（V1~V25 全部保留），只新增。
@@ -2467,7 +2467,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 阶段 2：单源赔率 + 删 3 处 `INNER JOIN match_source_mappings`（单 commit `9c6f616`）。**实跑验收已于 2026-10-22 全部通过**：真实同步 13 场 → 2052 行交叉积快照（`total_line` 非空率 100%）、两轮增量 `2052→0`、13 场预测全部冻结在 `pinnacle` 行、开赛后零新增；顺带修掉 `quota_cost` 恒为 0 的额度盲区
   - [x] 阶段 3：自动发布编排（`PredictionAutoPublishOrchestrator` + `PredictionAutoPublishJob`，生成 DRAFT 后自动过发布门）。**实跑验收 2026-10-22 通过**：首轮 13 候选全发布、次轮 `NO_PENDING_MATCH` 短路、每场仅 1 条 PUBLISHED、13 条审计记录操作者为 `system:auto-publish`
   - [x] 阶段 4：赛果同步与结算打通。`sectionsNo999` 为唯一权威比分，**90 分钟口径已用一场真实加时+点球样本复核**；比赛定位改用 `external_match_id`（`matchDate` 是开赛自然日，不是业务日）；真库首轮 `SUCCESS 23/23`、次轮 `unchanged=23`、13 条事实全为 `FINAL/REGULATION_90/OFFICIAL`
-  - [ ] 阶段 5：删除映射层与旧数据源（**代码侧已完成**：B0~B7 全部落地，`V26__drop_mapping_tables.sql` 待 CI `-Pintegration` 验证后收口）
+  - [x] 阶段 5：删除映射层与旧数据源（B0~B7 全部落地；`V26` 于 2026-10-25 由本地真实启动应用至生产库，删表前五张表已备份；已合入 master `9ab9d0d`）
     分七批，每批独立可编译、可单独回滚；**先改行为、再删代码、最后删表**：
     - [x] **B0 行为改造**：公开比赛详情与数据源监控停止读写映射表。`MatchQueryServiceImpl` 删除 `MatchSourceMappingMapper` 依赖与逐场映射查询，`MatchDetailVo` 移除 `mappingAvailability` / `sourceMappings`；`DataSourceMonitoringService` 删除 `match_source_mappings` 的 `PENDING` 计数、`jingcai.mapping.pending` 指标与 `mapping_backlog` 告警；`ObservabilityProperties.pendingMappingThreshold` 与两个 profile 的 `pending-mapping-threshold` 一并移除。前端 `public.ts` / `MatchDetailPage.tsx` 同步去掉「来源映射」区块
     - [x] **B1** 前端后台（`415879d`）：删 5 个映射/标准化页面 + 2 个页面测试；`App.tsx` 去掉 8 条路由、`AdminLayout` 去掉 3 个导航入口；`admin.ts` 删 14 个 API 函数与全部相关类型、`adminSearch.ts` 删 6 个 URL 状态函数、`useAdminQueries.ts` 删 7 个 queryKey + 6 个 hook + 2 组 mutation

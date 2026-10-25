@@ -31,14 +31,9 @@ import com.jingcaicompass.home.mapper.HomeSummaryMapper;
 import com.jingcaicompass.home.service.HomeSummaryQueryService;
 import com.jingcaicompass.match.job.SportteryPoolSyncJob;
 import com.jingcaicompass.match.mapper.MatchResultFactMapper;
-import com.jingcaicompass.match.mapper.LeagueAliasMapper;
 import com.jingcaicompass.match.mapper.LeagueMapper;
 import com.jingcaicompass.match.mapper.MatchMapper;
-import com.jingcaicompass.match.mapper.MatchSourceMappingMapper;
-import com.jingcaicompass.match.mapper.ProviderLeagueMappingMapper;
-import com.jingcaicompass.match.mapper.ProviderTeamMappingMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
-import com.jingcaicompass.match.mapper.TeamAliasMapper;
 import com.jingcaicompass.match.mapper.TeamMapper;
 import com.jingcaicompass.match.service.MatchResultSyncService;
 import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
@@ -118,14 +113,9 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(DataSyncRunPayloadMapper.class, () -> mock(DataSyncRunPayloadMapper.class))
             .withBean(RawDataPayloadMapper.class, () -> mock(RawDataPayloadMapper.class))
             .withBean(LeagueMapper.class, () -> mock(LeagueMapper.class))
-            .withBean(LeagueAliasMapper.class, () -> mock(LeagueAliasMapper.class))
-            .withBean(ProviderLeagueMappingMapper.class, () -> mock(ProviderLeagueMappingMapper.class))
             .withBean(TeamMapper.class, () -> mock(TeamMapper.class))
-            .withBean(TeamAliasMapper.class, () -> mock(TeamAliasMapper.class))
-            .withBean(ProviderTeamMappingMapper.class, () -> mock(ProviderTeamMappingMapper.class))
             .withBean(MatchMapper.class, () -> mock(MatchMapper.class))
             .withBean(MatchResultFactMapper.class, () -> mock(MatchResultFactMapper.class))
-            .withBean(MatchSourceMappingMapper.class, () -> mock(MatchSourceMappingMapper.class))
             .withBean(SportteryPoolSnapshotMapper.class, () -> mock(SportteryPoolSnapshotMapper.class))
             .withBean(AsianOddsSnapshotMapper.class, () -> mock(AsianOddsSnapshotMapper.class))
             .withBean(PredictionMapper.class, () -> mock(PredictionMapper.class))

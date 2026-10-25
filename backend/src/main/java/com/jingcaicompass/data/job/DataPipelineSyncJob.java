@@ -52,18 +52,14 @@ public class DataPipelineSyncJob {
             execution.recordOutcome(status);
             log.info(
                     "event=job_finished businessDate={} status={} sportteryRunId={} "
-                            + "asianRunId={} matches={} normalized={} pending={} mappingsConfirmed={} "
-                            + "mappingsPending={} snapshots={} coverage={} durationMs={}",
+                            + "asianRunId={} matches={} snapshots={} covered={} coverage={} durationMs={}",
                     businessDate,
                     status,
                     result.sportterySyncRunId(),
                     result.asianOddsSyncRunId(),
-                    result.normalization().totalMatchCount(),
-                    result.normalization().normalizedMatchCount(),
-                    result.normalization().pendingMatchCount(),
-                    result.confirmedMappingCount(),
-                    result.pendingMappingCount(),
+                    result.sportteryMatchUpsertCount(),
                     result.asianOddsSnapshotInsertCount(),
+                    result.coveredMatchCount(),
                     result.coverageRate(),
                     execution.durationMs()
             );

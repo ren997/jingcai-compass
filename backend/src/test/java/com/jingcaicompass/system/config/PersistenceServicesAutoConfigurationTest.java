@@ -40,10 +40,7 @@ import com.jingcaicompass.match.mapper.ProviderTeamMappingMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import com.jingcaicompass.match.mapper.TeamAliasMapper;
 import com.jingcaicompass.match.mapper.TeamMapper;
-import com.jingcaicompass.match.service.MatchNormalizationBackfillService;
-import com.jingcaicompass.match.service.MatchMappingReviewService;
 import com.jingcaicompass.match.service.MatchResultSyncService;
-import com.jingcaicompass.match.service.ProviderNormalizationReviewService;
 import com.jingcaicompass.match.service.SportteryPoolPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
 import com.jingcaicompass.match.client.SportteryProviderProperties;
@@ -167,7 +164,6 @@ class PersistenceServicesAutoConfigurationTest {
                 .withBean(DataSource.class, () -> mock(DataSource.class))
                 .run(context -> {
                     assertThat(context).hasSingleBean(DataPipelineService.class);
-                    assertThat(context).hasSingleBean(MatchNormalizationBackfillService.class);
                     assertThat(context).hasSingleBean(MatchResultSyncService.class);
                     assertThat(context).hasSingleBean(AuditLogService.class);
                     assertThat(context).hasSingleBean(PredictionImportFileParser.class);
@@ -186,8 +182,6 @@ class PersistenceServicesAutoConfigurationTest {
                     assertThat(context).hasSingleBean(AdminDraftPredictionQueryService.class);
                     assertThat(context).hasSingleBean(AdminPredictionStatusQueryService.class);
                     assertThat(context).hasSingleBean(AdminSyncRunQueryService.class);
-                    assertThat(context).hasSingleBean(MatchMappingReviewService.class);
-                    assertThat(context).hasSingleBean(ProviderNormalizationReviewService.class);
                     assertThat(context).doesNotHaveBean(DataPipelineSyncJob.class);
                     assertThat(context).doesNotHaveBean(PredictionLockJob.class);
                     assertThat(context).doesNotHaveBean(SnapshotPublishJob.class);

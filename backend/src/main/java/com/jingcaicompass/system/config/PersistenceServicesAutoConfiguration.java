@@ -60,30 +60,19 @@ import com.jingcaicompass.match.mapper.ProviderTeamMappingMapper;
 import com.jingcaicompass.match.mapper.SportteryPoolSnapshotMapper;
 import com.jingcaicompass.match.mapper.TeamAliasMapper;
 import com.jingcaicompass.match.mapper.TeamMapper;
-import com.jingcaicompass.match.service.LeagueNormalizationService;
-import com.jingcaicompass.match.service.LeagueNormalizationServiceImpl;
-import com.jingcaicompass.match.service.MatchMappingReviewService;
 import com.jingcaicompass.match.service.MatchQueryService;
 import com.jingcaicompass.match.service.MatchQueryServiceImpl;
 import com.jingcaicompass.match.service.MatchResultFactWriter;
 import com.jingcaicompass.match.service.MatchResultSyncService;
 import com.jingcaicompass.match.service.MatchResultSyncServiceImpl;
 import com.jingcaicompass.match.service.MatchResultSyncCoordinator;
-import com.jingcaicompass.match.service.MatchMappingReviewServiceImpl;
 import com.jingcaicompass.match.service.MatchMappingService;
 import com.jingcaicompass.match.service.MatchMappingServiceImpl;
-import com.jingcaicompass.match.service.MatchNormalizationBackfillService;
-import com.jingcaicompass.match.service.MatchNormalizationBackfillServiceImpl;
-import com.jingcaicompass.match.service.MatchNormalizationWorker;
-import com.jingcaicompass.match.service.ProviderNormalizationReviewService;
-import com.jingcaicompass.match.service.ProviderNormalizationReviewServiceImpl;
 import com.jingcaicompass.match.service.SportteryPoolMatchWriter;
 import com.jingcaicompass.match.service.SportteryPoolSyncService;
 import com.jingcaicompass.match.service.SportteryPoolSyncServiceImpl;
 import com.jingcaicompass.match.service.SportteryMatchResultPayloadMapper;
 import com.jingcaicompass.match.service.SportteryProvider;
-import com.jingcaicompass.match.service.TeamNormalizationService;
-import com.jingcaicompass.match.service.TeamNormalizationServiceImpl;
 import com.jingcaicompass.odds.client.AsianModelProperties;
 import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
@@ -844,34 +833,6 @@ public class PersistenceServicesAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnMissingBean(LeagueNormalizationService.class)
-    LeagueNormalizationService leagueNormalizationService(
-            LeagueMapper leagueMapper,
-            LeagueAliasMapper leagueAliasMapper,
-            ProviderLeagueMappingMapper providerLeagueMappingMapper
-    ) {
-        return new LeagueNormalizationServiceImpl(
-                leagueMapper,
-                leagueAliasMapper,
-                providerLeagueMappingMapper
-        );
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(TeamNormalizationService.class)
-    TeamNormalizationService teamNormalizationService(
-            TeamMapper teamMapper,
-            TeamAliasMapper teamAliasMapper,
-            ProviderTeamMappingMapper providerTeamMappingMapper
-    ) {
-        return new TeamNormalizationServiceImpl(
-                teamMapper,
-                teamAliasMapper,
-                providerTeamMappingMapper
-        );
-    }
-
-    @Bean
     @ConditionalOnMissingBean(MatchMappingService.class)
     MatchMappingService matchMappingService(
             MatchMapper matchMapper,
@@ -879,34 +840,6 @@ public class PersistenceServicesAutoConfiguration {
             MappingMetrics mappingMetrics
     ) {
         return new MatchMappingServiceImpl(matchMapper, matchSourceMappingMapper, mappingMetrics);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    MatchNormalizationWorker matchNormalizationWorker(
-            MatchMapper matchMapper,
-            LeagueNormalizationService leagueNormalizationService,
-            TeamNormalizationService teamNormalizationService
-    ) {
-        return new MatchNormalizationWorker(
-                matchMapper,
-                leagueNormalizationService,
-                teamNormalizationService
-        );
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(MatchNormalizationBackfillService.class)
-    MatchNormalizationBackfillService matchNormalizationBackfillService(
-            MatchMapper matchMapper,
-            MatchNormalizationWorker matchNormalizationWorker,
-            SportteryProvider sportteryProvider
-    ) {
-        return new MatchNormalizationBackfillServiceImpl(
-                matchMapper,
-                matchNormalizationWorker,
-                sportteryProvider
-        );
     }
 
     @Bean
@@ -922,13 +855,8 @@ public class PersistenceServicesAutoConfiguration {
             ProviderSyncTemplate providerSyncTemplate,
             AsianOddsPayloadMapper asianOddsPayloadMapper,
             AsianOddsSnapshotWriter asianOddsSnapshotWriter,
-            MatchMappingService matchMappingService,
-            LeagueNormalizationService leagueNormalizationService,
-            TeamNormalizationService teamNormalizationService,
             MatchMapper matchMapper,
             AsianOddsSnapshotMapper asianOddsSnapshotMapper,
-            DataSyncRunMapper dataSyncRunMapper,
-            AsianOddsProviderProperties asianOddsProviderProperties,
             ObjectMapper objectMapper
     ) {
         return new AsianOddsSyncServiceImpl(
@@ -936,13 +864,8 @@ public class PersistenceServicesAutoConfiguration {
                 providerSyncTemplate,
                 asianOddsPayloadMapper,
                 asianOddsSnapshotWriter,
-                matchMappingService,
-                leagueNormalizationService,
-                teamNormalizationService,
                 matchMapper,
                 asianOddsSnapshotMapper,
-                dataSyncRunMapper,
-                asianOddsProviderProperties,
                 objectMapper
         );
     }
@@ -951,20 +874,14 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean(DataPipelineService.class)
     DataPipelineService dataPipelineService(
             SportteryPoolSyncService sportteryPoolSyncService,
-            MatchNormalizationBackfillService matchNormalizationBackfillService,
             AsianOddsSyncService asianOddsSyncService,
-            AsianOddsProvider asianOddsProvider,
             MatchMapper matchMapper,
-            MatchSourceMappingMapper matchSourceMappingMapper,
             AsianOddsSnapshotMapper asianOddsSnapshotMapper
     ) {
         return new DataPipelineServiceImpl(
                 sportteryPoolSyncService,
-                matchNormalizationBackfillService,
                 asianOddsSyncService,
-                asianOddsProvider,
                 matchMapper,
-                matchSourceMappingMapper,
                 asianOddsSnapshotMapper
         );
     }
@@ -973,48 +890,6 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean(AuditLogService.class)
     AuditLogService auditLogService(AuditLogMapper auditLogMapper) {
         return new AuditLogServiceImpl(auditLogMapper);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(MatchMappingReviewService.class)
-    MatchMappingReviewService matchMappingReviewService(
-            MatchSourceMappingMapper matchSourceMappingMapper,
-            MatchMapper matchMapper,
-            ProviderLeagueMappingMapper providerLeagueMappingMapper,
-            ProviderTeamMappingMapper providerTeamMappingMapper,
-            AuditLogService auditLogService,
-            PaginationProperties paginationProperties
-    ) {
-        return new MatchMappingReviewServiceImpl(
-                matchSourceMappingMapper,
-                matchMapper,
-                providerLeagueMappingMapper,
-                providerTeamMappingMapper,
-                auditLogService,
-                paginationProperties
-        );
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(ProviderNormalizationReviewService.class)
-    ProviderNormalizationReviewService providerNormalizationReviewService(
-            ProviderLeagueMappingMapper providerLeagueMappingMapper,
-            ProviderTeamMappingMapper providerTeamMappingMapper,
-            LeagueMapper leagueMapper,
-            TeamMapper teamMapper,
-            AuditLogMapper auditLogMapper,
-            AuditLogService auditLogService,
-            PaginationProperties paginationProperties
-    ) {
-        return new ProviderNormalizationReviewServiceImpl(
-                providerLeagueMappingMapper,
-                providerTeamMappingMapper,
-                leagueMapper,
-                teamMapper,
-                auditLogMapper,
-                auditLogService,
-                paginationProperties
-        );
     }
 
     @Bean

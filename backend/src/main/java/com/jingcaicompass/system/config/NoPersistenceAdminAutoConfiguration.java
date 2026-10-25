@@ -5,10 +5,6 @@ import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
 import com.jingcaicompass.admin.service.AdminSportteryResultSyncService;
 import com.jingcaicompass.admin.service.NoOpAdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.NoOpAdminSyncRunQueryService;
-import com.jingcaicompass.match.service.MatchMappingReviewService;
-import com.jingcaicompass.match.service.NoOpMatchMappingReviewService;
-import com.jingcaicompass.match.service.NoOpProviderNormalizationReviewService;
-import com.jingcaicompass.match.service.ProviderNormalizationReviewService;
 import javax.sql.DataSource;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
@@ -39,17 +35,5 @@ public class NoPersistenceAdminAutoConfiguration {
     @ConditionalOnMissingBean(AdminPredictionStatusQueryService.class)
     AdminPredictionStatusQueryService unavailableAdminPredictionStatusQueryService() {
         return new NoOpAdminPredictionStatusQueryService();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(MatchMappingReviewService.class)
-    MatchMappingReviewService unavailableMatchMappingReviewService() {
-        return new NoOpMatchMappingReviewService();
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(ProviderNormalizationReviewService.class)
-    ProviderNormalizationReviewService unavailableProviderNormalizationReviewService() {
-        return new NoOpProviderNormalizationReviewService();
     }
 }

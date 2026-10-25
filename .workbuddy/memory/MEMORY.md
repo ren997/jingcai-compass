@@ -59,16 +59,20 @@
 
 ## 单源进度
 
-- 阶段 0（V25）/1（赛程）/2（赔率）/3（自动发布）/4（赛果与结算 `600f3dc`）全部完成并推送；阶段 4 验收 `SUCCESS 23/23`、次轮全 `unchanged`、13 条事实全 `FINAL/REGULATION_90/OFFICIAL`。
+- 阶段 0（V25）/1（赛程）/2（赔率）/3（自动发布）/4（赛果与结算 `600f3dc`）/5（删映射层与旧源，`c979b1d`）代码侧全部完成并推送；阶段 4 验收 `SUCCESS 23/23`、次轮全 `unchanged`、13 条事实全 `FINAL/REGULATION_90/OFFICIAL`。
 - **落库是交叉积**（让球线 × 大小球线），冻结行要求同一行具备两个市场。必须同时改 V25 唯一键与 `AsianOddsSnapshotWriter` 去重维度（含 `total_line` + `IS NULL`），否则每轮整批重插且不报错。**大小球保留档按「跨庄去水概率离 50/50 的距离」取前 4，不按报出家数**（按家数会选中稀疏整数盘、把主盘 `2.75/3.0` 排掉，共识已错却不报错）。
 - **`code != 200` 必须整体失败**：密钥过期放在响应体而 HTTP 仍 200；逐场降级会让同步显示成功、快照 0 条。单场 404 才降级，401/403 立即抛错。
 - **读查询按 `provider_code` 过滤、不 JOIN `match_source_mappings`**：去重键 `(bookmaker, line)` 不含 provider，混源同名庄会互相覆盖并一起进中位数。赔率响应**没有滚球标志**，只能用 `kickoff_time` 判赛前。`NovaApiClient` 装配条件是 OR，限速与赛程/赔率/赛果共用额度。
 - **`matches` 必须写全 `league_id`/`home_team_id`/`away_team_id`**（联赛下拉由前端从 `leagueId !== null` 反推，不填会让筛选**静默消失**）。**赛果三约定**：`amended=true`、`providerUpdatedAt` 取信封 `timestamp`、`score_scope` 不主动写；窗口按开赛自然日 → 新库上线先补采前一天赛程。
-- **生成是条件幂等**（赔率没变则同 `generationBatchHash`）；**亚盘同步是追加快照**，重跑后方向/置信度可能翻转（不是 bug）。迁移当前最高 **V25**（`backend/src/main/java/db/migration/` 有 Java 版，新建 SQL 前先 `ls` 避撞号）。
+- **生成是条件幂等**（赔率没变则同 `generationBatchHash`）；**亚盘同步是追加快照**，重跑后方向/置信度可能翻转（不是 bug）。迁移当前最高 **V26**（`backend/src/main/java/db/migration/` 有 Java 版，新建 SQL 前先 `ls` 避撞号）。
+- **单源后没有映射层也没有旧源**：V26 删了 5 张映射表，`ChinaSportteryProvider`/`TheOddsApiProvider` 与两个 RestClientConfig 已删，`SportteryProviderType` 只剩 `NOVA|STUB`、`AsianOddsProviderTypeEnum` 只剩 `STUB|NOVA_API`。两个 properties 记录只剩 `(provider, quotaWarningThreshold)`——`app.sporttery`/`app.asian-odds` 下的 base-url、api-key、超时、重试**从来没被读过**（Nova 只用 `app.nova`），别再往那儿加配置项。
+- **`app.sporttery.provider` 的 `matchIfMissing = true` 是历史隐患**：默认值曾是 `china`，缺省部署会去连体彩官网而那个 provider 的 `fetchMatchResultsRaw()` 直接抛错。B7 已把默认翻成 `nova`，`ProductionConfigurationTest` 钉住这两个默认值。
+- **`LegacyNameKeyIdentityCleanupMigrationIT` 不受 V26 影响**：它显式 `flyway("22")` 收尾，不会在表被删之后的版本上跑。它仍在 `INSERT INTO provider_team_mappings` 是合法的——只是历史迁移的中间态。
 
 ## 本地实跑
 
 - 探针 `tools/novaapi-probe/NovaApiProbe.java`（单文件 `java` 直跑），`raw <path> <query>` 打任意端点，产物落 `tools/novaapi-probe/novaapi-probe-out/<timestamp>/`。
+- **本机 `mvn` 不在 PATH 上**，每次先 export：`JAVA_HOME=/c/D/java/tools/jdk/jdk-21.0.11+10`，`PATH` 加 `/c/D/java/tools/maven/apache-maven-3.9.16-bin/apache-maven-3.9.16/bin`。`gh` 也未安装，**只能靠网页建 PR**（仓库是 public，匿名 `api.github.com/repos/ren997/jingcai-compass/pulls?head=ren997:<branch>` 可查有没有 PR）。
 - 凭据走**环境变量不落盘**：应用侧 `NOVA_API_KEY`/`NOVA_PRIVATE_KEY`，探针用 `NOVA_PRIVATE_KEY_B64`（同 base64 PKCS8）。日卡会过期，需用户重发。
 - **本地跑单源必须 `@SpringBootTest(properties=...)` 覆盖 provider**：`application-local.yml` 里是硬编码字符串，环境变量无效。全链路 `SportteryPoolSyncService.sync` → `AsianOddsSyncService.sync` → `PredictionAutoPublishOrchestrator.run(d)`。
 - **本地 `app.tasks.enabled=false`，定时 Job 全关**：已发布预测开赛过后仍停在 `PUBLISHED`，**每天必须手动跑**；「锁定后首页 500」的 P0 在本地从未触发，上线前必须确认。
@@ -85,7 +89,7 @@
 
 ## 已知待办
 
-- 阶段 5：删映射层与旧数据源（`match_source_mappings` 结构保留、停止写入；`ChinaSportteryProvider`、`TheOddsApiProvider`、5 个映射归一化服务、后台页面）。
+- **阶段 5 已代码侧收口**（B0~B7，单测 812→716 全绿）；唯一缺口是 **`feat/nova-single-source` 从未建过 PR**，38+ 提交没有 `-Pintegration` 证据，V26 的 `DROP TABLE` 与 18 个 `*IT` 一次都没在 Testcontainers PG16 上跑过。
 - 阶段 4 唯一欠证：**官方赛果 → 锁定 → 结算全链真跑**（目前结算均离线核对，未走 `SettlementService`）。
 - 回测做成功能（原型已验证）。邻线校验口径（整条阶梯取最大 vs 主盘 ±0.75）不改代码，结论写进 `docs/asian-model-design.md`。
-- `backend/src/test/java/com/jingcaicompass/tools/` 保持未跟踪（本地单测数比 CI 多 1~2）；`docs/business-data-flow.md` 仍在描述映射层（阶段 5 一起改）。
+- `backend/src/test/java/com/jingcaicompass/tools/` 保持未跟踪（本地单测数比 CI 多 1~2）。

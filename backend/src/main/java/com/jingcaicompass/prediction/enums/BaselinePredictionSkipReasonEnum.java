@@ -15,7 +15,9 @@ public enum BaselinePredictionSkipReasonEnum {
     KICKOFF_PASSED("KICKOFF_PASSED", "比赛已开赛或缺少开赛时间"),
     MISSING_SPORTTERY_MARKET("MISSING_SPORTTERY_MARKET", "缺少完整体彩让球与 SP 快照"),
     INVALID_SPORTTERY_MARKET("INVALID_SPORTTERY_MARKET", "体彩 SP 必须为正数"),
-    MISSING_CONFIRMED_ASIAN_MARKET("MISSING_CONFIRMED_ASIAN_MARKET", "缺少已确认映射的完整亚盘和大小球快照"),
+    // 编码名保留历史写法（对外 API 与前端已按它匹配）；单源之后已无「已确认映射」这一前提，
+    // 实际判据是「该场没有任何亚盘快照行」。
+    MISSING_CONFIRMED_ASIAN_MARKET("MISSING_CONFIRMED_ASIAN_MARKET", "缺少该场亚盘快照"),
     INVALID_ASIAN_MARKET("INVALID_ASIAN_MARKET", "亚盘和大小球水位必须为正数"),
     INSUFFICIENT_ASIAN_BOOKMAKERS("INSUFFICIENT_ASIAN_BOOKMAKERS", "报价庄家不足 2 家，无法形成去水共识主盘"),
     INSUFFICIENT_ASIAN_CONSTRAINTS("INSUFFICIENT_ASIAN_CONSTRAINTS",
@@ -34,7 +36,7 @@ public enum BaselinePredictionSkipReasonEnum {
     public static final String DESC =
             "预测基线跳过原因：NOT_SCHEDULED-非未开赛，KICKOFF_PASSED-已开赛，"
                     + "MISSING_SPORTTERY_MARKET-缺体彩盘口，INVALID_SPORTTERY_MARKET-体彩盘口无效，"
-                    + "MISSING_CONFIRMED_ASIAN_MARKET-缺已确认亚盘，INVALID_ASIAN_MARKET-亚盘无效，"
+                    + "MISSING_CONFIRMED_ASIAN_MARKET-缺亚盘快照，INVALID_ASIAN_MARKET-亚盘无效，"
                     + "INSUFFICIENT_ASIAN_BOOKMAKERS-报价庄家不足，"
                     + "INSUFFICIENT_ASIAN_CONSTRAINTS-缺大小球主盘（λ 反解只够一个约束），"
                     + "INCONSISTENT_ASIAN_MARKETS-两个市场定价不自洽，"

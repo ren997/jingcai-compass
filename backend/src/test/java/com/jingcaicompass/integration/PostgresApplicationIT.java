@@ -41,7 +41,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V26 与数据库原生行为。
+ * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V27 与数据库原生行为。
  */
 @Testcontainers
 @ActiveProfiles("integration")
@@ -116,8 +116,8 @@ class PostgresApplicationIT {
                 .filter(info -> info.getVersion() != null)
                 .toArray(MigrationInfo[]::new);
 
-        assertThat(applied).hasSize(26);
-        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("26");
+        assertThat(applied).hasSize(27);
+        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("27");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
@@ -273,8 +273,21 @@ class PostgresApplicationIT {
                 matchId
         )).isEqualTo(1);
 
-        // 3) score_scope 拒绝非 90 分钟口径。赛果事实需要合法的 raw payload，
-        //    这里只验证 CHECK 约束本身，用 VOID 事实（不要求比分）走最小路径。
+        // 3) score_scope 必须「装得下自己声明的取值」，未知口径仍由 CHECK 拒绝。
+        //    V25 把列声明成 VARCHAR(16)，CHECK 却允许 'INCLUDING_EXTRA_TIME'(20) 与
+        //    'INCLUDING_PENALTIES'(19)——两个合法取值一写就变成 value too long，
+        //    本该由结算侧显式拒绝的口径反而让整条事实插不进去。V27 已把宽度修到 24。
+        //    这里先查结构（不落数据），再用一个「长度合法但不在枚举里」的口径验约束。
+        assertThat(jdbcTemplate.queryForObject(
+                """
+                SELECT character_maximum_length
+                FROM information_schema.columns
+                WHERE table_name = 'match_result_facts' AND column_name = 'score_scope'
+                """,
+                Integer.class)).isGreaterThanOrEqualTo("INCLUDING_EXTRA_TIME".length());
+
+        // 赛果事实需要合法的 raw payload，这里只验证 CHECK 约束本身，
+        // 用 VOID 事实（不要求比分）走最小路径。
         long payloadId = jdbcTemplate.queryForObject(
                 """
                 INSERT INTO raw_data_payloads (
@@ -293,7 +306,7 @@ class PostgresApplicationIT {
                     match_id, fact_version, fact_status, match_status,
                     raw_data_payload_id, provider_updated_at, score_scope
                 )
-                VALUES (?, 1, 'VOID', 'CANCELLED', ?, TIMESTAMPTZ '2036-02-01 12:00:00+08', 'INCLUDING_EXTRA_TIME')
+                VALUES (?, 1, 'VOID', 'CANCELLED', ?, TIMESTAMPTZ '2036-02-01 12:00:00+08', 'INCLUDING_SHOOTOUT')
                 """,
                 matchId,
                 payloadId))

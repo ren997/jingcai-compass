@@ -201,26 +201,27 @@ class PredictionImportApplicationIT {
     }
 
     @Test
-    void generatesBaselineOnlyForConfirmedMappedMarketsAndReusesSameDraftBatch() {
-        // 1) 同一业务日准备两场完整盘口，只有一场拥有已确认外部赛事映射
+    void generatesBaselineForEveryMatchWithCompleteOddsAndReusesSameDraftBatch() {
+        // 1) 同一业务日准备两场完整盘口。单源之后没有映射层，
+        //    「只有已确认映射的比赛才生成」这条旧契约已随 match_source_mappings 一并删除，
+        //    两场都会生成。
         prepareBaselineGenerationFixtures();
 
-        // 2) 首次运行只为已确认比赛导入 DRAFT；未确认比赛保持可解释跳过
+        // 2) 首次运行为两场都导入 DRAFT，不存在任何跳过原因
         BaselinePredictionGenerationVo first = baselinePredictionGenerationService.generateAndImport(
                 LocalDate.of(2026, 7, 27),
                 "t306-it"
         );
 
         assertThat(first.candidateCount()).isEqualTo(2);
-        assertThat(first.generatedCount()).isEqualTo(1);
-        assertThat(first.insertedCount()).isEqualTo(1);
+        assertThat(first.generatedCount()).isEqualTo(2);
+        assertThat(first.insertedCount()).isEqualTo(2);
         assertThat(first.reusedCount()).isZero();
-        assertThat(first.skippedByReason()).containsEntry(
-                BaselinePredictionSkipReasonEnum.MISSING_CONFIRMED_ASIAN_MARKET,
-                1
-        );
+        assertThat(first.skippedByReason())
+                .doesNotContainKey(BaselinePredictionSkipReasonEnum.MISSING_CONFIRMED_ASIAN_MARKET);
         Prediction saved = predictionMapper.selectOne(new LambdaQueryWrapper<Prediction>()
-                .eq(Prediction::getGenerationBatchId, first.generationBatchId()));
+                .eq(Prediction::getGenerationBatchId, first.generationBatchId())
+                .eq(Prediction::getMatchId, FIRST_MATCH_ID));
         assertThat(saved.getMatchId()).isEqualTo(FIRST_MATCH_ID);
         assertThat(saved.getPredictionStatus()).isEqualTo(PredictionStatusEnum.DRAFT);
         assertThat(saved.getModelVersion()).isEqualTo("t306-asian-baseline-v6");
@@ -238,7 +239,7 @@ class PredictionImportApplicationIT {
         assertThat(saved.getAwayWinProb()).isNull();
         assertThat(saved.getConfidenceLevel()).isNull();
 
-        // 3) 输入快照未变化时重跑复用同一批次，不产生第二条预测版本
+        // 3) 输入快照未变化时重跑复用同一批次，两场都不产生额外预测版本
         BaselinePredictionGenerationVo second = baselinePredictionGenerationService.generateAndImport(
                 LocalDate.of(2026, 7, 27),
                 "t306-it"
@@ -246,12 +247,12 @@ class PredictionImportApplicationIT {
         assertThat(second.generationBatchId()).isEqualTo(first.generationBatchId());
         assertThat(second.generationBatchHash()).isEqualTo(first.generationBatchHash());
         assertThat(second.insertedCount()).isZero();
-        assertThat(second.reusedCount()).isEqualTo(1);
+        assertThat(second.reusedCount()).isEqualTo(2);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM predictions WHERE generation_batch_id = ?",
                 Integer.class,
                 first.generationBatchId()
-        )).isEqualTo(1);
+        )).isEqualTo(2);
 
         // 4) 生成器只留下草稿；仍须由既有发布、到期锁定流程推进生命周期
         PredictionPublishResultVo published = predictionPublishService.publish(
@@ -319,11 +320,11 @@ class PredictionImportApplicationIT {
             BaselinePredictionGenerationVo firstResult = first.get(30, TimeUnit.SECONDS);
             BaselinePredictionGenerationVo secondResult = second.get(30, TimeUnit.SECONDS);
 
-            // 2) 事务级批次锁使后到请求复用首批结果，绝不增加第二条预测版本
+            // 2) 事务级批次锁使后到请求复用首批结果，绝不增加额外预测版本
             assertThat(firstResult.generationBatchId()).isEqualTo(secondResult.generationBatchId());
             assertThat(firstResult.generationBatchHash()).isEqualTo(secondResult.generationBatchHash());
-            assertThat(firstResult.insertedCount() + secondResult.insertedCount()).isEqualTo(1);
-            assertThat(firstResult.reusedCount() + secondResult.reusedCount()).isEqualTo(1);
+            assertThat(firstResult.insertedCount() + secondResult.insertedCount()).isEqualTo(2);
+            assertThat(firstResult.reusedCount() + secondResult.reusedCount()).isEqualTo(2);
         } finally {
             executor.shutdownNow();
         }

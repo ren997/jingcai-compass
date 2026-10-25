@@ -9,20 +9,19 @@ import {
 } from '../../services/public';
 import {
   availabilityLabel,
-  asianHandicapPredictionMarketLabel,
-  confidenceLabel,
   dataSourceLabel,
+  formatAsianLine,
   formatHandicap,
   formatNumber,
   formatTimestamp,
   predictionStatusLabel,
   statusLabels,
-  totalGoalsPredictionMarketLabel,
   modelMarketProbabilityText,
   edgeText,
   lambdaText,
   dispersionText,
 } from './matchPresentation';
+import { PredictionVerdictLegs } from './PredictionVerdictLegs';
 import { parseMatchListSearch, todayInShanghai, toMatchListQuery, toMatchListSearchParams, type MatchListSearch } from './matchSearch';
 import { useLeagueOptionsQuery, useMatchListQuery } from './useMatchQueries';
 
@@ -209,9 +208,9 @@ function MatchCard({ match, listSearch }: { match: MatchListItemVo; listSearch: 
       <strong>{match.awayTeamName}</strong>
     </div>
     <div className="match-card-markets">
-      <SportterySummary match={match} />
-      <AsianMainSummary match={match} />
       <PredictionSummary match={match} />
+      <AsianMainSummary match={match} />
+      <SportterySummary match={match} />
     </div>
     <footer>
       <span className="handicap">{formatHandicap(match.officialHandicap)}</span>
@@ -252,7 +251,7 @@ function AsianMainSummary({ match }: { match: MatchListItemVo }) {
     <h2>亚盘主盘</h2>
     {!market ? <p>已确认的完整亚盘主盘暂缺</p> : <>
       <p className="market-provider">{market.bookmakerCode} · {market.providerCode}</p>
-      <div className="match-market-line"><strong>亚洲{formatHandicap(market.handicapLine)}</strong><span>主 {formatNumber(market.homeOdds)} / 客 {formatNumber(market.awayOdds)}</span></div>
+      <div className="match-market-line"><strong>让球 {formatAsianLine(market.handicapLine)}</strong><span>主 {formatNumber(market.homeOdds)} / 客 {formatNumber(market.awayOdds)}</span></div>
       <div className="match-market-line"><strong>大小球 {formatNumber(market.totalLine)}</strong><span>大 {formatNumber(market.overOdds)} / 小 {formatNumber(market.underOdds)}</span></div>
     </>}
   </section>;
@@ -292,24 +291,16 @@ function PredictionProbabilityRows({ prediction }: { prediction: MatchPrediction
 
 function PredictionSummary({ match }: { match: MatchListItemVo }) {
   const asianPredictions = match.publishedPredictions.filter((prediction) => prediction.predictionType === 'ASIAN');
-  return <section className="match-market-summary" aria-label={`${match.lotteryMatchNo} 预测结果`}>
+  return <section className="match-market-summary match-prediction-result" aria-label={`${match.lotteryMatchNo} 预测结果`}>
     <h2>预测结果</h2>
-    {asianPredictions.length === 0 ? <p>暂无已发布亚盘预测</p> : asianPredictions.map((prediction) => <article className="match-prediction-summary" key={prediction.modelVersion}>
-      <header><strong>{prediction.modelVersion}</strong><span>{predictionStatusLabel(prediction.predictionStatus)}</span></header>
-      {prediction.asianHandicapPick && <p>亚盘让球：{asianHandicapPredictionMarketLabel(
-        prediction.asianMarket?.handicapLine,
-        prediction.asianHandicapPick,
-        prediction.asianMarket?.homeOdds,
-        prediction.asianMarket?.awayOdds,
-      )} · 置信：{confidenceLabel(prediction.asianHandicapConfidenceLevel)}</p>}
-      {prediction.totalGoalsPick && <p>亚盘大小球：{totalGoalsPredictionMarketLabel(
-        prediction.asianMarket?.totalLine,
-        prediction.totalGoalsPick,
-        prediction.asianMarket?.overOdds,
-        prediction.asianMarket?.underOdds,
-      )} · 置信：{confidenceLabel(prediction.totalGoalsConfidenceLevel)}</p>}
-      <PredictionProbabilityRows prediction={prediction} />
-      {prediction.asianMarket && <p className="market-provider">生成快照 #{prediction.asianMarket.asianOddsSnapshotId} · {prediction.asianMarket.bookmakerCode}：亚洲{formatHandicap(prediction.asianMarket.handicapLine)} 主 {formatNumber(prediction.asianMarket.homeOdds)} / 客 {formatNumber(prediction.asianMarket.awayOdds)}；大小球 {formatNumber(prediction.asianMarket.totalLine)} 大 {formatNumber(prediction.asianMarket.overOdds)} / 小 {formatNumber(prediction.asianMarket.underOdds)} · {formatTimestamp(prediction.asianMarket.capturedAt)}</p>}
+    {asianPredictions.length === 0 ? <p>暂无已发布亚盘预测</p> : asianPredictions.map((prediction) => <article className="prediction-verdict" key={prediction.modelVersion}>
+      <PredictionVerdictLegs prediction={prediction} />
+      <p className="prediction-verdict-source">{prediction.modelVersion} · {predictionStatusLabel(prediction.predictionStatus)}</p>
+      <details className="prediction-verdict-basis">
+        <summary>模型诊断与判定行</summary>
+        <PredictionProbabilityRows prediction={prediction} />
+        {prediction.asianMarket && <p className="market-provider">判定行 #{prediction.asianMarket.asianOddsSnapshotId} · {prediction.asianMarket.bookmakerCode}：亚洲 {formatAsianLine(prediction.asianMarket.handicapLine)} 主 {formatNumber(prediction.asianMarket.homeOdds)} / 客 {formatNumber(prediction.asianMarket.awayOdds)}；大小球 {formatNumber(prediction.asianMarket.totalLine)} 大 {formatNumber(prediction.asianMarket.overOdds)} / 小 {formatNumber(prediction.asianMarket.underOdds)} · {formatTimestamp(prediction.asianMarket.capturedAt)}</p>}
+      </details>
     </article>)}
   </section>;
 }

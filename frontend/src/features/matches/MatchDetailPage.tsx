@@ -7,14 +7,12 @@ import {
 import NotFoundPage from '../../pages/NotFoundPage';
 import {
   availabilityLabel,
-  asianHandicapPredictionLabel,
   modelMarketProbabilityText,
   edgeText,
   lambdaText,
   dispersionText,
-  confidenceLabel,
   dataSourceLabel,
-  formatProbability,
+  formatAsianLine,
   formatHandicap,
   formatNumber,
   formatTimestamp,
@@ -23,8 +21,8 @@ import {
   snapshotTypeLabel,
   sportteryHandicapPredictionLabel,
   statusLabels,
-  totalGoalsPickLabel,
 } from './matchPresentation';
+import { PredictionVerdictLegs } from './PredictionVerdictLegs';
 import {
   useMatchDetailQuery,
   useMatchPredictionDetailQuery,
@@ -187,11 +185,10 @@ export default function MatchDetailPage() {
                         <strong>{model.modelVersion}</strong>
                         <span>{predictionStatusLabel(prediction.predictionStatus)} · 第 {prediction.predictionVersion} 版</span>
                       </header>
+                      <PredictionVerdictLegs prediction={prediction} />
                       <dl className="metadata-list prediction-metadata">
-                        {prediction.asianHandicapPick && <div><dt>亚盘让球</dt><dd>{asianHandicapPredictionLabel(prediction.asianMarket?.handicapLine, prediction.asianHandicapPick)} · 置信：{confidenceLabel(prediction.asianHandicapConfidenceLevel)}</dd></div>}
-                        {prediction.totalGoalsPick && <div><dt>亚盘大小球</dt><dd>{formatNumber(prediction.asianMarket?.totalLine)}：{totalGoalsPickLabel(prediction.totalGoalsPick)} · 置信：{confidenceLabel(prediction.totalGoalsConfidenceLevel)}</dd></div>}
                         <AsianModelProbabilityRows prediction={prediction} />
-                        {prediction.asianMarket && <div><dt>生成亚盘快照</dt><dd>#{prediction.asianMarket.asianOddsSnapshotId} · {prediction.asianMarket.bookmakerCode} · 亚洲{formatHandicap(prediction.asianMarket.handicapLine)} 主 {formatNumber(prediction.asianMarket.homeOdds)} / 客 {formatNumber(prediction.asianMarket.awayOdds)}；大小球 {formatNumber(prediction.asianMarket.totalLine)} 大 {formatNumber(prediction.asianMarket.overOdds)} / 小 {formatNumber(prediction.asianMarket.underOdds)} · {formatTimestamp(prediction.asianMarket.capturedAt)}</dd></div>}
+                        {prediction.asianMarket && <div><dt>生成亚盘快照</dt><dd>#{prediction.asianMarket.asianOddsSnapshotId} · {prediction.asianMarket.bookmakerCode} · 亚洲 {formatAsianLine(prediction.asianMarket.handicapLine)} 主 {formatNumber(prediction.asianMarket.homeOdds)} / 客 {formatNumber(prediction.asianMarket.awayOdds)}；大小球 {formatNumber(prediction.asianMarket.totalLine)} 大 {formatNumber(prediction.asianMarket.overOdds)} / 小 {formatNumber(prediction.asianMarket.underOdds)} · {formatTimestamp(prediction.asianMarket.capturedAt)}</dd></div>}
                         <div><dt>生成 / 发布时间</dt><dd>{formatTimestamp(prediction.generatedAt)} / {formatTimestamp(prediction.publishTime)}</dd></div>
                         <div><dt>锁定时间</dt><dd>{formatTimestamp(prediction.lockTime)}</dd></div>
                         <div><dt>特征版本</dt><dd>{prediction.featureVersion}</dd></div>

@@ -1705,36 +1705,117 @@ h1 {
   font-size: 12px;
 }
 
-.match-prediction-summary {
-  margin-top: 9px;
-  padding-top: 9px;
-  border-top: 1px solid #e6ede7;
+/* 预测结果整块上浮：它是这张卡片的主内容，其余（体彩/亚盘主盘）是它的依据。 */
+.match-prediction-result {
+  border-color: #bfd8c6;
+  background: #fff;
 }
 
-.match-prediction-summary:first-of-type {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: 0;
+.match-prediction-result > h2 {
+  margin-bottom: 10px;
 }
 
-.match-prediction-summary > header {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  color: #526259;
-  font-size: 12px;
+.prediction-verdict-legs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
 }
 
-.match-prediction-summary > header strong {
-  color: #245c3c;
+/* 单格结论：方向+线是唯一主角，赔率与置信度退到副行。 */
+.prediction-leg {
+  display: grid;
+  gap: 3px;
+  align-content: start;
+  padding: 9px 11px;
+  border: 1px solid #dbe4dc;
+  border-radius: 10px;
+  background: #f7faf7;
+}
+
+.prediction-leg.is-empty {
+  border-style: dashed;
+  background: transparent;
+}
+
+.prediction-leg-market {
+  color: #7c8b82;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+.prediction-leg-verdict {
+  color: #16462f;
+  font-size: 19px;
+  font-weight: 780;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  /* 空方的字号更小，锁死行高才能让同一行的三张卡片在「亚盘主盘」处对齐。 */
+  min-height: 22px;
   overflow-wrap: anywhere;
 }
 
-.match-prediction-summary > p {
-  margin: 5px 0 0;
-  color: #526259;
-  font-size: 12px;
-  line-height: 1.45;
+.prediction-leg.is-empty .prediction-leg-verdict {
+  color: #9aa79f;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.prediction-leg-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #6b7a71;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.prediction-leg-odds {
+  color: #405248;
+  font-weight: 650;
+}
+
+/* 置信度只做轻量色标：绿=高、黄=中、灰=低，不用高饱和色块，避免读成"推荐买入"。 */
+.prediction-confidence {
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-size: 11px;
+}
+
+.prediction-confidence.is-high {
+  background: #e0f1e5;
+  color: #176b42;
+}
+
+.prediction-confidence.is-medium {
+  background: #fbf0da;
+  color: #8a5a00;
+}
+
+.prediction-confidence.is-low {
+  background: #eef1ef;
+  color: #6b7a71;
+}
+
+.prediction-verdict-source {
+  margin: 8px 0 0;
+  color: #8b988f;
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+/* 概率/edge/λ/σ/判定行默认折叠：当前模型下模型概率与市场概率恒等，展开只为核对。 */
+.prediction-verdict-basis {
+  margin-top: 6px;
+}
+
+.prediction-verdict-basis > summary {
+  color: #7c8b82;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.prediction-verdict-basis[open] > summary {
+  margin-bottom: 4px;
 }
 
 .admin-draft-selection,

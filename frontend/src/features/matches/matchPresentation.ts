@@ -145,7 +145,7 @@ export function asianHandicapPredictionMarketLabel(
   const homePick = pick === 'HOME_COVER';
   const line = handicapLine === null || handicapLine === undefined
     ? '让球暂缺'
-    : formatAsianHandicapLine(homePick ? handicapLine : -handicapLine);
+    : formatAsianLine(homePick ? handicapLine : -handicapLine);
   return `${homePick ? '主' : '客'} ${line}（赔率 ${formatNumber(homePick ? homeOdds : awayOdds)}）`;
 }
 
@@ -193,8 +193,45 @@ export function dataSourceLabel(value: string | null | undefined) {
   return value;
 }
 
-function formatAsianHandicapLine(value: number) {
+/** 亚盘让球线的带符号写法：-0.5 / +1 / 0。 */
+export function formatAsianLine(value: number | null | undefined) {
+  if (value === null || value === undefined) {
+    return '—';
+  }
   return `${value > 0 ? '+' : ''}${value}`;
+}
+
+/**
+ * 让球方向的一句话结论：主 -0.5 / 客 +1.5 / 主 平手。
+ *
+ * <p>落库的 handicapLine 是主队让球数，客队视角要取反；平手盘不写 0 而写"平手"，
+ * 因为"主 0"会被读成主队受让 0 球这种不存在的盘口。</p>
+ */
+export function asianHandicapVerdictText(
+  handicapLine: number | null | undefined,
+  pick: AsianHandicapPick | null | undefined,
+) {
+  if (!pick) {
+    return null;
+  }
+  const side = pick === 'HOME_COVER' ? '主' : '客';
+  if (handicapLine === null || handicapLine === undefined) {
+    return side;
+  }
+  const line = pick === 'HOME_COVER' ? handicapLine : -handicapLine;
+  return `${side} ${line === 0 ? '平手' : formatAsianLine(line)}`;
+}
+
+/** 大小球方向的一句话结论：大 2.5 / 小 3.25。 */
+export function totalGoalsVerdictText(
+  totalLine: number | null | undefined,
+  pick: TotalGoalsPick | null | undefined,
+) {
+  if (!pick) {
+    return null;
+  }
+  const side = pick === 'OVER' ? '大' : '小';
+  return totalLine === null || totalLine === undefined ? side : `${side} ${totalLine}`;
 }
 
 /** 亚盘模型十列所在的市场，决定取哪一组概率。 */

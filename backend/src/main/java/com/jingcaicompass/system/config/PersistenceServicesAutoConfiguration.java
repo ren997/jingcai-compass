@@ -66,8 +66,6 @@ import com.jingcaicompass.match.service.MatchResultFactWriter;
 import com.jingcaicompass.match.service.MatchResultSyncService;
 import com.jingcaicompass.match.service.MatchResultSyncServiceImpl;
 import com.jingcaicompass.match.service.MatchResultSyncCoordinator;
-import com.jingcaicompass.match.service.MatchMappingService;
-import com.jingcaicompass.match.service.MatchMappingServiceImpl;
 import com.jingcaicompass.match.service.SportteryPoolMatchWriter;
 import com.jingcaicompass.match.service.SportteryPoolSyncService;
 import com.jingcaicompass.match.service.SportteryPoolSyncServiceImpl;
@@ -123,7 +121,6 @@ import com.jingcaicompass.snapshot.storage.SnapshotStorage;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.config.properties.AdminSecurityProperties;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
-import com.jingcaicompass.system.observability.MappingMetrics;
 import com.jingcaicompass.system.observability.JobMetrics;
 import com.jingcaicompass.system.observability.PredictionLifecycleMetrics;
 import com.jingcaicompass.system.observability.ProviderMetrics;
@@ -178,12 +175,6 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean
     SyncMetrics syncMetrics(MeterRegistry meterRegistry) {
         return new SyncMetrics(meterRegistry);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    MappingMetrics mappingMetrics(MeterRegistry meterRegistry) {
-        return new MappingMetrics(meterRegistry);
     }
 
     @Bean
@@ -830,16 +821,6 @@ public class PersistenceServicesAutoConfiguration {
                 objectMapper,
                 predictionImportClock
         );
-    }
-
-    @Bean
-    @ConditionalOnMissingBean(MatchMappingService.class)
-    MatchMappingService matchMappingService(
-            MatchMapper matchMapper,
-            MatchSourceMappingMapper matchSourceMappingMapper,
-            MappingMetrics mappingMetrics
-    ) {
-        return new MatchMappingServiceImpl(matchMapper, matchSourceMappingMapper, mappingMetrics);
     }
 
     @Bean

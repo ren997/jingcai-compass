@@ -28,7 +28,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  * 「去重维度写错导致同一家庄被重复计数」这类只在真库暴露的问题。主盘选择完全依赖这两条查询的
  * 去重口径，因此必须有真实库证据。</p>
  *
- * <p>单源改造后这两个测试同时承担一个反向证据：查询<b>不再依赖 {@code match_source_mappings}</b>。
+ * <p>单源改造后这两个测试同时承担一个反向证据：查询不依赖任何映射表（阶段 5 已把映射表物理删除）。
  * 因此造数据时只写 {@code matches} 与 {@code asian_odds_snapshots}，一条映射都不插——
  * 如果哪天有人把 JOIN 加回来，这里会立刻变成空结果。</p>
  */
@@ -77,7 +77,7 @@ class AsianOddsAggregationQueryIT {
             assertThat(metadata.getDatabaseMajorVersion()).isEqualTo(16);
         }
         jdbcTemplate.execute("""
-                TRUNCATE TABLE asian_odds_snapshots, match_source_mappings, matches
+                TRUNCATE TABLE asian_odds_snapshots, matches
                 RESTART IDENTITY CASCADE
                 """);
     }

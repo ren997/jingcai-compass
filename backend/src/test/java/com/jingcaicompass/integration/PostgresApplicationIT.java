@@ -41,7 +41,7 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V25 与数据库原生行为。
+ * PostgreSQL 16 空库集成验证：完整启动持久化上下文，并验证 V1～V26 与数据库原生行为。
  */
 @Testcontainers
 @ActiveProfiles("integration")
@@ -116,8 +116,8 @@ class PostgresApplicationIT {
                 .filter(info -> info.getVersion() != null)
                 .toArray(MigrationInfo[]::new);
 
-        assertThat(applied).hasSize(25);
-        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("25");
+        assertThat(applied).hasSize(26);
+        assertThat(applied[applied.length - 1].getVersion().getVersion()).isEqualTo("26");
         assertThat(flyway.info().pending()).isEmpty();
         assertThat(flyway.migrate().migrationsExecuted).isZero();
 
@@ -137,13 +137,8 @@ class PostgresApplicationIT {
                 "leagues",
                 "teams",
                 "matches",
-                "provider_league_mappings",
-                "provider_team_mappings",
-                "match_source_mappings",
                 "sporttery_pool_snapshots",
                 "asian_odds_snapshots",
-                "league_aliases",
-                "team_aliases",
                 "audit_logs",
                 "predictions",
                 "prediction_snapshots",
@@ -152,39 +147,14 @@ class PostgresApplicationIT {
                 "settlements"
         );
 
-        List<String> mappingColumns = jdbcTemplate.queryForList(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'match_source_mappings'
-                """,
-                String.class
+        // V26 把映射层五张表物理删除：单源之后它们既无写入方也无读取方。
+        assertThat(tables).doesNotContain(
+                "match_source_mappings",
+                "provider_league_mappings",
+                "provider_team_mappings",
+                "league_aliases",
+                "team_aliases"
         );
-        assertThat(mappingColumns).contains("mapping_explanation", "mapping_candidates", "external_kickoff_time");
-
-        List<String> providerLeagueMappingColumns = jdbcTemplate.queryForList(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'provider_league_mappings'
-                """,
-                String.class
-        );
-        List<String> providerTeamMappingColumns = jdbcTemplate.queryForList(
-                """
-                SELECT column_name
-                FROM information_schema.columns
-                WHERE table_schema = 'public'
-                  AND table_name = 'provider_team_mappings'
-                """,
-                String.class
-        );
-        assertThat(providerLeagueMappingColumns).contains(
-                "external_display_name", "external_normalized_key", "external_scope");
-        assertThat(providerTeamMappingColumns).contains(
-                "external_display_name", "external_normalized_key", "external_scope");
 
         List<String> predictionColumns = jdbcTemplate.queryForList(
                 """

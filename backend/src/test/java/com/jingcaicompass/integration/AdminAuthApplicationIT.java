@@ -78,20 +78,20 @@ class AdminAuthApplicationIT {
 
         // 3) 登录后可访问后台，退出立即撤销旧 Token
         String firstToken = login(PASSWORD);
-        mockMvc.perform(post("/api/admin/provider/mappings/list")
+        mockMvc.perform(post("/api/admin/provider/sync-runs/list")
                         .header("Authorization", "Bearer " + firstToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
+                        .content("{\"pageNo\":1,\"pageSize\":20}"))
                 .andExpect(status().isOk());
 
         mockMvc.perform(post("/api/admin/auth/logout")
                         .header("Authorization", "Bearer " + firstToken))
                 .andExpect(status().isOk());
 
-        mockMvc.perform(post("/api/admin/provider/mappings/list")
+        mockMvc.perform(post("/api/admin/provider/sync-runs/list")
                         .header("Authorization", "Bearer " + firstToken)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
+                        .content("{\"pageNo\":1,\"pageSize\":20}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("AUTH_UNAUTHORIZED"));
 

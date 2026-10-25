@@ -151,13 +151,6 @@ class PredictionImportApplicationIT {
                 ROLLBACK_SECOND_MATCH_ID
         );
         jdbcTemplate.update(
-                "DELETE FROM match_source_mappings WHERE match_id IN (?, ?, ?, ?)",
-                FIRST_MATCH_ID,
-                SECOND_MATCH_ID,
-                ROLLBACK_FIRST_MATCH_ID,
-                ROLLBACK_SECOND_MATCH_ID
-        );
-        jdbcTemplate.update(
                 "DELETE FROM matches WHERE id IN (?, ?, ?, ?)",
                 FIRST_MATCH_ID,
                 SECOND_MATCH_ID,
@@ -285,16 +278,6 @@ class PredictionImportApplicationIT {
         // 1) 已确认完整盘口存在，但两个市场水位完全均衡，均不足以发布。
         insertFutureMatch(FIRST_MATCH_ID, "T610-LOW-001");
         insertLowConfidenceAsianMarket(FIRST_MATCH_ID);
-        jdbcTemplate.update(
-                """
-                INSERT INTO match_source_mappings (
-                    match_id, provider_code, external_match_id, mapping_status,
-                    mapping_confidence, mapping_method, confirmed_by
-                ) VALUES (?, 'STUB', 't610-low-confidence', 'MANUAL_CONFIRMED',
-                          1.0000, 'MANUAL_REVIEW', 't610-it')
-                """,
-                FIRST_MATCH_ID
-        );
 
         // 2) 两项都是 LOW 时不产生 DRAFT，也没有后续发布入口。
         BaselinePredictionGenerationVo result = baselinePredictionGenerationService.generateAndImport(
@@ -421,16 +404,6 @@ class PredictionImportApplicationIT {
         insertFutureMatch(SECOND_MATCH_ID, "T306-002");
         insertBaselineMarkets(FIRST_MATCH_ID, "a", "b");
         insertBaselineMarkets(SECOND_MATCH_ID, "c", "d");
-        jdbcTemplate.update(
-                """
-                INSERT INTO match_source_mappings (
-                    match_id, provider_code, external_match_id, mapping_status,
-                    mapping_confidence, mapping_method, confirmed_by
-                ) VALUES (?, 'STUB', 't306-confirmed-001', 'MANUAL_CONFIRMED',
-                          1.0000, 'MANUAL_REVIEW', 't306-it')
-                """,
-                FIRST_MATCH_ID
-        );
     }
 
     private BaselinePredictionGenerationVo generateAfterBarrier(

@@ -2476,7 +2476,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
     - [x] **B4** 自动映射链路（`52638e4`）：删 `MatchMappingService(Impl)`、`MappingMetrics`、`MatchMappingScoreSupport`、5 个 MatchMap/EntityNormalize DTO 与 2 个枚举
     - [x] **B5** 映射层持久化（`20540f1`）：删 5 实体 + 5 Mapper + `MappingStatusEnum` + `MatchMapper` 两条复核 JOIN；`backend/src/main` 里映射类引用收敛为 0
     - [x] **B6** 删表迁移：`V26__drop_mapping_tables.sql` 删 5 张表；`PostgresApplicationIT` 迁移数 25→26 并改断言（表必须不存在）；顺带清掉 4 个 IT 里对映射表的 TRUNCATE / INSERT，删 `ProviderNormalizationMigrationApplicationIT`、`DataPipelineApplicationIT`
-    - [x] **B7** 删旧数据源（`68d2f38` 之后的独立提交）：删 `ChinaSportteryProvider`（体彩官网）、`TheOddsApiProvider`、两者专属的 `ChinaSportteryRestClientConfig` / `AsianOddsRestClientConfig` 与各自测试；删 `AsianOddsPayloadMapper` 的 THE_ODDS 解析分支（360 → 92 行）；`SportteryProviderType` 去掉 `CHINA`、`AsianOddsProviderTypeEnum` 去掉 `THE_ODDS_API`；两个 properties 记录收敛为 `(provider, quotaWarningThreshold)`——base-url / api-key / 超时 / 重试 / The Odds sport key 与累计预算全部随之删除，传输参数只剩 `app.nova` 一处。**默认值同步翻转**：`app.sporttery.provider` 由 `china` 改 `nova`（原来缺省部署会去连已停用的体彩官网）
+    - [x] **B7** 删旧数据源（`c979b1d`）：删 `ChinaSportteryProvider`（体彩官网）、`TheOddsApiProvider`、两者专属的 `ChinaSportteryRestClientConfig` / `AsianOddsRestClientConfig` 与各自测试；删 `AsianOddsPayloadMapper` 的 THE_ODDS 解析分支（360 → 92 行）；`SportteryProviderType` 去掉 `CHINA`、`AsianOddsProviderTypeEnum` 去掉 `THE_ODDS_API`；两个 properties 记录收敛为 `(provider, quotaWarningThreshold)`——base-url / api-key / 超时 / 重试 / The Odds sport key 与累计预算全部随之删除，传输参数只剩 `app.nova` 一处。**默认值同步翻转**：`app.sporttery.provider` 由 `china` 改 `nova`（原来缺省部署仍会去连已停用的体彩官网）
     - 顺序依据：`match_source_mappings` 上还有 4 处**运行时**读路径，先删表会导致公开详情 500、监控每分钟报错；其中赔率同步的映射分支只在旧源 provider 下可达，故与旧 Provider 一并放 B6
 
 - 阶段 1 补做（原计划留到阶段 5，本轮提前收口）：`matches.league_id` / `home_team_id` / `away_team_id` 填充。
@@ -2500,6 +2500,10 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
     **为什么先改这里**：改前 `match_source_mappings` 仍有 4 处运行时读路径——公开详情逐场查（删表即 500）、监控每分钟 `SELECT COUNT(*) WHERE mapping_status='PENDING'`（删表即每分钟报错）、数据管道映射计数、赔率同步旧源 `else` 分支。前三处本次处理；第四处只在非 NOVA provider 下可达，随旧 Provider 放到 B6。
     **验证**：后端 `mvn -o test` **812 项 0 失败 / 11 跳过**（跳过项为本地实跑脚手架）；前端 `tsc -b` 通过、`vitest run` **81 项全过**、`vite build` 成功。
     **顺带修掉一处监控盲区**：原 `mapping_backlog` 按 `provider=当前赔率源` 过滤，而库里 45 条映射全部属于 `THE_ODDS_API`（27 `MANUAL_CONFIRMED` + 18 `PENDING`）、`NOVA_API` 一条没有，所以该告警实际上永远是 0——与阈值 `20` 只差 2 行的「定时炸弹」并不存在，删它是删死逻辑而不是删有效监控。
+  - [x] 阶段 5 / B7（2026-10-25，`c979b1d`）：删除旧数据源。**改动面**：删 4 个类（`ChinaSportteryProvider`、`TheOddsApiProvider`、`ChinaSportteryRestClientConfig`、`AsianOddsRestClientConfig`）+ 2 个测试；`AsianOddsPayloadMapper` 360 → 92 行（只留「比赛数组」与「NOVA_API 信封」两条路径，未知结构仍抛错）；`SportteryProviderType` / `AsianOddsProviderTypeEnum` 各去掉一个值；两个 properties 记录收敛到 `(provider, quotaWarningThreshold)`。
+    **唯一有行为影响的改动**：`app.sporttery.provider` 默认值 `china` → `nova`。原默认值配合 `matchIfMissing = true`，意味着「不设环境变量的部署会去连体彩官网」，而那个 provider 的 `fetchMatchResultsRaw()` 本来就是直接抛错的。
+    **为什么连配置项一起删**：Nova 的两个 provider 只用 `app.nova`，`app.sporttery` / `app.asian-odds` 下的 base-url、api-key、超时、重试、sport key 从来没有被读过。留着不只是死代码——它会让人以为「改 `app.asian-odds.read-timeout` 能调超时」，排查超时问题先浪费一轮。
+    **验证**：`mvn -o test` **716 项 0 失败 / 11 跳过**（731 → 716：删 2 个 provider 测试 + 3 个随配置项消失的超时/重试校验用例）。
 
 - 阶段 2 的关键取舍（未实跑也要先钉住的四条）：
   1. **`line` 是主队让球数，不取反**。The Odds API 的让球两侧互为相反数（`homePoint + awayPoint == 0`），NovaAPI 同档两侧 `line` 文本完全相等。照搬旧配对逻辑会 100% 判 `INCONSISTENT_SPREAD_PAIR`，表现为「解析成功但零条 line」。

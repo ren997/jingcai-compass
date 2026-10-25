@@ -28,6 +28,11 @@ import java.time.Instant;
 
 /**
  * Provider 同步调用模板：运行 -> 请求 -> 原始入库 -> 解析 -> 完成。
+ *
+ * <p>收尾是硬约束：一条 {@code data_sync_runs} 记录一旦创建，就必须以 SUCCESS / FAILED /
+ * PARTIAL 之一结束。取数失败已有专门分支，但「取数成功之后」的入库、运行-载荷关联、
+ * 解析状态回写同样可能抛错，因此 {@link #execute} 在 fetch 之外再兜一层，
+ * 统一转成 FAILED 并写入错误信息。</p>
  */
 @Component
 @ConditionalOnBean(DataSource.class)
@@ -110,30 +115,59 @@ public class ProviderSyncTemplate {
 
             ProviderFetchResult fetchResult;
             try {
-            fetchResult = fetcher.fetch();
+                fetchResult = fetcher.fetch();
             } catch (RuntimeException exception) {
-            ProviderHttpException httpFailure = findHttpException(exception);
-            int retryCount = httpFailure == null ? 0 : httpFailure.retryCount();
-            int quotaCost = httpFailure == null ? 0 : httpFailure.quotaCost();
-            DataSyncRun finished = dataSyncRunService.finishFailed(
-                    run.getId(),
-                    new SyncRunFinishDto(0, 0, 0, retryCount, quotaCost, sanitize(exception.getMessage()))
-            );
+                ProviderHttpException httpFailure = findHttpException(exception);
+                int retryCount = httpFailure == null ? 0 : httpFailure.retryCount();
+                int quotaCost = httpFailure == null ? 0 : httpFailure.quotaCost();
+                DataSyncRun finished = dataSyncRunService.finishFailed(
+                        run.getId(),
+                        new SyncRunFinishDto(0, 0, 0, retryCount, quotaCost, sanitize(exception.getMessage()))
+                );
                 log.warn("event=sync_fetch_failed dataType={} exceptionType={} error={}",
                         dataType, exception.getClass().getSimpleName(), sanitize(exception.getMessage()));
                 return record(new ProviderSyncOutcome(finished, null, SyncStatusEnum.FAILED, false));
             }
 
             if (fetchResult == null || !StringUtils.hasText(fetchResult.payloadJson())) {
-            DataSyncRun finished = dataSyncRunService.finishFailed(
-                    run.getId(),
-                    new SyncRunFinishDto(0, 0, 0, 0, 0, "empty provider response")
-            );
+                DataSyncRun finished = dataSyncRunService.finishFailed(
+                        run.getId(),
+                        new SyncRunFinishDto(0, 0, 0, 0, 0, "empty provider response")
+                );
                 return record(new ProviderSyncOutcome(finished, null, SyncStatusEnum.FAILED, false));
             }
 
-            Instant requestedAt = Instant.now();
-            RawDataPayloadSaveResult saveResult = rawDataPayloadService.savePayload(
+            // 取数之后每一步（载荷入库、运行-载荷关联、解析状态回写）都不在上面的 catch 范围内。
+            // 少了这一层，入库异常会直接冒到调度层，记录永久停在 RUNNING —— 2026-10-25 的
+            // request_key 溢出就是这样：接口取数全部成功、额度已消耗，但管理端只显示「运行中」。
+            try {
+                return persistAndParse(providerCode, dataType, run, fetchResult, parser);
+            } catch (RuntimeException exception) {
+                return finishUnexpectedFailure(dataType, run, fetchResult, exception);
+            }
+        } finally {
+            restoreMdc(TraceIdContext.MDC_KEY, priorTraceId);
+            restoreMdc("providerCode", priorProviderCode);
+            restoreMdc("syncRunId", priorSyncRunId);
+            restoreMdc("status", priorStatus);
+            restoreMdc("durationMs", priorDurationMs);
+        }
+    }
+
+    /**
+     * 原始载荷入库 -> 关联本次运行 -> 解析 -> 收尾。
+     *
+     * <p>只处理预期内的解析失败；入库、关联等非预期异常交由 {@link #execute} 兜底。</p>
+     */
+    private ProviderSyncOutcome persistAndParse(
+            String providerCode,
+            ProviderDataTypeEnum dataType,
+            DataSyncRun run,
+            ProviderFetchResult fetchResult,
+            ProviderPayloadParser parser
+    ) {
+        Instant requestedAt = Instant.now();
+        RawDataPayloadSaveResult saveResult = rawDataPayloadService.savePayload(
                 new RawDataPayloadSaveDto(
                         providerCode,
                         dataType,
@@ -144,17 +178,17 @@ public class ProviderSyncTemplate {
                         requestedAt
                 )
         );
-            RawDataPayload payload = saveResult.payload();
+        RawDataPayload payload = saveResult.payload();
         // 1) 无论是否命中去重，都将本次运行精确关联到该载荷
-            dataSyncRunPayloadLinkService.link(run.getId(), payload.getId());
+        dataSyncRunPayloadLinkService.link(run.getId(), payload.getId());
 
-            ProviderParseResult parseResult;
-            try {
+        ProviderParseResult parseResult;
+        try {
             parseResult = parser.parse(dataType, fetchResult.requestKey(), payload);
             if (parseResult == null) {
                 parseResult = ProviderParseResult.empty();
             }
-            } catch (RuntimeException exception) {
+        } catch (RuntimeException exception) {
             rawDataPayloadService.markParseFailed(payload.getId(), sanitize(exception.getMessage()));
             DataSyncRun finished = dataSyncRunService.finishFailed(
                     run.getId(),
@@ -167,16 +201,16 @@ public class ProviderSyncTemplate {
                             sanitize(exception.getMessage())
                     )
             );
-                log.warn("event=sync_parse_failed dataType={} payloadId={} exceptionType={} error={}",
-                        dataType, payload.getId(), exception.getClass().getSimpleName(), sanitize(exception.getMessage()));
-                return record(new ProviderSyncOutcome(finished, payload, SyncStatusEnum.FAILED, saveResult.duplicate()));
-            }
+            log.warn("event=sync_parse_failed dataType={} payloadId={} exceptionType={} error={}",
+                    dataType, payload.getId(), exception.getClass().getSimpleName(), sanitize(exception.getMessage()));
+            return record(new ProviderSyncOutcome(finished, payload, SyncStatusEnum.FAILED, saveResult.duplicate()));
+        }
 
-            int successCount = Math.max(parseResult.successCount(), 0);
-            int failureCount = Math.max(parseResult.failureCount(), 0);
-            int fetchedCount = Math.max(successCount + failureCount, 1);
+        int successCount = Math.max(parseResult.successCount(), 0);
+        int failureCount = Math.max(parseResult.failureCount(), 0);
+        int fetchedCount = Math.max(successCount + failureCount, 1);
 
-            if (failureCount == 0) {
+        if (failureCount == 0) {
             rawDataPayloadService.markParseSuccess(payload.getId());
             DataSyncRun finished = dataSyncRunService.finishSuccess(
                     run.getId(),
@@ -189,10 +223,10 @@ public class ProviderSyncTemplate {
                             null
                     )
             );
-                return record(new ProviderSyncOutcome(finished, payload, SyncStatusEnum.SUCCESS, saveResult.duplicate()));
-            }
+            return record(new ProviderSyncOutcome(finished, payload, SyncStatusEnum.SUCCESS, saveResult.duplicate()));
+        }
 
-            if (successCount > 0) {
+        if (successCount > 0) {
             rawDataPayloadService.markParseFailed(payload.getId(), parseResult.errorMessage());
             DataSyncRun finished = dataSyncRunService.finishPartial(
                     run.getId(),
@@ -205,8 +239,8 @@ public class ProviderSyncTemplate {
                             parseResult.errorMessage()
                     )
             );
-                return record(new ProviderSyncOutcome(finished, payload, SyncStatusEnum.PARTIAL, saveResult.duplicate()));
-            }
+            return record(new ProviderSyncOutcome(finished, payload, SyncStatusEnum.PARTIAL, saveResult.duplicate()));
+        }
 
         rawDataPayloadService.markParseFailed(payload.getId(), parseResult.errorMessage());
         DataSyncRun finished = dataSyncRunService.finishFailed(
@@ -220,14 +254,45 @@ public class ProviderSyncTemplate {
                         parseResult.errorMessage()
                 )
         );
-            return record(new ProviderSyncOutcome(finished, payload, SyncStatusEnum.FAILED, saveResult.duplicate()));
-        } finally {
-            restoreMdc(TraceIdContext.MDC_KEY, priorTraceId);
-            restoreMdc("providerCode", priorProviderCode);
-            restoreMdc("syncRunId", priorSyncRunId);
-            restoreMdc("status", priorStatus);
-            restoreMdc("durationMs", priorDurationMs);
+        return record(new ProviderSyncOutcome(finished, payload, SyncStatusEnum.FAILED, saveResult.duplicate()));
+    }
+
+    /**
+     * 取数成功、但后续环节抛出非预期异常时的收尾。
+     *
+     * <p>额度已经真实消耗，所以必须把 {@code retryCount} / {@code quotaCost} 记进运行记录——
+     * 否则失败轮次在额度汇总里显示为 0，会被误读成「一次请求都没发出去」。</p>
+     */
+    private ProviderSyncOutcome finishUnexpectedFailure(
+            ProviderDataTypeEnum dataType,
+            DataSyncRun run,
+            ProviderFetchResult fetchResult,
+            RuntimeException exception
+    ) {
+        String message = sanitize(exception.getMessage());
+        DataSyncRun finished;
+        try {
+            finished = dataSyncRunService.finishFailed(
+                    run.getId(),
+                    new SyncRunFinishDto(
+                            0,
+                            0,
+                            0,
+                            fetchResult.retryCount(),
+                            fetchResult.quotaCost(),
+                            message
+                    )
+            );
+        } catch (RuntimeException finishFailure) {
+            // 连收尾都失败时保留原始异常：状态已无从修正，但不能把真正的出错原因吞掉。
+            exception.addSuppressed(finishFailure);
+            log.error("event=sync_persist_failed_and_unfinishable dataType={} syncRunId={} error={}",
+                    dataType, run.getId(), message, exception);
+            throw exception;
         }
+        log.error("event=sync_persist_failed dataType={} syncRunId={} retryCount={} quotaCost={} error={}",
+                dataType, run.getId(), fetchResult.retryCount(), fetchResult.quotaCost(), message, exception);
+        return record(new ProviderSyncOutcome(finished, null, SyncStatusEnum.FAILED, false));
     }
 
     private ProviderHttpException findHttpException(Throwable throwable) {

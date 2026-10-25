@@ -20,6 +20,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import java.time.Instant;
 
@@ -216,6 +217,38 @@ class RawDataProviderSyncTemplateTest {
         assertThat(outcome.duplicatePayload()).isTrue();
         assertThat(outcome.status()).isEqualTo(SyncStatusEnum.SUCCESS);
         verify(dataSyncRunPayloadLinkService).link(5L, 50L);
+    }
+
+    /**
+     * 2026-10-25 事故回归：取数全部成功、载荷入库被数据库拒绝（request_key 撞 varchar(256)）。
+     * 修复前异常直接冒到调度层，运行记录永久停在 RUNNING、额度显示 0。
+     */
+    @Test
+    void payloadPersistenceFailureStillFinishesRunAsFailed() {
+        DataSyncRun running = run(7L, SyncStatusEnum.RUNNING);
+        DataSyncRun failed = run(7L, SyncStatusEnum.FAILED);
+        when(dataSyncRunService.startRun("STUB", ProviderDataTypeEnum.ASIAN_ODDS)).thenReturn(running);
+        when(rawDataPayloadService.savePayload(any(RawDataPayloadSaveDto.class)))
+                .thenThrow(new DataIntegrityViolationException("value too long for type character varying(256)"));
+        when(dataSyncRunService.finishFailed(eq(7L), any())).thenReturn(failed);
+
+        ProviderSyncOutcome outcome = template.execute(
+                "STUB",
+                ProviderDataTypeEnum.ASIAN_ODDS,
+                () -> new ProviderFetchResult("nova-odds:1,2", "{\"ok\":true}", 200, null, 1, 29),
+                (dataType, requestKey, saved) -> new ProviderParseResult(1, 0, null)
+        );
+
+        assertThat(outcome.status()).isEqualTo(SyncStatusEnum.FAILED);
+        assertThat(outcome.payload()).isNull();
+        verify(dataSyncRunPayloadLinkService, never()).link(any(), any());
+        verify(rawDataPayloadService, never()).markParseSuccess(any());
+        ArgumentCaptor<SyncRunFinishDto> captor = ArgumentCaptor.forClass(SyncRunFinishDto.class);
+        verify(dataSyncRunService).finishFailed(eq(7L), captor.capture());
+        assertThat(captor.getValue().errorMessage()).contains("value too long");
+        // 额度已真实消耗，必须留在运行记录上，否则失败轮次会被误读成「一次请求都没发出去」。
+        assertThat(captor.getValue().quotaCost()).isEqualTo(29);
+        assertThat(captor.getValue().retryCount()).isEqualTo(1);
     }
 
     private DataSyncRun run(Long id, SyncStatusEnum status) {

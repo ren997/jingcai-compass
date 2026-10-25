@@ -73,6 +73,39 @@ class NovaApiOddsProviderTest {
         assertThat(provider.estimateQuotaCost(new AsianOddsQueryDto(null, null, null, null))).isZero();
     }
 
+    /**
+     * 请求键必须短于落库列宽（V28 后为 1024），且场次越多越要收敛。
+     *
+     * <p>2026-10-25 的真实事故：29 场拼出 283 字符，撞上当时的 VARCHAR(256)，
+     * 整轮亚盘同步失败、记录停在 RUNNING。场次数只增不减，所以不能只靠加宽列。</p>
+     */
+    @Test
+    void keepsRequestKeyWithinColumnWidthAsMatchCountGrows() throws Exception {
+        when(client.get(eq(NovaApiOddsProvider.PROVIDER_CODE), eq(NovaApiOddsProvider.ODDS_PATH), anyMap()))
+                .thenAnswer(invocation -> ok("{\"code\":200,\"data\":{\"providers\":[]}}", 1));
+
+        // 29 场：真实事故的规模。生产上窗口是 20 字符时间戳，拼出来 283 字符；
+        // 这里窗口为空（*）所以更短，断言只要求「保持可读且不超列宽」。
+        String[] today = matchIds(29);
+        ProviderFetchResult readable = provider.fetchPreMatchOddsRaw(query(today));
+        assertThat(readable.requestKey().length()).isLessThanOrEqualTo(1024);
+        assertThat(readable.requestKey()).startsWith("nova-odds:2042213").contains(",2042229");
+
+        // 120 场：可读键会到 ~1000 字符，必须退化成定长摘要。
+        ProviderFetchResult degraded = provider.fetchPreMatchOddsRaw(query(matchIds(120)));
+        assertThat(degraded.requestKey().length()).isLessThanOrEqualTo(1024);
+        assertThat(degraded.requestKey()).startsWith("nova-odds:120:").doesNotContain(",2042229");
+    }
+
+    private static String[] matchIds(int count) {
+        String[] ids = new String[count];
+        for (int index = 0; index < count; index++) {
+            // 2042213 起连续编号，与真实赛程同一量级（7 位）。
+            ids[index] = String.valueOf(2042213 + index);
+        }
+        return ids;
+    }
+
     @Test
     void refusesToCallProviderWithoutMatchIds() {
         assertThatThrownBy(() -> provider.fetchPreMatchOddsRaw(new AsianOddsQueryDto(null, null, null, null)))

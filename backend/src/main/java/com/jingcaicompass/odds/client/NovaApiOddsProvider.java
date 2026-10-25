@@ -16,6 +16,9 @@ import com.jingcaicompass.system.provider.ProviderErrorCategory;
 import com.jingcaicompass.system.provider.ProviderException;
 import com.jingcaicompass.system.provider.ProviderHttpException;
 import com.jingcaicompass.system.provider.ProviderHttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -47,6 +50,8 @@ public class NovaApiOddsProvider implements AsianOddsProvider {
     static final String PROVIDER_CODE = NovaApiOddsPayloadMapper.PROVIDER_CODE;
     static final String ODDS_PATH = "/nova/tf/odds";
     private static final String MATCH_ID_PARAMETER = "matchId";
+    /** 列宽 1024（V28）下的保守上限，超出即退化为定长摘要键。 */
+    private static final int REQUEST_KEY_MAX_LENGTH = 900;
 
     private final NovaApiClient client;
     private final AsianOddsPayloadMapper payloadMapper;
@@ -227,10 +232,42 @@ public class NovaApiOddsProvider implements AsianOddsProvider {
         return status != null && (status == 401 || status == 403);
     }
 
+    /**
+     * 请求键：可读格式把当日全部 matchId 拼进去，长度随场次数线性增长。
+     *
+     * <p>2026-10-25 踩过一次：29 场拼出 283 字符，写库时撞上
+     * {@code raw_data_payloads.request_key VARCHAR(256)}，整轮同步失败且记录停在 RUNNING。
+     * 列已由 V28 加宽到 1024，但「场次数只增不减」这个前提本身不成立（周末 60~80 场很常见），
+     * 所以这里再加一道守卫：超过阈值就退化成「场次数 + 集合摘要」的定长键。</p>
+     *
+     * <p>退化键仍然等价：同一批 matchId 得到同一个摘要，不同批次不会误判为重复；
+     * 丢掉的是「肉眼能看出具体是哪几场」，排查时改用 payload 内容即可。</p>
+     */
     private static String requestKey(AsianOddsQueryDto query, List<String> matchIds) {
         String from = query.kickoffFrom() == null ? "*" : query.kickoffFrom().toInstant().toString();
         String to = query.kickoffTo() == null ? "*" : query.kickoffTo().toInstant().toString();
-        return "nova-odds:" + String.join(",", matchIds) + ":" + from + ":" + to;
+        String joined = String.join(",", matchIds);
+        String readable = "nova-odds:" + joined + ":" + from + ":" + to;
+        if (readable.length() <= REQUEST_KEY_MAX_LENGTH) {
+            return readable;
+        }
+        return "nova-odds:" + matchIds.size() + ":" + shortDigest(joined) + ":" + from + ":" + to;
+    }
+
+    private static String shortDigest(String value) {
+        try {
+            byte[] hash = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(32);
+            for (int index = 0; index < 16; index++) {
+                hex.append(Character.forDigit((hash[index] >> 4) & 0xF, 16));
+                hex.append(Character.forDigit(hash[index] & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException exception) {
+            // SHA-256 是 JDK 强制要求提供的算法，走到这里说明运行环境本身异常。
+            throw new IllegalStateException("SHA-256 不可用", exception);
+        }
     }
 
     private static void putIfNotNull(ObjectNode target, String name, java.time.OffsetDateTime value) {

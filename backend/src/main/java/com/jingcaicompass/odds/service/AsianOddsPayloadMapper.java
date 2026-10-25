@@ -5,24 +5,21 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.odds.dto.AsianOddsMatchOddsDto;
-import com.jingcaicompass.odds.dto.AsianOddsLineDto;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
-import java.math.BigDecimal;
-import java.time.OffsetDateTime;
-import java.time.format.DateTimeParseException;
-import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
-/** 亚盘原始 JSON → 比赛盘口列表。 */
+/**
+ * 亚盘原始 JSON → 比赛盘口列表。
+ *
+ * <p>单源（NovaAPI）之后只有一种聚合格式：{@code {"provider":"NOVA_API","responses":[...]}}，
+ * 解析细节由 {@link NovaApiOddsPayloadMapper} 承担；本类保留的是「按信封结构分派」这一层，
+ * 以及同步侧可能直接拿到的比赛数组格式。</p>
+ */
 @Component
 public class AsianOddsPayloadMapper {
-
-    private static final String THE_ODDS_API = "THE_ODDS_API";
 
     private final ObjectMapper objectMapper;
     private final NovaApiOddsPayloadMapper novaApiOddsPayloadMapper;
@@ -50,10 +47,6 @@ public class AsianOddsPayloadMapper {
             if (root.isObject() && root.has("matches")) {
                 return readList(root.get("matches"));
             }
-            if (root.isObject() && THE_ODDS_API.equals(root.path("provider").asText())
-                    && root.has("responses")) {
-                return parseTheOddsResponses(root);
-            }
             if (root.isObject() && NovaApiOddsPayloadMapper.PROVIDER_CODE.equals(root.path("provider").asText())
                     && root.has("responses")) {
                 return novaApiOddsPayloadMapper.parse(root);
@@ -66,7 +59,7 @@ public class AsianOddsPayloadMapper {
             // 覆盖率 0%」，而调用方只会看到一份正常的同步记录——排查方向被彻底带偏。
             throw new BusinessException(
                     ErrorCode.DATA_SOURCE_PARSE_FAILED,
-                    "无法识别的亚盘载荷结构（既非比赛数组，也非已知 Provider 的聚合格式）"
+                    "无法识别的亚盘载荷结构（既非比赛数组，也非 NovaAPI 的聚合格式）"
             );
         } catch (JsonProcessingException exception) {
             throw new BusinessException(ErrorCode.DATA_SOURCE_PARSE_FAILED, "亚盘载荷解析失败", exception);
@@ -80,281 +73,5 @@ public class AsianOddsPayloadMapper {
         List<AsianOddsMatchOddsDto> matches = objectMapper.convertValue(node, new TypeReference<>() {
         });
         return matches == null ? List.of() : List.copyOf(matches);
-    }
-
-    private List<AsianOddsMatchOddsDto> parseTheOddsResponses(JsonNode root) {
-        OffsetDateTime from = parseTime(root.path("kickoffFrom"));
-        OffsetDateTime to = parseTime(root.path("kickoffTo"));
-        String bookmakerCode = text(root, "bookmakerCode");
-        List<AsianOddsMatchOddsDto> matches = new ArrayList<>();
-        JsonNode responses = root.path("responses");
-        if (!responses.isArray()) {
-            throw new BusinessException(ErrorCode.DATA_SOURCE_PARSE_FAILED, "The Odds API 响应聚合格式无效");
-        }
-        for (JsonNode response : responses) {
-            String sportKey = text(response, "sportKey");
-            JsonNode events = response.path("body");
-            if (!events.isArray()) {
-                throw new BusinessException(ErrorCode.DATA_SOURCE_PARSE_FAILED, "The Odds API 赛事响应不是数组");
-            }
-            for (JsonNode event : events) {
-                AsianOddsMatchOddsDto match = toTheOddsMatch(event, sportKey, bookmakerCode);
-                if (isWithinWindow(match.kickoffTime(), from, to)) {
-                    matches.add(match);
-                }
-            }
-        }
-        return List.copyOf(matches);
-    }
-
-    private AsianOddsMatchOddsDto toTheOddsMatch(
-            JsonNode event,
-            String fallbackSportKey,
-            String requestedBookmaker
-    ) {
-        Set<String> errors = new LinkedHashSet<>();
-        String providerMatchId = text(event, "id");
-        String homeTeamName = text(event, "home_team");
-        String awayTeamName = text(event, "away_team");
-        OffsetDateTime kickoffTime = parseTime(event.path("commence_time"));
-        String sportKey = text(event, "sport_key");
-        if (!StringUtils.hasText(sportKey)) {
-            sportKey = fallbackSportKey;
-        }
-        if (!StringUtils.hasText(providerMatchId)) {
-            errors.add("MISSING_EVENT_ID");
-        }
-        if (!StringUtils.hasText(sportKey)) {
-            errors.add("MISSING_SPORT_KEY");
-        }
-        if (!StringUtils.hasText(homeTeamName) || !StringUtils.hasText(awayTeamName)) {
-            errors.add("MISSING_TEAM_NAME");
-        }
-        if (kickoffTime == null) {
-            errors.add("MISSING_KICKOFF_TIME");
-        }
-
-        List<AsianOddsLineDto> lines = new ArrayList<>();
-        JsonNode bookmakers = event.path("bookmakers");
-        if (bookmakers.isArray()) {
-            for (JsonNode bookmaker : bookmakers) {
-                String bookmakerCode = text(bookmaker, "key");
-                if (!StringUtils.hasText(bookmakerCode)
-                        || (StringUtils.hasText(requestedBookmaker)
-                        && !requestedBookmaker.equalsIgnoreCase(bookmakerCode))) {
-                    continue;
-                }
-                OffsetDateTime bookmakerUpdatedAt = parseTime(bookmaker.path("last_update"));
-                JsonNode markets = bookmaker.path("markets");
-                if (!markets.isArray()) {
-                    errors.add("INVALID_MARKETS");
-                    continue;
-                }
-
-                JsonNode spreadMarket = null;
-                JsonNode totalsMarket = null;
-                for (JsonNode market : markets) {
-                    String marketKey = market.path("key").asText();
-                    if ("spreads".equals(marketKey)) {
-                        spreadMarket = market;
-                    } else if ("totals".equals(marketKey)) {
-                        totalsMarket = market;
-                    }
-                }
-                if (spreadMarket == null) {
-                    continue;
-                }
-
-                OffsetDateTime spreadUpdatedAt = providerUpdatedAt(spreadMarket, bookmakerUpdatedAt);
-                AsianOddsLineDto spreadLine = toSpreadLine(
-                        spreadMarket.path("outcomes"),
-                        bookmakerCode,
-                        homeTeamName,
-                        awayTeamName,
-                        spreadUpdatedAt,
-                        errors
-                );
-                if (spreadLine == null) {
-                    continue;
-                }
-                if (totalsMarket == null) {
-                    lines.add(spreadLine);
-                    continue;
-                }
-
-                TotalsLine totalsLine = toTotalsLine(
-                        totalsMarket.path("outcomes"),
-                        providerUpdatedAt(totalsMarket, bookmakerUpdatedAt),
-                        errors
-                );
-                if (totalsLine == null) {
-                    continue;
-                }
-                lines.add(new AsianOddsLineDto(
-                        bookmakerCode,
-                        spreadLine.handicapLine(),
-                        spreadLine.homeOdds(),
-                        spreadLine.awayOdds(),
-                        totalsLine.totalLine(),
-                        totalsLine.overOdds(),
-                        totalsLine.underOdds(),
-                        latestUpdatedAt(spreadLine.providerUpdatedAt(), totalsLine.providerUpdatedAt())
-                ));
-            }
-        }
-        boolean live = event.path("live").asBoolean(false);
-        return new AsianOddsMatchOddsDto(
-                providerMatchId,
-                homeTeamName,
-                awayTeamName,
-                kickoffTime,
-                live,
-                List.copyOf(lines),
-                sportKey,
-                errors.isEmpty() ? null : String.join(",", errors)
-        );
-    }
-
-    private AsianOddsLineDto toSpreadLine(
-            JsonNode outcomes,
-            String bookmakerCode,
-            String homeTeamName,
-            String awayTeamName,
-            OffsetDateTime providerUpdatedAt,
-            Set<String> errors
-    ) {
-        if (!outcomes.isArray()) {
-            errors.add("INVALID_SPREAD_OUTCOMES");
-            return null;
-        }
-        JsonNode home = findOutcome(outcomes, homeTeamName);
-        JsonNode away = findOutcome(outcomes, awayTeamName);
-        BigDecimal homePoint = decimal(home, "point");
-        BigDecimal awayPoint = decimal(away, "point");
-        BigDecimal homePrice = decimal(home, "price");
-        BigDecimal awayPrice = decimal(away, "price");
-        if (homePoint == null || awayPoint == null || homePrice == null || awayPrice == null) {
-            errors.add("INCOMPLETE_SPREAD_PAIR");
-            return null;
-        }
-        if (homePoint.add(awayPoint).compareTo(BigDecimal.ZERO) != 0) {
-            errors.add("INCONSISTENT_SPREAD_PAIR");
-            return null;
-        }
-        return new AsianOddsLineDto(
-                bookmakerCode,
-                homePoint,
-                homePrice,
-                awayPrice,
-                null,
-                null,
-                null,
-                providerUpdatedAt
-        );
-    }
-
-    private TotalsLine toTotalsLine(
-            JsonNode outcomes,
-            OffsetDateTime providerUpdatedAt,
-            Set<String> errors
-    ) {
-        if (!outcomes.isArray()) {
-            errors.add("INVALID_TOTALS_OUTCOMES");
-            return null;
-        }
-        JsonNode over = findOutcomeIgnoreCase(outcomes, "Over");
-        JsonNode under = findOutcomeIgnoreCase(outcomes, "Under");
-        BigDecimal overPoint = decimal(over, "point");
-        BigDecimal underPoint = decimal(under, "point");
-        BigDecimal overPrice = decimal(over, "price");
-        BigDecimal underPrice = decimal(under, "price");
-        if (overPoint == null || underPoint == null || overPrice == null || underPrice == null) {
-            errors.add("INCOMPLETE_TOTALS_PAIR");
-            return null;
-        }
-        if (overPoint.compareTo(underPoint) != 0) {
-            errors.add("INCONSISTENT_TOTALS_PAIR");
-            return null;
-        }
-        return new TotalsLine(overPoint, overPrice, underPrice, providerUpdatedAt);
-    }
-
-    private JsonNode findOutcome(JsonNode outcomes, String teamName) {
-        if (!StringUtils.hasText(teamName)) {
-            return null;
-        }
-        for (JsonNode outcome : outcomes) {
-            if (teamName.equals(outcome.path("name").asText())) {
-                return outcome;
-            }
-        }
-        return null;
-    }
-
-    private JsonNode findOutcomeIgnoreCase(JsonNode outcomes, String outcomeName) {
-        if (!StringUtils.hasText(outcomeName)) {
-            return null;
-        }
-        for (JsonNode outcome : outcomes) {
-            if (outcomeName.equalsIgnoreCase(outcome.path("name").asText())) {
-                return outcome;
-            }
-        }
-        return null;
-    }
-
-    private OffsetDateTime providerUpdatedAt(JsonNode market, OffsetDateTime bookmakerUpdatedAt) {
-        OffsetDateTime marketUpdatedAt = parseTime(market.path("last_update"));
-        return marketUpdatedAt == null ? bookmakerUpdatedAt : marketUpdatedAt;
-    }
-
-    private OffsetDateTime latestUpdatedAt(OffsetDateTime first, OffsetDateTime second) {
-        if (first == null) {
-            return second;
-        }
-        if (second == null || !second.isAfter(first)) {
-            return first;
-        }
-        return second;
-    }
-
-    private static BigDecimal decimal(JsonNode node, String name) {
-        if (node == null || node.isNull() || !node.hasNonNull(name)) {
-            return null;
-        }
-        try {
-            return new BigDecimal(node.get(name).asText());
-        } catch (NumberFormatException exception) {
-            return null;
-        }
-    }
-
-    private static OffsetDateTime parseTime(JsonNode node) {
-        if (node == null || node.isNull() || !StringUtils.hasText(node.asText())) {
-            return null;
-        }
-        try {
-            return OffsetDateTime.parse(node.asText());
-        } catch (DateTimeParseException exception) {
-            return null;
-        }
-    }
-
-    private static boolean isWithinWindow(OffsetDateTime kickoff, OffsetDateTime from, OffsetDateTime to) {
-        return kickoff == null
-                || ((from == null || !kickoff.isBefore(from)) && (to == null || !kickoff.isAfter(to)));
-    }
-
-    private static String text(JsonNode node, String fieldName) {
-        JsonNode field = node == null ? null : node.get(fieldName);
-        return field == null || field.isNull() ? null : field.asText(null);
-    }
-
-    private record TotalsLine(
-            BigDecimal totalLine,
-            BigDecimal overOdds,
-            BigDecimal underOdds,
-            OffsetDateTime providerUpdatedAt
-    ) {
     }
 }

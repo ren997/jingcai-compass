@@ -34,18 +34,11 @@ app:
   pagination:
     max-page-size: 100
   # 离线联调可将 sporttery/asian-odds.provider 都设为 stub（classpath:stub/** fixtures）
-  # sporttery.provider 可选值：china | nova | stub
+  # sporttery.provider 可选值：nova | stub
   sporttery:
-    provider: china
-    base-url: https://webapi.sporttery.cn
-    connect-timeout: 5s
-    read-timeout: 10s
-    retry:
-      max-attempts: 2
-      delay: 500ms
+    provider: nova
     quota-warning-threshold: 0
-  # 仅 sporttery.provider=nova 时使用。api-key / private-key 缺失时只在
-  # 真正发起请求的那一刻报错，不影响其它 provider 的启动。
+  # api-key / private-key 缺失时只在真正发起请求的那一刻报错，不影响 stub 部署的启动。
   # private-key 是 Ed25519 私钥的 Base64（PKCS#8 或裸 32 字节种子均可）。
   nova:
     base-url: https://novaapi.tsgnkj.com
@@ -58,15 +51,8 @@ app:
       delay: 500ms
     quota-warning-threshold: 0
   asian-odds:
-    # stub | THE_ODDS_API（THE_ODDS_API 时装配带超时的 RestClient，业务适配后续任务）
+    # stub | NOVA_API；凭据、限速、超时与重试统一在 app.nova。
     provider: stub
-    base-url: https://api.the-odds-api.com
-    api-key: <api-key>
-    connect-timeout: 5s
-    read-timeout: 10s
-    retry:
-      max-attempts: 2
-      delay: 500ms
     quota-warning-threshold: 0
     # 跨庄聚合：白名单按线判定（该线白名单家数 >= min-whitelist-bookmakers 才用白名单样本），
     # 否则该线回退全量中位数；单线报价家数 < min-bookmakers 的线不参与主盘选择。

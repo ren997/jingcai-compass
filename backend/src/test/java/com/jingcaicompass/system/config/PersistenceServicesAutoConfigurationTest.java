@@ -248,11 +248,6 @@ class PersistenceServicesAutoConfigurationTest {
     private static AsianOddsProviderProperties asianOddsProviderProperties() {
         return new AsianOddsProviderProperties(
                 com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum.STUB,
-                java.net.URI.create("https://api.the-odds-api.com"),
-                "",
-                Duration.ofSeconds(5),
-                Duration.ofSeconds(10),
-                new AsianOddsProviderProperties.RetryProperties(2, Duration.ofMillis(500)),
                 0
         );
     }

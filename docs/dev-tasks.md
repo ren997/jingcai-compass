@@ -2454,7 +2454,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T614 单源 NovaAPI 改造（赛程 + 赔率 + 赛果 + 自动发布）
 
-- 状态：`IN_PROGRESS`（阶段 0~4 已完成且实跑验收通过；阶段 5 代码侧 B0~B6 已全部完成，V26 删表待 CI 集成验证）
+- 状态：`IN_PROGRESS`（阶段 0~4 已完成且实跑验收通过；阶段 5 代码侧 B0~B7 已全部完成，`V26` 删表待 CI 集成验证）
 - 分支：`feat/nova-single-source`
 - 背景：核心诉求是「每天拉数据 → 生成预测 → 次日结算」。但当前在产数据链是三段不同来源拼起来的（赛程/赛果 `sporttery.cn`、赔率 `THE_ODDS_API`），靠 `match_source_mappings` 人工缝合：自动确认要求队名精确匹配 ≥0.85，中英文永远不达标，**每跑一批新比赛都必须手写 SQL**。更硬的一条是 `ChinaSportteryProvider.fetchMatchResultsRaw()` 直接抛错——「第二天结算」今天根本跑不通。
 - 决策：NovaAPI 成为唯一数据源。赛程、赔率、赛果共用同一个 `matchId`，因此映射/归一化层（`match_source_mappings`、`provider_team_mappings`、别名表、归一化评审、`name_key` 系列）在业务上失去存在理由。数据库可清空重建；迁移不重写历史（V1~V25 全部保留），只新增。
@@ -2467,7 +2467,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 阶段 2：单源赔率 + 删 3 处 `INNER JOIN match_source_mappings`（单 commit `9c6f616`）。**实跑验收已于 2026-10-22 全部通过**：真实同步 13 场 → 2052 行交叉积快照（`total_line` 非空率 100%）、两轮增量 `2052→0`、13 场预测全部冻结在 `pinnacle` 行、开赛后零新增；顺带修掉 `quota_cost` 恒为 0 的额度盲区
   - [x] 阶段 3：自动发布编排（`PredictionAutoPublishOrchestrator` + `PredictionAutoPublishJob`，生成 DRAFT 后自动过发布门）。**实跑验收 2026-10-22 通过**：首轮 13 候选全发布、次轮 `NO_PENDING_MATCH` 短路、每场仅 1 条 PUBLISHED、13 条审计记录操作者为 `system:auto-publish`
   - [x] 阶段 4：赛果同步与结算打通。`sectionsNo999` 为唯一权威比分，**90 分钟口径已用一场真实加时+点球样本复核**；比赛定位改用 `external_match_id`（`matchDate` 是开赛自然日，不是业务日）；真库首轮 `SUCCESS 23/23`、次轮 `unchanged=23`、13 条事实全为 `FINAL/REGULATION_90/OFFICIAL`
-  - [ ] 阶段 5：删除映射层与旧数据源（**代码侧已完成**：B0~B6 全部落地，`V26__drop_mapping_tables.sql` 待 CI `-Pintegration` 验证后收口）
+  - [ ] 阶段 5：删除映射层与旧数据源（**代码侧已完成**：B0~B7 全部落地，`V26__drop_mapping_tables.sql` 待 CI `-Pintegration` 验证后收口）
     分七批，每批独立可编译、可单独回滚；**先改行为、再删代码、最后删表**：
     - [x] **B0 行为改造**：公开比赛详情与数据源监控停止读写映射表。`MatchQueryServiceImpl` 删除 `MatchSourceMappingMapper` 依赖与逐场映射查询，`MatchDetailVo` 移除 `mappingAvailability` / `sourceMappings`；`DataSourceMonitoringService` 删除 `match_source_mappings` 的 `PENDING` 计数、`jingcai.mapping.pending` 指标与 `mapping_backlog` 告警；`ObservabilityProperties.pendingMappingThreshold` 与两个 profile 的 `pending-mapping-threshold` 一并移除。前端 `public.ts` / `MatchDetailPage.tsx` 同步去掉「来源映射」区块
     - [x] **B1** 前端后台（`415879d`）：删 5 个映射/标准化页面 + 2 个页面测试；`App.tsx` 去掉 8 条路由、`AdminLayout` 去掉 3 个导航入口；`admin.ts` 删 14 个 API 函数与全部相关类型、`adminSearch.ts` 删 6 个 URL 状态函数、`useAdminQueries.ts` 删 7 个 queryKey + 6 个 hook + 2 组 mutation
@@ -2476,6 +2476,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
     - [x] **B4** 自动映射链路（`52638e4`）：删 `MatchMappingService(Impl)`、`MappingMetrics`、`MatchMappingScoreSupport`、5 个 MatchMap/EntityNormalize DTO 与 2 个枚举
     - [x] **B5** 映射层持久化（`20540f1`）：删 5 实体 + 5 Mapper + `MappingStatusEnum` + `MatchMapper` 两条复核 JOIN；`backend/src/main` 里映射类引用收敛为 0
     - [x] **B6** 删表迁移：`V26__drop_mapping_tables.sql` 删 5 张表；`PostgresApplicationIT` 迁移数 25→26 并改断言（表必须不存在）；顺带清掉 4 个 IT 里对映射表的 TRUNCATE / INSERT，删 `ProviderNormalizationMigrationApplicationIT`、`DataPipelineApplicationIT`
+    - [x] **B7** 删旧数据源（`68d2f38` 之后的独立提交）：删 `ChinaSportteryProvider`（体彩官网）、`TheOddsApiProvider`、两者专属的 `ChinaSportteryRestClientConfig` / `AsianOddsRestClientConfig` 与各自测试；删 `AsianOddsPayloadMapper` 的 THE_ODDS 解析分支（360 → 92 行）；`SportteryProviderType` 去掉 `CHINA`、`AsianOddsProviderTypeEnum` 去掉 `THE_ODDS_API`；两个 properties 记录收敛为 `(provider, quotaWarningThreshold)`——base-url / api-key / 超时 / 重试 / The Odds sport key 与累计预算全部随之删除，传输参数只剩 `app.nova` 一处。**默认值同步翻转**：`app.sporttery.provider` 由 `china` 改 `nova`（原来缺省部署会去连已停用的体彩官网）
     - 顺序依据：`match_source_mappings` 上还有 4 处**运行时**读路径，先删表会导致公开详情 500、监控每分钟报错；其中赔率同步的映射分支只在旧源 provider 下可达，故与旧 Provider 一并放 B6
 
 - 阶段 1 补做（原计划留到阶段 5，本轮提前收口）：`matches.league_id` / `home_team_id` / `away_team_id` 填充。

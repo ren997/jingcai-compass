@@ -122,11 +122,12 @@ REDIS_PASSWORD=<password>
 JWT_SECRET=replace-with-a-long-random-secret
 CORS_ALLOWED_ORIGINS=http://localhost:5173
 
+# nova | stub，缺省 nova。体彩官网（china）已随单源改造删除，配错会在启动期绑定失败。
 SPORTTERY_PROVIDER=stub
-SPORTTERY_BASE_URL=
 ASIAN_ODDS_PROVIDER=stub
-ASIAN_ODDS_BASE_URL=https://api.the-odds-api.com
-ASIAN_ODDS_API_KEY=
+# 仅 provider=nova / NOVA_API 时使用；缺凭据只在真正发请求时报错，不影响 stub 启动。
+NOVA_API_KEY=
+NOVA_PRIVATE_KEY=
 
 SNAPSHOT_STORAGE_TYPE=local
 SNAPSHOT_STORAGE_PATH=./runtime/snapshots

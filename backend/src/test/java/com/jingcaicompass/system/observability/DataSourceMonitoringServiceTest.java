@@ -11,7 +11,6 @@ import com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum;
 import com.jingcaicompass.odds.service.AsianOddsProvider;
 import com.jingcaicompass.system.config.properties.SyncTaskProperties;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
-import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -105,25 +104,10 @@ class DataSourceMonitoringServiceTest {
     }
 
     private SportteryProviderProperties sportteryProperties() {
-        return new SportteryProviderProperties(
-                SportteryProviderType.CHINA,
-                URI.create("https://sporttery.example.test"),
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                new SportteryProviderProperties.RetryProperties(1, Duration.ofMillis(100)),
-                0
-        );
+        return new SportteryProviderProperties(SportteryProviderType.NOVA, 0);
     }
 
     private AsianOddsProviderProperties asianOddsProperties() {
-        return new AsianOddsProviderProperties(
-                AsianOddsProviderTypeEnum.THE_ODDS_API,
-                URI.create("https://odds.example.test"),
-                "api-key-not-logged",
-                Duration.ofSeconds(1),
-                Duration.ofSeconds(1),
-                new AsianOddsProviderProperties.RetryProperties(1, Duration.ofMillis(100)),
-                40
-        );
+        return new AsianOddsProviderProperties(AsianOddsProviderTypeEnum.NOVA_API, 40);
     }
 }

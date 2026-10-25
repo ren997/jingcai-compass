@@ -40,7 +40,10 @@ class ProductionConfigurationTest {
                 .isEqualTo("${ADMIN_BOOTSTRAP_USERNAME:}");
         assertThat(application.getProperty("app.security.bootstrap.password"))
                 .isEqualTo("${ADMIN_BOOTSTRAP_PASSWORD:}");
-        assertThat(application.getProperty("app.asian-odds.api-key")).isEqualTo("${ASIAN_ODDS_API_KEY:}");
+        // 旧源（体彩官网 / The Odds API）已随单源改造删除，默认值必须是 nova / stub：
+        // 若默认仍指向已删除的 provider，缺省部署会在启动期绑定失败。
+        assertThat(application.getProperty("app.sporttery.provider")).isEqualTo("${SPORTTERY_PROVIDER:nova}");
+        assertThat(application.getProperty("app.asian-odds.provider")).isEqualTo("${ASIAN_ODDS_PROVIDER:stub}");
         assertThat(application.getProperty("app.snapshot.storage.type"))
                 .isEqualTo("${SNAPSHOT_STORAGE_TYPE:local}");
         assertThat(application.getProperty("app.snapshot.storage.path"))

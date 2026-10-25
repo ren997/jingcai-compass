@@ -22,9 +22,7 @@ import com.jingcaicompass.odds.enums.AsianOddsProviderTypeEnum;
 import com.jingcaicompass.system.config.properties.PaginationProperties;
 import com.jingcaicompass.system.exception.BusinessException;
 import com.jingcaicompass.system.exception.ErrorCode;
-import java.net.URI;
 import java.time.Clock;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -53,12 +51,8 @@ class AdminSyncRunQueryServiceTest {
                 dataSyncRunMapper,
                 rawDataPayloadMapper,
                 new PaginationProperties(100),
-                new SportteryProviderProperties(SportteryProviderType.STUB, URI.create("https://sporttery.test"),
-                        Duration.ofSeconds(1), Duration.ofSeconds(1),
-                        new SportteryProviderProperties.RetryProperties(1, Duration.ofMillis(100)), 3),
-                new AsianOddsProviderProperties(AsianOddsProviderTypeEnum.STUB, URI.create("https://odds.test"), "secret",
-                        Duration.ofSeconds(1), Duration.ofSeconds(1),
-                        new AsianOddsProviderProperties.RetryProperties(1, Duration.ofMillis(100)), 5),
+                new SportteryProviderProperties(SportteryProviderType.STUB, 3),
+                new AsianOddsProviderProperties(AsianOddsProviderTypeEnum.STUB, 5),
                 new AdminSensitiveDataSanitizer(new com.fasterxml.jackson.databind.ObjectMapper()),
                 Clock.fixed(Instant.parse("2026-07-28T01:00:00Z"), ZoneOffset.UTC)
         );

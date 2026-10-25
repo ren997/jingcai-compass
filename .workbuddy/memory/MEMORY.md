@@ -59,7 +59,7 @@
 
 ## 单源进度
 
-- 阶段 0（V25）/1（赛程）/2（赔率）/3（自动发布）/4（赛果与结算 `600f3dc`）/5（删映射层与旧源，`c979b1d`）代码侧全部完成并推送；阶段 4 验收 `SUCCESS 23/23`、次轮全 `unchanged`、13 条事实全 `FINAL/REGULATION_90/OFFICIAL`。
+- 阶段 0（V25）/1（赛程）/2（赔率）/3（自动发布）/4（赛果与结算 `600f3dc`）/5（删映射层与旧源）全部完成，**阶段 5 已合入 master（merge `9ab9d0d`）**；阶段 4 验收 `SUCCESS 23/23`、次轮全 `unchanged`、13 条事实全 `FINAL/REGULATION_90/OFFICIAL`。阶段 5 的本地验收方式：`local` profile 直连生产库真实启动，Flyway 自动到 v26，公开赛程/详情/亚盘/管理端 `sync-runs` 全部正常。
 - **落库是交叉积**（让球线 × 大小球线），冻结行要求同一行具备两个市场。必须同时改 V25 唯一键与 `AsianOddsSnapshotWriter` 去重维度（含 `total_line` + `IS NULL`），否则每轮整批重插且不报错。**大小球保留档按「跨庄去水概率离 50/50 的距离」取前 4，不按报出家数**（按家数会选中稀疏整数盘、把主盘 `2.75/3.0` 排掉，共识已错却不报错）。
 - **`code != 200` 必须整体失败**：密钥过期放在响应体而 HTTP 仍 200；逐场降级会让同步显示成功、快照 0 条。单场 404 才降级，401/403 立即抛错。
 - **读查询按 `provider_code` 过滤、不 JOIN `match_source_mappings`**：去重键 `(bookmaker, line)` 不含 provider，混源同名庄会互相覆盖并一起进中位数。赔率响应**没有滚球标志**，只能用 `kickoff_time` 判赛前。`NovaApiClient` 装配条件是 OR，限速与赛程/赔率/赛果共用额度。
@@ -75,7 +75,10 @@
 - **本机 `mvn` 不在 PATH 上**，每次先 export：`JAVA_HOME=/c/D/java/tools/jdk/jdk-21.0.11+10`，`PATH` 加 `/c/D/java/tools/maven/apache-maven-3.9.16-bin/apache-maven-3.9.16/bin`。`gh` 也未安装，**只能靠网页建 PR**（仓库是 public，匿名 `api.github.com/repos/ren997/jingcai-compass/pulls?head=ren997:<branch>` 可查有没有 PR）。
 - 凭据走**环境变量不落盘**：应用侧 `NOVA_API_KEY`/`NOVA_PRIVATE_KEY`，探针用 `NOVA_PRIVATE_KEY_B64`（同 base64 PKCS8）。日卡会过期，需用户重发。
 - **本地跑单源必须 `@SpringBootTest(properties=...)` 覆盖 provider**：`application-local.yml` 里是硬编码字符串，环境变量无效。全链路 `SportteryPoolSyncService.sync` → `AsianOddsSyncService.sync` → `PredictionAutoPublishOrchestrator.run(d)`。
-- **本地 `app.tasks.enabled=false`，定时 Job 全关**：已发布预测开赛过后仍停在 `PUBLISHED`，**每天必须手动跑**；「锁定后首页 500」的 P0 在本地从未触发，上线前必须确认。
+- **`application-local.yml` 里 `app.tasks.enabled: true`，六个 Job 全开**（赛程/赔率/自动发布/赛果/锁定/结算）——只想验证「能不能启动」时必须命令行覆盖 `--app.tasks.enabled=false`，否则启动即真实同步 + 自动发布。已发布预测开赛过后仍停在 `PUBLISHED` 的老问题不变，**每天必须手动跑**；「锁定后首页 500」的 P0 在本地从未触发，上线前必须确认。
+- **本地启动必须显式 `--server.port=8080 --management.server.port=8081`**：WorkBuddy 把自己占用的 55726 注入了环境，`server.port: ${SERVER_PORT:8080}` 会解析成 55726（`env` 里查不到该变量，但运行期确实拿到），表现为 `Port 55726 was already in use`。
+- **Flyway 在 Web 服务器启动之前执行**：端口冲突导致 `APPLICATION FAILED TO START` 时，迁移**已经提交落库**了。所以「本地起一下」本身就是一次数据库变更，破坏性迁移（如 V26 DROP）必须先备份再启动，不能指望「启动失败=没改库」。
+- **`NoResourceFoundException` 被 `GlobalExceptionHandler` 当 500 返回**（应为 404）：猜错 API 路径时会看到 `COMMON_INTERNAL_ERROR`，别误判成服务故障。公开接口只有 `GET /api/public/matches`、`POST /api/public/matches/{list,detail}`、`POST /api/public/predictions/detail` 与快照下载；管理端没有 `dashboard` controller。
 - **修复后线上形态（10-23 首批）**：8 条 `edge` 全 `0.000000`。两种正常「不发」：① 开赛后才同步赔率的场次丢弃；② 主盘档两侧在 `1.90~1.98` 平衡区 → 两市场都 LOW → **整场跳过**（12 场里 3 场）。**场场都有方向才是异常。** 导出盘口必须标侧别（「主 X @y / 客 -X @z」「线 大 @a / 小 @b」）。
 - **补算已开赛场次离线复刻、不写库**（`lookupMatch` 的开场守卫正为拦此）：`AsianMarketConsensusAggregator`/`AsianPublishGate`/`ImpliedPoissonModel` 无 Spring 依赖，**直接 `new` + `backend/target/classes` 引用**，不要手写公式（手写版已两次出现末位漂移隐患）。
 
@@ -89,7 +92,7 @@
 
 ## 已知待办
 
-- **阶段 5 已代码侧收口**（B0~B7，单测 812→716 全绿）；唯一缺口是 **`feat/nova-single-source` 从未建过 PR**，38+ 提交没有 `-Pintegration` 证据，V26 的 `DROP TABLE` 与 18 个 `*IT` 一次都没在 Testcontainers PG16 上跑过。
+- **阶段 5 已合入 master**（merge `9ab9d0d`，任务板 `951d612`）：B0~B7 全部落地，单测 812→716 全绿；**V26 于 2026-10-25 由本地真实启动触发 Flyway v25→v26，已对生产库生效**（删表前五张表用 JDBC 备份到 `.workbuddy/tmp/mapping-backup-20261025-145650/`）。未走 PR：本地 profile 直连生产库启动成功即合并，`backend-integration`（`push→master` 且命中 `backend/**`）已随合并自动触发，其 `-Pintegration` 结果是这轮唯一待观察项。
 - 阶段 4 唯一欠证：**官方赛果 → 锁定 → 结算全链真跑**（目前结算均离线核对，未走 `SettlementService`）。
 - 回测做成功能（原型已验证）。邻线校验口径（整条阶梯取最大 vs 主盘 ±0.75）不改代码，结论写进 `docs/asian-model-design.md`。
 - `backend/src/test/java/com/jingcaicompass/tools/` 保持未跟踪（本地单测数比 CI 多 1~2）。

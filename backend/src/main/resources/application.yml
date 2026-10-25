@@ -104,6 +104,12 @@ app:
     dispersion-tolerance: ${ASIAN_MODEL_DISPERSION_TOLERANCE:0.0200}
     # 影子门槛的安全边际：required = 1/冻结报价 + 本值。本阶段只记录不拦截。
     safety-margin: ${ASIAN_MODEL_SAFETY_MARGIN:0.0100}
+    # 置信度阈值：margin 是抽水率（越平衡越大），所以此处是上限、越严越小；
+    # signal 是两侧去水概率的归一化差距，此处是下限。默认值与原先硬编码常量逐字相等。
+    high-confidence-margin: ${ASIAN_MODEL_HIGH_CONFIDENCE_MARGIN:0.1000}
+    medium-confidence-margin: ${ASIAN_MODEL_MEDIUM_CONFIDENCE_MARGIN:0.1600}
+    high-direction-signal: ${ASIAN_MODEL_HIGH_DIRECTION_SIGNAL:0.0750}
+    medium-direction-signal: ${ASIAN_MODEL_MEDIUM_DIRECTION_SIGNAL:0.0250}
   tasks:
     enabled: ${SYNC_TASKS_ENABLED:false}
     sporttery-pool:

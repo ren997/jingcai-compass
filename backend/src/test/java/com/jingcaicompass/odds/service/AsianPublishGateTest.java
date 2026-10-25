@@ -146,7 +146,8 @@ class AsianPublishGateTest {
     @Test
     void honoursConfiguredSafetyMargin() {
         AsianPublishGate tight = new AsianPublishGate(
-                new AsianModelProperties(null, null, null, null, new BigDecimal("0.0025")));
+                new AsianModelProperties(null, null, null, null, new BigDecimal("0.0025"),
+                        null, null, null, null));
 
         AsianPublishGate.Verdict verdict =
                 tight.evaluate(Market.TOTALS, Side.FIRST, 0.505d, new BigDecimal("0.50"), TWO, TWO);

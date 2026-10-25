@@ -658,6 +658,75 @@ class BaselinePredictionGenerationServiceTest {
         return counter == null ? 0d : counter.count();
     }
 
+    /**
+     * 差分测试：同一条夹具分别走「生产 service」与「决策引擎」，逐字段必须相等。
+     *
+     * <p>这是 P1 重构的核心保证——service 现在只是取数 + 组装，判定全部由引擎完成；若哪天有人把
+     * 某条规则又写回 service，这个断言会立刻失败。数值一律 {@code isEqualByComparingTo}：两边都
+     * 走同一个 6 位标度的缩放，再用 {@code isCloseTo} 会掩盖真正的末位漂移。</p>
+     */
+    @Test
+    void engineReproducesProductionDecisionFieldByField() {
+        MatchEntity match = scheduledMatch(101L);
+        List<AsianOddsSnapshot> rows = List.of(
+                row(501L, 101L, "BOOK_A", "-0.50", "1.90", "1.90", "2.50", "1.80", "2.00", LATEST_CAPTURE),
+                row(502L, 101L, "BOOK_B", "-0.50", "1.90", "1.90", "2.50", "1.85", "1.95", EARLIER_CAPTURE));
+        stubMarkets(match, rows, rows);
+        stubImport();
+
+        service.generateAndImport(LOTTERY_DATE, "admin");
+        PredictionImportDto fromService = capturedPrediction();
+
+        AsianDecision fromEngine = new AsianDecisionEngine(
+                AsianOddsAggregationProperties.defaults(), AsianModelProperties.defaults(), meterRegistry)
+                .decide(new AsianDecisionInput(
+                        101L,
+                        MatchStatusEnum.SCHEDULED,
+                        match.getKickoffTime(),
+                        NOW,
+                        rows,
+                        rows.stream()
+                                .map(row -> new com.jingcaicompass.odds.service.AsianMarketConsensusAggregator.Quote(
+                                        row.getProviderCode(), row.getBookmakerCode(), row.getTotalLine(),
+                                        row.getOverOdds(), row.getUnderOdds(), row.getCapturedAt(), row.getId()))
+                                .toList(),
+                        rows));
+
+        assertThat(fromEngine.skipReason()).isNull();
+        assertThat(fromService.asianOddsSnapshotId()).isEqualTo(fromEngine.frozen().getId());
+        assertThat(fromService.generatedAt()).isEqualTo(fromEngine.featureAsOf());
+        assertThat(fromService.asianHandicapPick()).isEqualTo(fromEngine.handicap().pick());
+        assertThat(fromService.totalGoalsPick()).isEqualTo(fromEngine.totals().pick());
+        // 落库口径是「没方向就没有置信度」，与引擎内部的 LOW 保留不同，必须按同一规则比较。
+        assertThat(fromService.asianHandicapConfidenceLevel()).isEqualTo(
+                fromEngine.handicap().pick() == null ? null : fromEngine.handicap().confidence());
+        assertThat(fromService.totalGoalsConfidenceLevel()).isEqualTo(
+                fromEngine.totals().pick() == null ? null : fromEngine.totals().confidence());
+
+        AsianModelOutputDto model = fromService.asianModel();
+        // BigDecimal 用 isEqualByComparingTo 而不是 isEqualTo：DTO 是从序列化文件里解析回来的，
+        // JSON 会吃掉尾部零（0.500000 → 0.5），按 scale 比较只会测到这条序列化细节。
+        assertThat(model.lambdaHome()).isEqualByComparingTo(scale(fromEngine.solution().lambdaHome()));
+        assertThat(model.lambdaAway()).isEqualByComparingTo(scale(fromEngine.solution().lambdaAway()));
+        assertThat(model.modelCoverProb()).isEqualByComparingTo(scale(fromEngine.handicap().coverProbability()));
+        assertThat(model.marketCoverProb()).isEqualByComparingTo(fromEngine.handicapConsensus().firstProbability());
+        assertThat(model.edgeCover()).isEqualByComparingTo(
+                scale(fromEngine.handicap().coverProbability()).subtract(fromEngine.handicapConsensus().firstProbability()));
+        assertThat(model.modelOverProb()).isEqualByComparingTo(scale(fromEngine.totals().overProbability()));
+        assertThat(model.marketOverProb()).isEqualByComparingTo(fromEngine.totalsAtFrozenLine().firstProbability());
+        assertThat(model.edgeOver()).isEqualByComparingTo(
+                scale(fromEngine.totals().overProbability()).subtract(fromEngine.totalsAtFrozenLine().firstProbability()));
+        assertThat(model.handicapDispersion()).isEqualByComparingTo(fromEngine.handicapConsensus().dispersion());
+        assertThat(model.totalsDispersion()).isEqualByComparingTo(fromEngine.totalsAtFrozenLine().dispersion());
+        // 主盘上 edge 恒为 0：λ 由该盘口反解、再投影回同一条线，必然复现市场概率。
+        assertThat(model.edgeCover()).isEqualByComparingTo("0.000000");
+    }
+
+    /** 与落库标度一致（6 位、HALF_UP），用于把引擎的 double 结果与 DTO 的 BigDecimal 对齐。 */
+    private static BigDecimal scale(double value) {
+        return BigDecimal.valueOf(value).setScale(6, java.math.RoundingMode.HALF_UP);
+    }
+
     private void stubMarkets(
             MatchEntity match,
             List<AsianOddsSnapshot> handicapRows,

@@ -349,13 +349,19 @@ class ApplicationConfigurationPropertiesTest {
     @Test
     void appliesAsianModelDefaultsWhenSectionIsAbsent() {
         // 未配置 app.asian-model 时构造绑定会以 null 实例化 record，须回落到实测标定的默认值。
-        AsianModelProperties defaults = new AsianModelProperties(null, null, null, null, null);
+        AsianModelProperties defaults =
+                new AsianModelProperties(null, null, null, null, null, null, null, null, null);
 
         assertThat(defaults.neighborTolerance()).isEqualByComparingTo("0.0400");
         assertThat(defaults.residualTolerance()).isEqualByComparingTo("0.0010");
         assertThat(defaults.maxGoals()).isEqualTo(24);
         assertThat(defaults.dispersionTolerance()).isEqualByComparingTo("0.0200");
         assertThat(defaults.safetyMargin()).isEqualByComparingTo("0.0100");
+        // 置信度阈值的默认值必须与原先生成服务里的硬编码常量逐字相等，否则等于悄悄改了线上口径。
+        assertThat(defaults.highConfidenceMargin()).isEqualByComparingTo("0.1000");
+        assertThat(defaults.mediumConfidenceMargin()).isEqualByComparingTo("0.1600");
+        assertThat(defaults.highDirectionSignal()).isEqualByComparingTo("0.0750");
+        assertThat(defaults.mediumDirectionSignal()).isEqualByComparingTo("0.0250");
     }
 
     @Configuration(proxyBeanMethods = false)

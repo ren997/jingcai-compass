@@ -212,7 +212,7 @@ Ed25519 + 三请求头：`X-API-Key` / `X-Timestamp`（毫秒）/ `X-Signature`�
 | 新增 `NovaApiProvider` | `match/client` | Ed25519 签名 + 上述 5 个端点 |
 | 补实赛果同步 | `NovaSportteryProvider.fetchMatchResultsRaw()` | **已落地**：`/nova/text/match-results` + `NovaMatchResultPayloadMapper`。只读 `sectionsNo999`；按 `matchId` 定位比赛（**不要用 `matchDate`**，那是开赛自然日） |
 | 亚盘赔率适配 | `odds/client`、`odds/service` | **已落地**：`NovaApiOddsProvider`（一场一次调用）+ `NovaApiOddsPayloadMapper`（`providers → markets → options`；中文庄名归一为 ASCII；丢弃 `suspended`）。主盘仍由 `AsianMarketConsensusAggregator` 跨庄算，适配层不做决定 —— 它只负责把「一条让球线 + 一条大小球线」展开成同一行，因为冻结行要求同一行同时具备两个市场 |
-| `score_scope` 字段 | `match_result_facts` | V25 已加，默认 `REGULATION_90`；执行侧不改写它——口径由「只读 `sectionsNo999`」这一条在解析边界保证 |
+| `score_scope` 字段 | `match_result_facts` | V25 已加，默认 `REGULATION_90`；执行侧不改写它——口径由「只读 `sectionsNo999`」这一条在解析边界保证。V25 原声明 `VARCHAR(16)` 装不下自己 CHECK 允许的 `INCLUDING_EXTRA_TIME`(20)/`INCLUDING_PENALTIES`(19)，已在 V27 放宽到 24（当前无 Java 写入方，只靠默认值） |
 | 阶段 A 结算闭环 | `SettlementWriter` / `MarketTypeEnum` | 已完成（T613），赛果接进来即可结算 |
 
 **顺序建议**：先补阶段 A 的结算闭环（纯本地数学），再接数据源。否则数据接进来预测依然停在 `LOCKED`。

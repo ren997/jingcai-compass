@@ -12,11 +12,6 @@ const StatisticsPage = lazy(() => import('../features/history/StatisticsPage'));
 const AdminHomePage = lazy(() => import('../pages/AdminHomePage'));
 const AdminSyncRunsPage = lazy(() => import('../features/admin/AdminSyncRunsPage'));
 const AdminSyncRunDetailPage = lazy(() => import('../features/admin/AdminSyncRunDetailPage'));
-const AdminMappingsPage = lazy(() => import('../features/admin/AdminMappingsPage'));
-const AdminMappingMatchDetailPage = lazy(() => import('../features/admin/AdminMappingMatchDetailPage'));
-const AdminMappingDetailPage = lazy(() => import('../features/admin/AdminMappingDetailPage'));
-const AdminNormalizationsPage = lazy(() => import('../features/admin/AdminNormalizationsPage'));
-const AdminNormalizationDetailPage = lazy(() => import('../features/admin/AdminNormalizationDetailPage'));
 const AdminPredictionLocksPage = lazy(() => import('../features/admin/AdminPredictionLocksPage'));
 const AdminDraftPredictionsPage = lazy(() => import('../features/admin/AdminDraftPredictionsPage'));
 const AdminSettlementStatusesPage = lazy(() => import('../features/admin/AdminSettlementStatusesPage'));
@@ -43,13 +38,6 @@ export default function App() {
             <Route index element={<AdminHomePage />} />
             <Route path="sync-runs" element={<AdminSyncRunsPage />} />
             <Route path="sync-runs/:syncRunId" element={<AdminSyncRunDetailPage />} />
-            <Route path="mappings" element={<AdminMappingsPage />} />
-            <Route path="mappings/matches/:matchId" element={<AdminMappingMatchDetailPage />} />
-            <Route path="mappings/:mappingId" element={<AdminMappingDetailPage />} />
-            <Route path="normalizations/leagues" element={<AdminNormalizationsPage entityType="LEAGUE" />} />
-            <Route path="normalizations/leagues/:mappingId" element={<AdminNormalizationDetailPage entityType="LEAGUE" />} />
-            <Route path="normalizations/teams" element={<AdminNormalizationsPage entityType="TEAM" />} />
-            <Route path="normalizations/teams/:mappingId" element={<AdminNormalizationDetailPage entityType="TEAM" />} />
             <Route path="predictions" element={<AdminPredictionLocksPage />} />
             <Route path="predictions/drafts" element={<AdminDraftPredictionsPage />} />
             <Route path="predictions/:predictionId" element={<AdminPredictionStatusDetailPage />} />

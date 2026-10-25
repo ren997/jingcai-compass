@@ -14,14 +14,6 @@ export type ProviderDataType = (typeof PROVIDER_DATA_TYPES)[number];
 export const SYNC_STATUSES = ['RUNNING', 'SUCCESS', 'FAILED', 'PARTIAL'] as const;
 export type SyncStatus = (typeof SYNC_STATUSES)[number];
 
-export const MAPPING_STATUSES = ['PENDING', 'AUTO_CONFIRMED', 'MANUAL_CONFIRMED', 'REJECTED'] as const;
-export type MappingReviewStatus = (typeof MAPPING_STATUSES)[number];
-export const MAPPING_REVIEW_SCOPES = ['ACTIVE', 'HISTORY'] as const;
-export type MappingReviewScope = (typeof MAPPING_REVIEW_SCOPES)[number];
-
-export const NORMALIZATION_ENTITY_TYPES = ['LEAGUE', 'TEAM'] as const;
-export type NormalizationEntityType = (typeof NORMALIZATION_ENTITY_TYPES)[number];
-
 export const PREDICTION_STATUSES = ['PUBLISHED', 'LOCKED'] as const;
 export type PredictionStatus = (typeof PREDICTION_STATUSES)[number];
 
@@ -424,60 +416,6 @@ export type AdminManualMatchResult = {
   settlement: AdminManualResultSettlement;
 };
 
-export type MappingReviewListQuery = {
-  providerCode?: string;
-  mappingStatus?: MappingReviewStatus;
-  reviewScope?: MappingReviewScope;
-  pageNo: number;
-  pageSize: number;
-};
-
-export type MappingReviewListItem = {
-  mappingId: number;
-  matchId: number | null;
-  providerCode: string;
-  externalMatchId: string;
-  mappingStatus: MappingReviewStatus;
-  mappingConfidence: number | null;
-  mappingMethod: string | null;
-  mappingExplanation: string | null;
-  candidateCount: number;
-  confirmedBy: string | null;
-  updatedAt: string;
-};
-
-/** 以竞彩比赛为主体的映射复核项。 */
-export type MappingReviewMatchListItem = {
-  match: MappingMatchBrief;
-  externalCandidates: MappingReviewExternalCandidate[];
-};
-
-export type MappingMatchBrief = {
-  matchId: number;
-  lotteryMatchNo: string;
-  lotteryDate: string;
-  leagueName: string;
-  homeTeamName: string;
-  awayTeamName: string;
-  kickoffTime: string;
-};
-
-export type MappingReviewExternalCandidate = {
-  mappingId: number;
-  providerCode: string;
-  externalMatchId: string;
-  externalLeagueId: string | null;
-  externalHomeTeamName: string | null;
-  externalAwayTeamName: string | null;
-  /** 亚盘供应商事件原始开赛时间；仅用于与竞彩官方时间核对。 */
-  externalKickoffTime: string | null;
-  mappingStatus: MappingReviewStatus;
-  score: number | null;
-  reasons: string[];
-  mappingExplanation: string | null;
-  updatedAt: string;
-};
-
 export type AdminSportteryResultSync = {
   syncRunId: number;
   startDate: string;
@@ -493,96 +431,6 @@ export type AdminSportteryResultSync = {
   unchangedFactCount: number;
   duplicatePayload: boolean;
   errorSummary: string | null;
-};
-
-export type MappingReviewNormalizationRole = 'LEAGUE' | 'HOME_TEAM' | 'AWAY_TEAM';
-
-/** 与某一外部赛事候选绑定的联赛或球队标准化确认建议。 */
-export type MappingReviewNormalizationProposal = {
-  sourceMappingId: number;
-  role: MappingReviewNormalizationRole;
-  providerMappingId: number | null;
-  externalDisplayName: string | null;
-  targetEntityId: number | null;
-  targetEntityName: string | null;
-  mappingStatus: MappingReviewStatus | null;
-  selectable: boolean;
-  unavailableReason: string | null;
-};
-
-/** 一场竞彩比赛及其服务端保留的外部赛事候选。 */
-export type MappingReviewMatchDetail = {
-  match: MappingMatchBrief;
-  externalCandidates: MappingReviewExternalCandidate[];
-  normalizationProposals: MappingReviewNormalizationProposal[];
-};
-
-export type MappingReviewCandidate = {
-  matchId: number;
-  score: number | null;
-  reasons: string[];
-  match: MappingMatchBrief | null;
-};
-
-export type MappingReviewDetail = {
-  mappingId: number;
-  matchId: number | null;
-  providerCode: string;
-  externalMatchId: string;
-  externalLeagueId: string | null;
-  externalHomeTeamId: string | null;
-  externalAwayTeamId: string | null;
-  externalHomeTeamName: string | null;
-  externalAwayTeamName: string | null;
-  externalKickoffTime: string | null;
-  mappingStatus: MappingReviewStatus;
-  mappingConfidence: number | null;
-  mappingMethod: string | null;
-  mappingExplanation: string | null;
-  candidates: MappingReviewCandidate[];
-  confirmedBy: string | null;
-  match: MappingMatchBrief | null;
-  updatedAt: string;
-};
-
-export type ProviderNormalizationListQuery = {
-  entityType: NormalizationEntityType;
-  providerCode?: string;
-  mappingStatus?: MappingReviewStatus;
-  pageNo: number;
-  pageSize: number;
-};
-
-export type ProviderNormalizationEntity = {
-  entityId: number;
-  nameZh: string | null;
-  nameEn: string | null;
-};
-
-export type ProviderNormalizationAudit = {
-  operatorId: string;
-  actionType: 'CONFIRM' | 'REJECT' | 'REOPEN';
-  fieldName: string | null;
-  createdAt: string;
-};
-
-export type ProviderNormalizationReviewListItem = {
-  mappingId: number;
-  entityType: NormalizationEntityType;
-  providerCode: string;
-  externalId: string;
-  externalScope: string | null;
-  externalDisplayName: string | null;
-  externalNormalizedKey: string | null;
-  mappingStatus: MappingReviewStatus;
-  mappingConfidence: number | null;
-  mappingMethod: string | null;
-  currentEntity: ProviderNormalizationEntity | null;
-  updatedAt: string;
-};
-
-export type ProviderNormalizationReviewDetail = ProviderNormalizationReviewListItem & {
-  auditHistory: ProviderNormalizationAudit[];
 };
 
 /** 使用管理员账号换取短期 Bearer Token。 */
@@ -693,45 +541,6 @@ export function fetchAdminPredictionStatusDetail(predictionId: number, signal?: 
   });
 }
 
-/** 分页读取映射复核队列。 */
-export function fetchMappingReviews(query: MappingReviewListQuery, signal?: AbortSignal) {
-  return requestApi<PageResult<MappingReviewListItem>>('/api/admin/provider/mappings/list', {
-    method: 'POST', body: query, signal, authenticated: true,
-  });
-}
-
-/** 按竞彩比赛读取可确认的外部比赛候选。 */
-export function fetchMappingReviewMatches(query: MappingReviewListQuery, signal?: AbortSignal) {
-  return requestApi<PageResult<MappingReviewMatchListItem>>('/api/admin/provider/mappings/matches/list', {
-    method: 'POST', body: query, signal, authenticated: true,
-  });
-}
-
-/** 读取一场竞彩比赛及其可安全确认的外部候选。 */
-export function fetchMappingReviewMatchDetail(
-  matchId: number,
-  query: Pick<MappingReviewListQuery, 'providerCode' | 'mappingStatus'>,
-  signal?: AbortSignal,
-) {
-  return requestApi<MappingReviewMatchDetail>('/api/admin/provider/mappings/matches/detail', {
-    method: 'POST', body: { matchId, ...query }, signal, authenticated: true,
-  });
-}
-
-/** 读取映射候选、内部比赛资料和当前人工状态。 */
-export function fetchMappingReviewDetail(mappingId: number, signal?: AbortSignal) {
-  return requestApi<MappingReviewDetail>('/api/admin/provider/mappings/detail', {
-    method: 'POST', body: { mappingId }, signal, authenticated: true,
-  });
-}
-
-/** 确认当前关联或已持久化候选比赛。 */
-export function confirmMappingReview(mappingId: number, targetMatchId: number) {
-  return requestApi<MappingReviewDetail>('/api/admin/provider/mappings/confirm', {
-    method: 'POST', body: { mappingId, targetMatchId }, authenticated: true,
-  });
-}
-
 /** 手动同步指定竞彩业务日范围的官方赛果；服务端不会自动结算。 */
 export function syncAdminSportteryResults(
   request: { startDate?: string; endDate?: string }, signal?: AbortSignal,
@@ -745,86 +554,5 @@ export function syncAdminSportteryResults(
 export function recordAdminManualMatchResult(request: AdminManualMatchResultRequest) {
   return requestApi<AdminManualMatchResult>('/api/admin/manual-results', {
     method: 'POST', body: request, authenticated: true,
-  });
-}
-
-/** 确认赛事，并可在同一事务内显式确认联赛、主队、客队标准化关系。 */
-export function confirmMappingReviewBundle(
-  request: {
-    mappingId: number;
-    targetMatchId: number;
-    confirmLeague: boolean;
-    confirmHomeTeam: boolean;
-    confirmAwayTeam: boolean;
-  },
-  signal?: AbortSignal,
-) {
-  return requestApi<MappingReviewDetail>('/api/admin/provider/mappings/confirm-bundle', {
-    method: 'POST', body: request, signal, authenticated: true,
-  });
-}
-
-/** 拒绝当前待复核映射，可记录操作原因。 */
-export function rejectMappingReview(mappingId: number, reason?: string) {
-  return requestApi<MappingReviewDetail>('/api/admin/provider/mappings/reject', {
-    method: 'POST', body: { mappingId, reason: reason?.trim() || null }, authenticated: true,
-  });
-}
-
-/** 将被拒绝映射恢复为待复核状态。 */
-export function reopenMappingReview(mappingId: number) {
-  return requestApi<MappingReviewDetail>('/api/admin/provider/mappings/reopen', {
-    method: 'POST', body: { mappingId }, authenticated: true,
-  });
-}
-
-/** 分页读取供应商联赛或球队标准化复核队列。 */
-export function fetchProviderNormalizations(query: ProviderNormalizationListQuery, signal?: AbortSignal) {
-  return requestApi<PageResult<ProviderNormalizationReviewListItem>>('/api/admin/provider/normalizations/list', {
-    method: 'POST', body: query, signal, authenticated: true,
-  });
-}
-
-/** 读取一条供应商标准化映射及其审计历史。 */
-export function fetchProviderNormalizationDetail(
-  entityType: NormalizationEntityType,
-  mappingId: number,
-  signal?: AbortSignal,
-) {
-  return requestApi<ProviderNormalizationReviewDetail>('/api/admin/provider/normalizations/detail', {
-    method: 'POST', body: { entityType, mappingId }, signal, authenticated: true,
-  });
-}
-
-/** 搜索确认时可选的内部标准联赛或球队。 */
-export function fetchProviderNormalizationCandidates(
-  entityType: NormalizationEntityType,
-  mappingId: number,
-  keyword?: string,
-  signal?: AbortSignal,
-) {
-  return requestApi<ProviderNormalizationEntity[]>('/api/admin/provider/normalizations/candidates/list', {
-    method: 'POST', body: { entityType, mappingId, keyword: keyword?.trim() || null }, signal, authenticated: true,
-  });
-}
-
-/** 人工确认供应商标准化映射。 */
-export function confirmProviderNormalization(entityType: NormalizationEntityType, mappingId: number, targetEntityId: number) {
-  return requestApi<ProviderNormalizationReviewDetail>('/api/admin/provider/normalizations/confirm', {
-    method: 'POST', body: { entityType, mappingId, targetEntityId }, authenticated: true,
-  });
-}
-
-/** 拒绝供应商标准化映射。 */
-export function rejectProviderNormalization(entityType: NormalizationEntityType, mappingId: number, reason?: string) {
-  return requestApi<ProviderNormalizationReviewDetail>('/api/admin/provider/normalizations/reject', {
-    method: 'POST', body: { entityType, mappingId, reason: reason?.trim() || null }, authenticated: true,
-  });
-}
-
-/** 将被拒绝映射重新打开。 */
-export function reopenProviderNormalization(entityType: NormalizationEntityType, mappingId: number) {
-  return requestApi<ProviderNormalizationReviewDetail>('/api/admin/provider/normalizations/reopen', {
-    method: 'POST', body: { entityType, mappingId }, authenticated: true,
   });
 }

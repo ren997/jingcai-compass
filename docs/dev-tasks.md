@@ -2454,7 +2454,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
 
 ### T614 单源 NovaAPI 改造（赛程 + 赔率 + 赛果 + 自动发布）
 
-- 状态：`IN_PROGRESS`（阶段 0~4 已完成且实跑验收通过；阶段 5 进行中，B0 已完成）
+- 状态：`IN_PROGRESS`（阶段 0~4 已完成且实跑验收通过；阶段 5 进行中，B0/B1 已完成）
 - 分支：`feat/nova-single-source`
 - 背景：核心诉求是「每天拉数据 → 生成预测 → 次日结算」。但当前在产数据链是三段不同来源拼起来的（赛程/赛果 `sporttery.cn`、赔率 `THE_ODDS_API`），靠 `match_source_mappings` 人工缝合：自动确认要求队名精确匹配 ≥0.85，中英文永远不达标，**每跑一批新比赛都必须手写 SQL**。更硬的一条是 `ChinaSportteryProvider.fetchMatchResultsRaw()` 直接抛错——「第二天结算」今天根本跑不通。
 - 决策：NovaAPI 成为唯一数据源。赛程、赔率、赛果共用同一个 `matchId`，因此映射/归一化层（`match_source_mappings`、`provider_team_mappings`、别名表、归一化评审、`name_key` 系列）在业务上失去存在理由。数据库可清空重建；迁移不重写历史（V1~V25 全部保留），只新增。
@@ -2467,7 +2467,7 @@ T305 + T405 + T505 + T602 + T604 + T606 -> T605
   - [x] 阶段 2：单源赔率 + 删 3 处 `INNER JOIN match_source_mappings`（单 commit `9c6f616`）。**实跑验收已于 2026-10-22 全部通过**：真实同步 13 场 → 2052 行交叉积快照（`total_line` 非空率 100%）、两轮增量 `2052→0`、13 场预测全部冻结在 `pinnacle` 行、开赛后零新增；顺带修掉 `quota_cost` 恒为 0 的额度盲区
   - [x] 阶段 3：自动发布编排（`PredictionAutoPublishOrchestrator` + `PredictionAutoPublishJob`，生成 DRAFT 后自动过发布门）。**实跑验收 2026-10-22 通过**：首轮 13 候选全发布、次轮 `NO_PENDING_MATCH` 短路、每场仅 1 条 PUBLISHED、13 条审计记录操作者为 `system:auto-publish`
   - [x] 阶段 4：赛果同步与结算打通。`sectionsNo999` 为唯一权威比分，**90 分钟口径已用一场真实加时+点球样本复核**；比赛定位改用 `external_match_id`（`matchDate` 是开赛自然日，不是业务日）；真库首轮 `SUCCESS 23/23`、次轮 `unchanged=23`、13 条事实全为 `FINAL/REGULATION_90/OFFICIAL`
-  - [ ] 阶段 5：删除映射层与旧数据源（**进行中**：B0 行为改造已完成，B1~B6 未开始）
+  - [ ] 阶段 5：删除映射层与旧数据源（**进行中**：B0 行为改造、B1 前端后台清理已完成，B2~B6 未开始）
     分七批，每批独立可编译、可单独回滚；**先改行为、再删代码、最后删表**：
     - [x] **B0 行为改造**：公开比赛详情与数据源监控停止读写映射表。`MatchQueryServiceImpl` 删除 `MatchSourceMappingMapper` 依赖与逐场映射查询，`MatchDetailVo` 移除 `mappingAvailability` / `sourceMappings`；`DataSourceMonitoringService` 删除 `match_source_mappings` 的 `PENDING` 计数、`jingcai.mapping.pending` 指标与 `mapping_backlog` 告警；`ObservabilityProperties.pendingMappingThreshold` 与两个 profile 的 `pending-mapping-threshold` 一并移除。前端 `public.ts` / `MatchDetailPage.tsx` 同步去掉「来源映射」区块
     - [ ] **B1** 前端后台：删 5 个映射/标准化页面 + 路由/导航/API 层

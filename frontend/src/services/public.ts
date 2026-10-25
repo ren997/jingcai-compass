@@ -30,8 +30,6 @@ export type MatchDataAvailability =
 
 export type OddsSnapshotType = 'FIRST_SEEN' | 'PRE_KICKOFF' | 'OTHER';
 
-export type MappingStatus = 'PENDING' | 'AUTO_CONFIRMED' | 'MANUAL_CONFIRMED' | 'REJECTED';
-
 export type PredictionStatus = 'PUBLISHED' | 'LOCKED';
 
 export type HandicapPick = 'HOME_WIN' | 'DRAW' | 'AWAY_WIN';

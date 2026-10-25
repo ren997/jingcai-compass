@@ -35,3 +35,6 @@ backend/src/main/resources/application-local.yml
 # tools/verify-stage2/Sql.java 内含明文库凭据，务必保持未跟踪
 backend/src/test/java/com/jingcaicompass/tools/
 tools/verify-stage2/
+
+# 本地临时产物：CI 日志抓取、删表前的库表备份等，只留在本机
+.workbuddy/tmp/

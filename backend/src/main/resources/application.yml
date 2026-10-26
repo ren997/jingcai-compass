@@ -113,6 +113,22 @@ app:
     medium-confidence-margin: ${ASIAN_MODEL_MEDIUM_CONFIDENCE_MARGIN:0.1600}
     high-direction-signal: ${ASIAN_MODEL_HIGH_DIRECTION_SIGNAL:0.0750}
     medium-direction-signal: ${ASIAN_MODEL_MEDIUM_DIRECTION_SIGNAL:0.0250}
+  # 历史回测：赔率历史 /nova/tf/odds-history 只回溯约 4 个月（06-20 起完整），
+  # 更早的场次归档会得到 NO_HISTORY，所以 min-lottery-date 是一道硬边界而不是默认值。
+  backtest:
+    provider-code: ${BACKTEST_PROVIDER_CODE:NOVA_API}
+    # 赔率实测在赛前约 105 分钟停更；再往后取到的是停盘价，再往前是开盘价。它属于 run 的定义列，落库后不可改。
+    decision-lead-minutes: ${BACKTEST_DECISION_LEAD_MINUTES:105}
+    limits:
+      min-lottery-date: ${BACKTEST_MIN_LOTTERY_DATE:2026-06-20}
+      max-span-days: ${BACKTEST_MAX_SPAN_DAYS:120}
+      max-parameter-sets: ${BACKTEST_MAX_PARAMETER_SETS:8}
+      budget-confirm-threshold: ${BACKTEST_BUDGET_CONFIRM_THRESHOLD:4000}
+    worker:
+      poll-interval: ${BACKTEST_POLL_INTERVAL:30s}
+      initial-delay: ${BACKTEST_INITIAL_DELAY:60s}
+      heartbeat-timeout: ${BACKTEST_HEARTBEAT_TIMEOUT:5m}
+      batch-size: ${BACKTEST_BATCH_SIZE:50}
   tasks:
     enabled: ${SYNC_TASKS_ENABLED:false}
     sporttery-pool:
@@ -132,6 +148,10 @@ app:
       enabled: ${DATA_PIPELINE_TASK_ENABLED:false}
       fixed-delay: ${DATA_PIPELINE_FIXED_DELAY:20m}
       initial-delay: ${DATA_PIPELINE_INITIAL_DELAY:45s}
+    backtest-run:
+      # 回测是手动触发的重任务（一次 4 个月 ≈ 2000 次 API 调用），默认不自动消费队列：
+      # 让「入队」与「开始跑」成为两个显式动作，避免队列里有残留时开机就吃掉半天额度。
+      enabled: ${BACKTEST_TASK_ENABLED:false}
     prediction-lock:
       enabled: ${PREDICTION_LOCK_TASK_ENABLED:false}
       fixed-delay: ${PREDICTION_LOCK_FIXED_DELAY:30s}

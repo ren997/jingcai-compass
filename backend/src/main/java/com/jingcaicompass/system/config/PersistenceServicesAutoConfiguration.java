@@ -21,6 +21,17 @@ import com.jingcaicompass.admin.service.AdminSportteryResultSyncService;
 import com.jingcaicompass.admin.service.AdminSportteryResultSyncServiceImpl;
 import com.jingcaicompass.admin.service.AdminManualMatchResultService;
 import com.jingcaicompass.admin.service.AdminManualMatchResultServiceImpl;
+import com.jingcaicompass.backtest.BacktestProperties;
+import com.jingcaicompass.backtest.job.BacktestRunJob;
+import com.jingcaicompass.backtest.mapper.BacktestCandidateMapper;
+import com.jingcaicompass.backtest.mapper.BacktestCaseMapper;
+import com.jingcaicompass.backtest.mapper.BacktestMetricMapper;
+import com.jingcaicompass.backtest.mapper.BacktestRunMapper;
+import com.jingcaicompass.backtest.service.BacktestEvaluationService;
+import com.jingcaicompass.backtest.service.BacktestMetricsService;
+import com.jingcaicompass.backtest.service.BacktestRunService;
+import com.jingcaicompass.backtest.service.BacktestRunnerService;
+import com.jingcaicompass.backtest.service.BacktestSettlementService;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
 import com.jingcaicompass.backtest.mapper.OddsHistoryArchiveMapper;
 import com.jingcaicompass.backtest.service.BacktestArchiveService;
@@ -132,6 +143,7 @@ import java.time.Clock;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -895,6 +907,107 @@ public class PersistenceServicesAutoConfiguration {
                 objectMapper,
                 novaApiHistoryClientProvider
         );
+    }
+
+    /**
+     * 回测运行定义与查询。
+     *
+     * <p>这一批回测服务<b>全部</b>要在这里兜底：{@code @Service + @ConditionalOnBean(DataSource)}
+     * 在组件扫描阶段求值时 DataSource 尚未由自动配置注册，条件恒为 false，
+     * 于是被注解的类根本不会被创建。表现是 controller 注入失败、上下文起不来——
+     * 与 {@code PredictionAutoPublishJob} 那次「任务从未创建」是同一个机制，
+     * 区别只在那边表现为静默，这边表现为启动失败。</p>
+     */
+    @Bean
+    @ConditionalOnMissingBean(BacktestRunService.class)
+    BacktestRunService backtestRunService(
+            BacktestRunMapper backtestRunMapper,
+            BacktestCaseMapper backtestCaseMapper,
+            OddsHistoryArchiveMapper oddsHistoryArchiveMapper,
+            BacktestCandidateMapper backtestCandidateMapper,
+            BacktestProperties backtestProperties,
+            AsianModelProperties asianModelProperties,
+            PaginationProperties paginationProperties
+    ) {
+        return new BacktestRunService(
+                backtestRunMapper,
+                backtestCaseMapper,
+                oddsHistoryArchiveMapper,
+                backtestCandidateMapper,
+                backtestProperties,
+                asianModelProperties,
+                paginationProperties
+        );
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(BacktestEvaluationService.class)
+    BacktestEvaluationService backtestEvaluationService(
+            BacktestArchiveService backtestArchiveService,
+            OddsHistoryArchiveMapper oddsHistoryArchiveMapper,
+            ObjectMapper objectMapper,
+            BacktestProperties backtestProperties
+    ) {
+        return new BacktestEvaluationService(
+                backtestArchiveService, oddsHistoryArchiveMapper, objectMapper, backtestProperties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(BacktestSettlementService.class)
+    BacktestSettlementService backtestSettlementService(
+            MatchResultFactMapper matchResultFactMapper,
+            MarketSettlementCalculatorRouter marketSettlementCalculatorRouter
+    ) {
+        return new BacktestSettlementService(matchResultFactMapper, marketSettlementCalculatorRouter);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(BacktestMetricsService.class)
+    BacktestMetricsService backtestMetricsService(
+            BacktestMetricMapper backtestMetricMapper,
+            ObjectMapper objectMapper
+    ) {
+        return new BacktestMetricsService(backtestMetricMapper, objectMapper);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean(BacktestRunnerService.class)
+    BacktestRunnerService backtestRunnerService(
+            BacktestRunMapper backtestRunMapper,
+            BacktestCaseMapper backtestCaseMapper,
+            BacktestCandidateMapper backtestCandidateMapper,
+            BacktestEvaluationService backtestEvaluationService,
+            BacktestSettlementService backtestSettlementService,
+            BacktestMetricsService backtestMetricsService,
+            BacktestProperties backtestProperties,
+            AsianOddsAggregationProperties asianOddsAggregationProperties,
+            AsianModelProperties asianModelProperties,
+            PlatformTransactionManager transactionManager
+    ) {
+        return new BacktestRunnerService(
+                backtestRunMapper,
+                backtestCaseMapper,
+                backtestCandidateMapper,
+                backtestEvaluationService,
+                backtestSettlementService,
+                backtestMetricsService,
+                backtestProperties,
+                asianOddsAggregationProperties,
+                asianModelProperties,
+                transactionManager
+        );
+    }
+
+    /** 回测队列消费任务；默认关闭，见 {@code app.tasks.backtest-run.enabled}。 */
+    @Bean
+    @ConditionalOnMissingBean(BacktestRunJob.class)
+    @ConditionalOnProperty(
+            prefix = "app.tasks",
+            name = {"enabled", "backtest-run.enabled"},
+            havingValue = "true"
+    )
+    BacktestRunJob backtestRunJob(BacktestRunnerService backtestRunnerService) {
+        return new BacktestRunJob(backtestRunnerService);
     }
 
     @Bean

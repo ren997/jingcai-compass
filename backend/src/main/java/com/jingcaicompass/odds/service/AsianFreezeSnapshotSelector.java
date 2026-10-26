@@ -20,6 +20,14 @@ import java.util.Set;
  */
 public class AsianFreezeSnapshotSelector {
 
+    /**
+     * 选行口径版本号（回测 {@code selector_version}）。
+     *
+     * <p>排序键的<b>第一键是对齐大小球主盘</b>，那是 2026-10-22 那批「13/13 全小球」事故的根因修复。
+     * 回测若用一份不含该键的复刻实现，选出来的冻结行会与线上不同，而所有断言照样通过。</p>
+     */
+    public static final String SELECTOR_VERSION = "freeze-selector-v2";
+
     private static final BigDecimal FIFTY_PERCENT = new BigDecimal("0.5");
 
     private final Set<String> whitelist;

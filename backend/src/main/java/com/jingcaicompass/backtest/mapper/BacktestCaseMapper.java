@@ -95,6 +95,20 @@ public interface BacktestCaseMapper extends BaseMapper<BacktestCaseEntity> {
             """)
     List<BacktestCaseEntity> selectByRunId(@Param("runId") Long runId);
 
+    /**
+     * 读取待结算样本。
+     *
+     * <p>只取 {@code PENDING}：已结算行由触发器锁死，把它们读进来只会白跑一遍生产计算器；
+     * 更重要的是 {@code settleOnce} 的 WHERE 会返回 0 行，调用方拿不到「这条其实已经结算过」的信号。</p>
+     */
+    @Select("""
+            SELECT *
+            FROM backtest_cases
+            WHERE run_id = #{runId} AND result_status = 'PENDING'
+            ORDER BY group_key, external_match_id
+            """)
+    List<BacktestCaseEntity> selectPendingByRunId(@Param("runId") Long runId);
+
     /** 该 run 是否还有未结算的样本；标 SUCCEEDED 前必须为 0。 */
     @Select("""
             SELECT count(*)

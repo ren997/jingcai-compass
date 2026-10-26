@@ -11,8 +11,12 @@ import java.math.RoundingMode;
  * {@code margin > 0} 表示该方向赢盘，{@code = 0} 走盘，{@code < 0} 输盘。
  * 四分之一盘（.25/.75）按盘口线拆成上下两个半盘分别判定后再合并，
  * 因此内部一律以 0.25 为一个整数刻度做精确运算，不使用浮点数。</p>
+ *
+ * <p>可见性为 {@code public} 只为了一个调用方：历史回测要按「当时冻结的水位」折算收益。
+ * 它必须调用<b>这一份</b>实现而不是复制公式——复制出来的第二份在下次改口径时不会一起改，
+ * 表现是回测收益与线上结算长期存在一个说不清来源的偏差。</p>
  */
-final class SettlementMarginSupport {
+public final class SettlementMarginSupport {
 
     /** margin 与盘口线的唯一合法步长：0.25。 */
     static final BigDecimal QUARTER = new BigDecimal("0.25");
@@ -102,7 +106,7 @@ final class SettlementMarginSupport {
      * @param price  预测方向的欧式赔率（含本金），待结算、走盘与作废时可为空
      * @return 净收益
      */
-    static BigDecimal netProfit(SettlementStatusEnum status, BigDecimal price) {
+    public static BigDecimal netProfit(SettlementStatusEnum status, BigDecimal price) {
         if (status == null) {
             throw new IllegalArgumentException("settlementStatus must not be null");
         }

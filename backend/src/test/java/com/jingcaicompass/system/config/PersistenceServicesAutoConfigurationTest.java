@@ -18,6 +18,11 @@ import com.jingcaicompass.admin.service.AdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
 import com.jingcaicompass.audit.service.AuditLogService;
+import com.jingcaicompass.backtest.BacktestProperties;
+import com.jingcaicompass.backtest.mapper.BacktestCandidateMapper;
+import com.jingcaicompass.backtest.mapper.BacktestCaseMapper;
+import com.jingcaicompass.backtest.mapper.BacktestMetricMapper;
+import com.jingcaicompass.backtest.mapper.BacktestRunMapper;
 import com.jingcaicompass.backtest.mapper.OddsHistoryArchiveMapper;
 import com.jingcaicompass.data.job.DataPipelineSyncJob;
 import com.jingcaicompass.data.mapper.DataProviderMapper;
@@ -78,6 +83,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
@@ -117,6 +123,13 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(TeamMapper.class, () -> mock(TeamMapper.class))
             .withBean(MatchMapper.class, () -> mock(MatchMapper.class))
             .withBean(MatchResultFactMapper.class, () -> mock(MatchResultFactMapper.class))
+            .withBean(BacktestRunMapper.class, () -> mock(BacktestRunMapper.class))
+            .withBean(BacktestCaseMapper.class, () -> mock(BacktestCaseMapper.class))
+            .withBean(BacktestMetricMapper.class, () -> mock(BacktestMetricMapper.class))
+            .withBean(BacktestCandidateMapper.class, () -> mock(BacktestCandidateMapper.class))
+            .withBean(PlatformTransactionManager.class, () -> mock(PlatformTransactionManager.class))
+            // 回测的属性组必须显式给：它是 @ConfigurationProperties，在这个 runner 里不会自动绑定。
+            .withBean(BacktestProperties.class, BacktestProperties::defaults)
             .withBean(SportteryPoolSnapshotMapper.class, () -> mock(SportteryPoolSnapshotMapper.class))
             .withBean(AsianOddsSnapshotMapper.class, () -> mock(AsianOddsSnapshotMapper.class))
             .withBean(OddsHistoryArchiveMapper.class, () -> mock(OddsHistoryArchiveMapper.class))

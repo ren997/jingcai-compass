@@ -25,6 +25,18 @@ import java.util.Set;
  */
 public class AsianMarketConsensusAggregator {
 
+    /**
+     * 聚合口径版本号。
+     *
+     * <p>回测的 {@code backtest_runs.aggregation_version} 记的就是它：聚合顺序
+     * （逐家去水 → 中位 → 归一）一旦调整，同一份历史序列会算出不同的主盘线，
+     * 结论就不再可比。改口径必须 bump 这里，否则只是让两份结论看起来同源。</p>
+     */
+    public static final String AGGREGATION_VERSION = "consensus-devig-median-v1";
+
+    /** 主盘定义版本：与 {@link #AGGREGATION_VERSION} 分开，因为「哪条线是主盘」可以独立调整。 */
+    public static final String MAIN_LINE_RULE_VERSION = "most-balanced-line-v1";
+
     private static final BigDecimal FIFTY_PERCENT = new BigDecimal("0.5");
     private static final BigDecimal ONE = BigDecimal.ONE;
 

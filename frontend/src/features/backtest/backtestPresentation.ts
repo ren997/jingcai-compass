@@ -184,16 +184,29 @@ export function brierDeltaVerdict(value: number | null | undefined) {
   return '持平';
 }
 
-/** 进度文案：中间态显示阶段，终态显示结果。 */
+/** 进度文案：归档阶段看场次，判定及之后看样本数，终态看结果。 */
 export function backtestProgressText(run: Pick<
   BacktestRunVo,
-  'runStatus' | 'runStage' | 'processedMatchCount' | 'totalMatchCount' | 'progressRatio'
+  'runStatus' | 'runStage' | 'processedMatchCount' | 'totalMatchCount' | 'caseCount' | 'progressRatio'
 >) {
   if (run.runStatus === 'QUEUED') {
     return '排队中，等待 worker 抢单';
   }
+  // 归档结束后 processed 已等于总数，此时再显示「10/10（100%）」会让人以为整件事做完了。
+  // 判定与之后的阶段真正的进展是新产出的样本条数。
+  if (
+    run.runStatus === 'EVALUATING'
+    || run.runStatus === 'SETTLING'
+    || run.runStatus === 'AGGREGATING'
+  ) {
+    return `${backtestStageLabels[run.runStage]} · 已产出 ${run.caseCount ?? 0} 条样本`;
+  }
   if (run.totalMatchCount === null || run.totalMatchCount === 0) {
-    return `${backtestRunStatusLabel(run.runStatus)} · ${backtestStageLabels[run.runStage]}`;
+    const statusLabel = backtestRunStatusLabel(run.runStatus);
+    const stageLabel = backtestStageLabels[run.runStage];
+    // 状态名与阶段名经常是同一个词（ARCHIVING 两者都是「补采历史赔率」），
+    // 不加判断就会显示成「补采历史赔率 · 补采历史赔率」。
+    return statusLabel === stageLabel ? stageLabel : `${statusLabel} · ${stageLabel}`;
   }
   const processed = run.processedMatchCount ?? 0;
   return `${backtestStageLabels[run.runStage]} · ${processed}/${run.totalMatchCount} 场`

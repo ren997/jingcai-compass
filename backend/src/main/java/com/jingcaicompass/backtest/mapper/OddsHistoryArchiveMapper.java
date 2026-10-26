@@ -34,6 +34,22 @@ public interface OddsHistoryArchiveMapper extends BaseMapper<OddsHistoryArchiveE
     );
 
     /**
+     * 只取 jsonb 原文。
+     *
+     * <p><b>不能靠实体的 {@code payload} 字段。</b>该字段声明了
+     * {@code @TableField(typeHandler = PostgresJsonbTypeHandler.class)}，但
+     * {@code @TableName(autoResultMap = true)} 生成的 resultMap 只被 MyBatis-Plus 自己拼的
+     * SQL 使用；{@code @Select} 注解查询走原生映射，{@code Map<String,Object>} 字段落到
+     * 默认 handler 上，jsonb 读回来是空 Map。表现是切片一行都切不出来（{@code MISSING_ROWS}），
+     * 而归档状态、点数、庄家数全部正常——看起来像「这段时间没开价」。</p>
+     *
+     * <p>返回 {@code text} 而不是让驱动反序列化：Jackson 解析结果与「归档时写进去的那份字节」
+     * 完全一致，也不受 MyBatis 字段映射机制影响。</p>
+     */
+    @Select("SELECT payload::text FROM odds_history_archive WHERE id = #{id}")
+    String selectPayloadTextById(@Param("id") Long id);
+
+    /**
      * 批量读取一批比赛已终局的归档结论。
      *
      * <p>回测准备阶段一次性判定「哪些场次可以省掉 API 调用」，逐场查询会把这块变成 N 次往返；

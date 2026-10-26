@@ -1,3 +1,4 @@
+import { Alert } from 'antd';
 import type { BacktestComparisonVo, BacktestMetricsVo } from '../../services/backtest';
 import { BACKTEST_MARKET_SCOPES } from '../../services/backtest';
 import {
@@ -54,6 +55,10 @@ export default function BacktestMetricsTable({ comparison, isReady }: BacktestMe
     });
   });
 
+  // 全部参数组都没出方向：这不是「没样本」，而是每一场都卡在判定阶段。
+  // 不点明的话，这一页会显示六行全「—」，最容易被读成「那段时间上游没开价」。
+  const noDirection = rows.every(({ metrics }) => metrics.pickCount === 0);
+
   return (
     <section className="detail-section">
       <div className="section-heading">
@@ -66,6 +71,15 @@ export default function BacktestMetricsTable({ comparison, isReady }: BacktestMe
           </div>
         )}
       </div>
+
+      {noDirection && (
+        <Alert
+          type="warning"
+          showIcon
+          message="这批样本没有任何方向"
+          description="样本数与跳过分布见下表展开项：每一场都停在了判定阶段，而不是「这段时间上游没开价」。"
+        />
+      )}
 
       <div className="table-scroll">
         <table>
@@ -112,7 +126,14 @@ export default function BacktestMetricsTable({ comparison, isReady }: BacktestMe
         <summary>口径说明与跳过分布</summary>
         <ul>
           <li>命中率分母不含走盘；走盘按 0.5 计入加权命中率与 Brier，不进命中率分母。</li>
-          <li>Δ = 市场 Brier − 模型 Brier，<strong>正数才表示模型更好</strong>。负值是合法结论，不取绝对值。</li>
+          <li>
+            Δ = 市场 Brier − 模型 Brier，<strong>正数才表示模型更好</strong>。负值是合法结论，不取绝对值。
+          </li>
+          <li>
+            但 Δ <strong>在当前模型下恒为 0</strong>：模型概率是由该主盘去水概率反解 λ 再投影回
+            同一条线，与市场概率同源，因此两侧 Brier 相等。Δ 列不是「模型优于市场」的证据，
+            跨参数组比较请看 ROI 与命中率。
+          </li>
           <li>合计口径独立计算，不等于让球与大小球相加：两个市场注数不等。</li>
           <li>样本为 0 时命中率与 ROI 显示「—」而不是 0%：没下注和下了不中不是一回事。</li>
         </ul>

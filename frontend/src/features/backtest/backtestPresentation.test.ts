@@ -125,12 +125,26 @@ describe('backtest presentation', () => {
       runStage: 'NONE',
       processedMatchCount: 0,
       totalMatchCount: null,
+      caseCount: 0,
       progressRatio: 0,
-    } as Pick<BacktestRunVo, 'runStatus' | 'runStage' | 'processedMatchCount' | 'totalMatchCount' | 'progressRatio'>;
+    } as Pick<
+      BacktestRunVo,
+      'runStatus' | 'runStage' | 'processedMatchCount' | 'totalMatchCount' | 'caseCount' | 'progressRatio'
+    >;
     expect(backtestProgressText(run)).toBe('排队中，等待 worker 抢单');
     // 没有总场次时不编造百分比：0/0 算出来的 100% 会让「还在跑」看起来像「已跑完」。
-    expect(backtestProgressText({ ...run, runStatus: 'EVALUATING', runStage: 'EVALUATING' }))
-      .toBe('逐步判定 · 逐步判定');
+    expect(backtestProgressText({ ...run, runStatus: 'ARCHIVING', runStage: 'ARCHIVING' }))
+      .toBe('补采历史赔率');
+    // 判定阶段 processed 已等于总数，再说「10/10（100%）」会让人以为整件事做完了。
+    expect(backtestProgressText({
+      ...run,
+      runStatus: 'EVALUATING',
+      runStage: 'EVALUATING',
+      processedMatchCount: 10,
+      totalMatchCount: 10,
+      caseCount: 18,
+      progressRatio: 1,
+    })).toBe('逐步判定 · 已产出 18 条样本');
   });
 
   it('does not fabricate metrics for a group or scope that has none', () => {

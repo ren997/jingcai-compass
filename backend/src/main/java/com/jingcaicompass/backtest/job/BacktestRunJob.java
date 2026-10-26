@@ -1,5 +1,6 @@
 package com.jingcaicompass.backtest.job;
 
+import com.jingcaicompass.backtest.BacktestSchedule;
 import com.jingcaicompass.backtest.service.BacktestRunnerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,10 +37,14 @@ public class BacktestRunJob {
      *
      * <p>{@code fixedDelay} 而不是 {@code fixedRate}：回测可能跑几十分钟，
      * {@code fixedRate} 会在它还没结束时继续触发，把一个单线程池排满。</p>
+     *
+     * <p>两个延迟都走 SpEL 取毫秒，不写 {@code 30s} / {@code 60s} 这类简写：
+     * {@code initialDelayString} 不接受简写时长，会在创建 bean 阶段抛
+     * {@code NumberFormatException} 让应用起不来（见 {@link BacktestSchedule}）。</p>
      */
     @Scheduled(
-            fixedDelayString = "${app.backtest.worker.poll-interval:30s}",
-            initialDelayString = "${app.backtest.worker.initial-delay:60s}"
+            fixedDelayString = "#{@backtestSchedule.pollIntervalMillis()}",
+            initialDelayString = "#{@backtestSchedule.initialDelayMillis()}"
     )
     public void poll() {
         try {

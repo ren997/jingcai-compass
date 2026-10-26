@@ -72,6 +72,22 @@ public interface BacktestRunMapper extends BaseMapper<BacktestRunEntity> {
     );
 
     /**
+     * 只续心跳，不改任何计数。
+     *
+     * <p>为什么需要它：判定阶段某一批可能**一条样本都没插入**（归档不可用的场次会整场跳过），
+     * 这时 {@code addProgress...if (全部增量为 0) return} 就不写库了，心跳跟着停。
+     * 而心跳是「这个 run 还活着」的唯一证据——心跳一停，重启自愈会把还在跑的 run 判成
+     * {@code INTERRUPTED}。所以「没有可汇报的数字」不等于「不发心跳」。</p>
+     */
+    @Update("""
+            UPDATE backtest_runs
+            SET last_heartbeat_at = #{heartbeatAt},
+                updated_at = #{heartbeatAt}
+            WHERE id = #{runId}
+            """)
+    int touchHeartbeat(@Param("runId") Long runId, @Param("heartbeatAt") Instant heartbeatAt);
+
+    /**
      * 推进状态与阶段。
      *
      * <p>状态机的合法性由 DB 触发器把关（非法流转直接抛错），Java 侧不做重复校验：

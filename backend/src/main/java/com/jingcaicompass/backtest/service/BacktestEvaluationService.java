@@ -1,5 +1,6 @@
 package com.jingcaicompass.backtest.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jingcaicompass.backtest.BacktestProperties;
@@ -23,6 +24,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import javax.sql.DataSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 
@@ -49,6 +52,8 @@ import org.springframework.stereotype.Service;
 @Service
 @ConditionalOnBean(DataSource.class)
 public class BacktestEvaluationService {
+
+    private static final Logger log = LoggerFactory.getLogger(BacktestEvaluationService.class);
 
     private final BacktestArchiveService archiveService;
     private final OddsHistoryArchiveMapper archiveMapper;
@@ -120,7 +125,11 @@ public class BacktestEvaluationService {
     ) {
         Instant decisionAt = candidate.kickoffTime()
                 .minus(properties.decisionLeadMinutes(), ChronoUnit.MINUTES);
-        JsonNode payload = objectMapper.valueToTree(archive.getPayload());
+        JsonNode payload = payloadOf(archive);
+        if (payload == null) {
+            // 归档行存在但载荷读不出：当作「没有可用报价」处理，不让一场脏数据把整个 run 打断。
+            return emptyCases(runId, candidate, decisionAt, groups, archive);
+        }
         OddsHistorySnapshotBuilder.HistorySnapshot snapshot = snapshotBuilder.build(
                 payload,
                 decisionAt,
@@ -131,14 +140,7 @@ public class BacktestEvaluationService {
         if (snapshot.isEmpty()) {
             // 该时点一行报价都没有（决策时刻早于首个变快点，或整场停盘）。
             // 仍然逐组产出样本：这是「这段时间确实没开价」的证据，跳过记录会让数据可用性分页看不出边界。
-            List<BacktestCaseEntity> emptyCases = new ArrayList<>(groups.size());
-            for (GroupEngine group : groups) {
-                emptyCases.add(BacktestCaseBuilder.build(
-                        runId, group.groupKey(), candidate, decisionAt, archive.getId(),
-                        group.engine().decide(emptyInput(candidate, decisionAt))
-                ));
-            }
-            return List.copyOf(emptyCases);
+            return emptyCases(runId, candidate, decisionAt, groups, archive);
         }
 
         List<AsianOddsSnapshot> handicapRows = distinctHandicapRows(snapshot.rows());
@@ -156,6 +158,47 @@ public class BacktestEvaluationService {
             ));
             cases.add(BacktestCaseBuilder.build(
                     runId, group.groupKey(), candidate, decisionAt, archive.getId(), decision));
+        }
+        return List.copyOf(cases);
+    }
+
+    /**
+     * 取载荷原文并解析。
+     *
+     * <p>绕开实体的 {@code payload} 字段是必须的，不是洁癖：{@code @TableField(typeHandler)}
+     * 只在 MyBatis-Plus 自己拼 SQL 时生效，{@code @Select} 注解查询会忽略它，{@code Map} 字段
+     * 落到默认 handler 上读回空 Map。那时切片恒为 0 行、判定恒为 {@code MISSING_ROWS}，
+     * 而归档状态与点数全部正常——最像「这段时间上游没开价」，实际是自己没读到。</p>
+     *
+     * @return 解析失败的载荷返回 {@code null}（由调用方按「无可用报价」处理）
+     */
+    JsonNode payloadOf(OddsHistoryArchiveEntity archive) {
+        String text = archiveMapper.selectPayloadTextById(archive.getId());
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readTree(text);
+        } catch (JsonProcessingException exception) {
+            log.warn("event=backtest_archive_payload_unreadable archiveId={} matchId={}",
+                    archive.getId(), archive.getExternalMatchId(), exception);
+            return null;
+        }
+    }
+
+    private List<BacktestCaseEntity> emptyCases(
+            Long runId,
+            BacktestCandidateDto candidate,
+            Instant decisionAt,
+            List<GroupEngine> groups,
+            OddsHistoryArchiveEntity archive
+    ) {
+        List<BacktestCaseEntity> cases = new ArrayList<>(groups.size());
+        for (GroupEngine group : groups) {
+            cases.add(BacktestCaseBuilder.build(
+                    runId, group.groupKey(), candidate, decisionAt, archive.getId(),
+                    group.engine().decide(emptyInput(candidate, decisionAt))
+            ));
         }
         return List.copyOf(cases);
     }

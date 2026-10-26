@@ -1,7 +1,7 @@
 # 历史回测：设计与改造方案
 
-> 状态：P1~P5 已实现，真实回测尚未跑过
-> 版本：0.1 · 2026-10-26
+> 状态：P1~P6 已实现，整链已在真实库跑通（10 场 / 2 参数组）
+> 版本：0.2 · 2026-10-26
 > 范围：在既有 `backend` 上增量建设，不新建工程、不改动生产预测链路
 > 相关：`docs/asian-model-design.md`（模型与阈值来源）、`docs/data-sources-novaapi.md`（历史赔率接口）、`backend/src/main/resources/db/migration/V29__add_historical_backtest.sql`
 
@@ -189,6 +189,18 @@ QUEUED → ARCHIVING → EVALUATING → SETTLING → AGGREGATING → SUCCEEDED |
 展示上刻意不给 Δ 着色：这一页已经用「正红负绿」表示收益，再用红色表示「不如市场」
 会让同一个红有两种相反含义。所以 Δ 只给文字判断（优于市场 / 不如市场 / 持平）。
 
+**但这个 Δ 在当前模型下恒为 0。** 原因与 `asian-model-design.md` 里记的 `edge ≡ 0`
+是同一件事：模型概率是由该主盘的去水概率反解 λ，再投影回**同一条线**，因此与市场概率
+逐位相等，两侧 Brier 必然相同。它不是「模型打平市场」，而是恒等式。
+
+实测（`2026-10-20` 一天、两个参数组、6 行指标）Δ 全部为 `0.0000`。所以：
+
+- **Δ 列不构成「模型优于市场」的证据**，只在换了模型结构（不再是主盘反解投影）之后才有信息量。
+- 参数组之间的比较主要看 **ROI 与命中率**；Brier 的绝对值只能反映「模型自我一致性」，
+  在同一模型的不同阈值下差异很小。
+
+这条不写清楚，读的人会把「Δ = 0」当成 bug 去查，或者反过来把它当成「模型与市场等价」的结论。
+
 ### 7.4 选优顺序
 
 ROI 降序 → Brier 升序 → `settled` 降序。**判定理由必须一起返回并显示**，
@@ -266,9 +278,22 @@ ROI 降序 → Brier 升序 → `settled` 降序。**判定理由必须一起返
 
 ## 12. 已知边界与未做
 
-- **真实回测尚未跑过。** P1~P5 的验证都在单测与原型（`tools/hist-backtest/HistoryReplay.java`）
-  层面。原型已验证：001（`2042155`）在 `10-23 15:14:21` 截面的判定与实盘补算逐位一致。
-  但「create → worker → 指标」整条链在真实库上还没跑过一次真实区间。
+- **整链已在真实库跑通**（2026-10-26）：`create → ARCHIVING → EVALUATING → SETTLING →
+  AGGREGATING → SUCCEEDED`，10 场 × 2 参数组 → 20 条样本，归档复用 10/10、额度 0。
+  结果：`tight` 让球 4 腿 66.67% / ROI +29%，大小球 2 腿 0% / ROI −75%；
+  `baseline` 12 腿 40% / ROI −13.17%。**样本只有 10 场，这个数字没有任何统计意义**，
+  它的价值是证明链路能算对、能算出东西。
+- **首跑暴露了三个缺陷**（都由「只在默认关闭的开关打开时才创建」或「只在真实库才有数据」
+  才触发，单测与 CI 覆盖不到）：
+  1. `initialDelayString = "${...:60s}"` → `NumberFormatException`，应用起不来。
+     `initialDelayString` 不认 Spring Boot 的简写时长，`fixedDelayString` 认——两条解析路径。
+     现在两个延迟都走 `SyncTaskSchedule` 同款的 SpEL 毫秒。
+  2. 归档与判定**各自**累加 `processed_match_count` → 10 场变 20 场，撞
+     `ck_backtest_runs_counts`。现在 processed 只由归档阶段推进，判定阶段的 flush
+     方法签名里根本没有这个参数（写错都写不出来）。
+  3. `@Select` 注解查询**不应用** `@TableField(typeHandler)`，`payload` 这个
+     `Map<String,Object>` 字段读回来是空 → 切片恒 0 行、切场全 `MISSING_ROWS`，
+     而归档状态、点数、庄家数全部正常。现在改用 `SELECT payload::text` 再 Jackson 解析。
 - **`BacktestMigrationIT` 未真跑。** 本机无 Docker，它只在 `-Pintegration` 下存在。
   生产库的 V29 是逐条执行验证的（见 `tools/backtest-schema-verify/`），
   但 CI 的空库全量重放没走过。
@@ -277,3 +302,8 @@ ROI 降序 → Brier 升序 → `settled` 降序。**判定理由必须一起返
   T−9h / T−6h LOW，T−3h 客 MEDIUM，收盘 LOW。结论对时点极度敏感，
   所以时点进了 `backtest_cases` 唯一键，而不是一个全局配置。
 - **不做跨 run 汇总。** 两个 run 的样本区间与版本号都可能不同，汇总出的 ROI 没有意义。
+- **回测明细不可删。** `backtest_cases` 有 DELETE 守卫，所以跑废的 run 会留在库里
+  （状态为 `FAILED` 或指标为空）。清理需要绕过守卫，不值得——它们本身就是
+  「这个功能在哪一版上出过什么错」的记录。公开端只显示 `SUCCEEDED` / `PARTIAL`，
+  但一个「成功却没有方向」的 run 仍会出现在公开列表里，靠指标表的
+  「这批样本没有任何方向」提示来消歧。

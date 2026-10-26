@@ -240,8 +240,7 @@ public class BacktestRunnerService {
 
         for (BacktestCandidateDto candidate : candidates) {
             if (isCancelled(runId)) {
-                flushProgress(runId, batchProcessed, batchReused, batchFetched, batchFailed, 0, batchQuota,
-                        BacktestStageEnum.ARCHIVING);
+                flushArchiveProgress(runId, batchProcessed, batchReused, batchFetched, batchFailed, batchQuota);
                 return new ArchiveStats(totalReused, totalFetched, totalFailed, true);
             }
             ArchiveOutcome outcome = evaluationService.archive(candidate);
@@ -259,8 +258,7 @@ public class BacktestRunnerService {
             batchQuota += outcome.quotaCost();
             batchProcessed++;
             if (batchProcessed % batchSize == 0) {
-                flushProgress(runId, batchProcessed, batchReused, batchFetched, batchFailed, 0, batchQuota,
-                        BacktestStageEnum.ARCHIVING);
+                flushArchiveProgress(runId, batchProcessed, batchReused, batchFetched, batchFailed, batchQuota);
                 batchProcessed = 0;
                 batchReused = 0;
                 batchFetched = 0;
@@ -268,8 +266,7 @@ public class BacktestRunnerService {
                 batchQuota = 0;
             }
         }
-        flushProgress(runId, batchProcessed, batchReused, batchFetched, batchFailed, 0, batchQuota,
-                BacktestStageEnum.ARCHIVING);
+        flushArchiveProgress(runId, batchProcessed, batchReused, batchFetched, batchFailed, batchQuota);
         return new ArchiveStats(totalReused, totalFetched, totalFailed, false);
     }
 
@@ -282,9 +279,14 @@ public class BacktestRunnerService {
         int batchInserted = 0;
         int batchProcessed = 0;
         int batchSize = properties.worker().batchSize();
+        // processed_match_count 只由归档阶段推进，语义是「已归档完成的场次」。
+        // 判定阶段绝不能再加一次：同一批场次会被两个阶段各算一遍，10 场变成 20 场，
+        // 直接撞上 ck_backtest_runs_counts（processed <= total）——而且是在真实库里跑
+        // 到判定阶段才撞，因为归档刚结束时这个值恰好还等于 total。
+        // 判定阶段的进展用 case_count 与 run_stage 表达。
         for (BacktestCandidateDto candidate : candidates) {
             if (isCancelled(runId)) {
-                flushProgress(runId, batchProcessed, 0, 0, 0, batchInserted, 0, BacktestStageEnum.EVALUATING);
+                flushEvaluationProgress(runId, batchInserted);
                 return new CaseStats(totalInserted, true);
             }
             OddsHistoryArchiveEntity archive = evaluationService.loadArchive(candidate);
@@ -300,12 +302,12 @@ public class BacktestRunnerService {
             }
             batchProcessed++;
             if (batchProcessed % batchSize == 0) {
-                flushProgress(runId, batchProcessed, 0, 0, 0, batchInserted, 0, BacktestStageEnum.EVALUATING);
+                flushEvaluationProgress(runId, batchInserted);
                 batchProcessed = 0;
                 batchInserted = 0;
             }
         }
-        flushProgress(runId, batchProcessed, 0, 0, 0, batchInserted, 0, BacktestStageEnum.EVALUATING);
+        flushEvaluationProgress(runId, batchInserted);
         return new CaseStats(totalInserted, false);
     }
 
@@ -331,7 +333,36 @@ public class BacktestRunnerService {
         return settled;
     }
 
-    private void flushProgress(
+    /**
+     * 归档阶段的进度：推进「已归档场次」与归档计数。
+     *
+     * <p>{@code processed_match_count} <b>只在这里增加</b>。它被 DB 的
+     * {@code ck_backtest_runs_counts}（{@code processed <= total}）保护，而归档刚结束时
+     * 它恰好等于 total——同一批场次若在判定阶段再被加一遍，10 场会变成 20 场，
+     * 撞约束的时机是「归档成功、判定开始时」，看上去像判定坏了。</p>
+     */
+    private void flushArchiveProgress(
+            Long runId,
+            int processed,
+            int reused,
+            int fetched,
+            int failed,
+            int quota
+    ) {
+        writeProgress(runId, processed, reused, fetched, failed, 0, quota, BacktestStageEnum.ARCHIVING);
+    }
+
+    /**
+     * 判定阶段的进度：只推进样本数。
+     *
+     * <p>签名里<b>没有</b> processed 参数，是为了让「判定阶段又加了一次场次」这件事
+     * 在编译期就写不出来，而不是靠注释提醒。</p>
+     */
+    private void flushEvaluationProgress(Long runId, int cases) {
+        writeProgress(runId, 0, 0, 0, 0, cases, 0, BacktestStageEnum.EVALUATING);
+    }
+
+    private void writeProgress(
             Long runId,
             int processed,
             int reused,
@@ -341,12 +372,14 @@ public class BacktestRunnerService {
             int quota,
             BacktestStageEnum stage
     ) {
-        if (processed == 0 && cases == 0 && quota == 0) {
-            // 没有任何增量时不写库：否则每 batchSize 场都会多一次写，而这次写的值与上次相同。
+        Instant now = Instant.now();
+        if (processed == 0 && reused == 0 && fetched == 0 && failed == 0 && cases == 0 && quota == 0) {
+            // 没有可汇报的数字，但心跳必须续：判定阶段整批都被跳过时，这里是唯一的存活证据。
+            // 心跳一停，重启自愈会把还在跑的 run 判成 INTERRUPTED。
+            runMapper.touchHeartbeat(runId, now);
             return;
         }
-        runMapper.addProgress(runId, processed, reused, fetched, failed, cases, quota,
-                stage.getCode(), Instant.now());
+        runMapper.addProgress(runId, processed, reused, fetched, failed, cases, quota, stage.getCode(), now);
     }
 
     private boolean isCancelled(Long runId) {

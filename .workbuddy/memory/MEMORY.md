@@ -89,6 +89,11 @@
 - **record 型 `@ConfigurationProperties` 只能有一个构造器**：加便捷构造器会让绑定退化成「找不到默认构造器」，启动直接失败。
 - 两个共用 `INCONSISTENT_ASIAN_MARKETS` 的出口只能靠指标 outcome（`infeasible` / `inconsistent`）区分，不能合并。
 - **归档必须自建 `odds_history_archive`，不复用 `raw_data_payloads`**：raw 存「一次同步调用的原始响应」（当前态、按 run 计），归档存「一场一序列全史 + 按 T 切好的截面」（按 `match_id` 计，需终态判定与增量补采状态机）；raw 的 `data_type` 有 CHECK 白名单。结果落 `backtest_*` 三表不进 `settlements`；每次 run 记四版本号；无泄漏做成硬断言。
+- **回测现状（10-26）**：P1~P3 完成，单测 753 → **820** 项全绿；迁移到 **V29**（四表 + 触发器），生产库 dry-run 12 条断言全绿；`BacktestMigrationIT` 仅 `-Pintegration`（本地无 Docker，运行期表现未验证）。P4 待做：编排、结算、指标、两个 controller。
+- **归档失败必须分档**：`SUCCESS`/`NO_HISTORY`(404)/`NO_QUOTE_YET`(空序列) 是终局可负缓存复用；`RETRYABLE_FAILURE` 下次必重采；`PERMANENT_FAILURE`(400/401/403) 重采只会重复错误。**HTTP 200 + 体里 `code=500` 是上游偶发**（换 `idEvent` 即 200），`ProviderHttpExecutor` 看不到响应体，只能客户端自己再试一次。
+- **定长键一律 VARCHAR 不用 CHAR**：`CHAR(n)` 入库补空格、出库带空格返回，与内存里的十六进制指纹比对会静默 miss（「明明有归档却判定未采过」）；PG 里 CHAR 无空间/性能优势。静态断言写 `doesNotContain("CHAR(32)")` 会被 `VARCHAR(32)` 命中，得用 `(?<!VAR)CHAR\(`。
+- **`RestClient` 无 per-call 读超时**（`JdkClientHttpRequestFactory` 超时是工厂级）：历史接口要 60s 而实时保持 20s，只能拆两个 bean（`novaApiRestClient` / `novaApiHistoryRestClient`）；调宽全局会让实时同步的卡死检测一起变钝。
+- **持久化服务只加 `@ConditionalOnBean(DataSource)` 不够**：该条件在组件扫描期恒 false，必须在 `PersistenceServicesAutoConfiguration` 补 `@Bean` 兜底（既有 46 个服务都是这个形态）；只留 `@Service` 不加条件则会让无 DataSource 的测试上下文起不来。
 
 ## 前端约定
 

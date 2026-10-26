@@ -80,20 +80,23 @@
 - **补算已开赛场次离线复刻、不写库**：纯函数直接 `new` + `backend/target/classes`，**不要手写公式**（手写版已两次末位漂移）。
 - **无头截图可验前端**：`msedge.exe --headless=new --disable-gpu --hide-scrollbars --window-size=1000,1100 --virtual-time-budget=9000 --screenshot=...`（本机无 playwright/puppeteer）。
 
-## 回测（P1 已完成）
+## 回测（P1~P6 已实现，真实区间未跑过）
 
 - 原型 `tools/hist-backtest/HistoryReplay.java`：odds-history 的 `points[]` 按「≤T 最后一条」切截面 → 伪装成交叉积 → 交给生产同一批纯函数。**已校验**：001（2042155）在 `10-23 15:14:21` 截面与实盘补算逐位一致。**决策时点必须显式固定**（同一场 T-45h/T-24h/T-18h 让球主 MEDIUM、T-9h/T-6h LOW、T-3h 客 MEDIUM、收盘 LOW）。
-- 计划 `~/.workbuddy/plans/radiant-beacon-turing-27C472nZ.md`；分支 `feat/historical-backtest`。
-- **P1 已完成（`753` 项全绿，基线 722）**：判定核心抽成 `prediction/service/AsianDecisionEngine`（`selectFeatureSet` + `toPrediction` 整搬，13 个出口顺序不变），阈值进 `AsianModelProperties` 四个新字段（默认值与原常量逐字相等），置信度判定独立为 `AsianConfidenceClassifier`。生产 service 只剩取数 + DTO 组装。
-- **引擎持可空 `MeterRegistry`**：5 个 record 方法直连 registry 且原无 null 判断，`JobMetrics.noop()` 用不了；Micrometer 非 Spring，仍零 Spring 依赖。回测传 null。
-- **record 型 `@ConfigurationProperties` 只能有一个构造器**：加便捷构造器会让绑定退化成「找不到默认构造器」，启动直接失败。
-- 两个共用 `INCONSISTENT_ASIAN_MARKETS` 的出口只能靠指标 outcome（`infeasible` / `inconsistent`）区分，不能合并。
-- **归档必须自建 `odds_history_archive`，不复用 `raw_data_payloads`**：raw 存「一次同步调用的原始响应」（当前态、按 run 计），归档存「一场一序列全史 + 按 T 切好的截面」（按 `match_id` 计，需终态判定与增量补采状态机）；raw 的 `data_type` 有 CHECK 白名单。结果落 `backtest_*` 三表不进 `settlements`；每次 run 记四版本号；无泄漏做成硬断言。
-- **回测现状（10-26）**：P1~P3 完成，单测 753 → **820** 项全绿；迁移到 **V29**（四表 + 触发器），生产库 dry-run 12 条断言全绿；`BacktestMigrationIT` 仅 `-Pintegration`（本地无 Docker，运行期表现未验证）。P4 待做：编排、结算、指标、两个 controller。
-- **归档失败必须分档**：`SUCCESS`/`NO_HISTORY`(404)/`NO_QUOTE_YET`(空序列) 是终局可负缓存复用；`RETRYABLE_FAILURE` 下次必重采；`PERMANENT_FAILURE`(400/401/403) 重采只会重复错误。**HTTP 200 + 体里 `code=500` 是上游偶发**（换 `idEvent` 即 200），`ProviderHttpExecutor` 看不到响应体，只能客户端自己再试一次。
-- **定长键一律 VARCHAR 不用 CHAR**：`CHAR(n)` 入库补空格、出库带空格返回，与内存里的十六进制指纹比对会静默 miss（「明明有归档却判定未采过」）；PG 里 CHAR 无空间/性能优势。静态断言写 `doesNotContain("CHAR(32)")` 会被 `VARCHAR(32)` 命中，得用 `(?<!VAR)CHAR\(`。
-- **`RestClient` 无 per-call 读超时**（`JdkClientHttpRequestFactory` 超时是工厂级）：历史接口要 60s 而实时保持 20s，只能拆两个 bean（`novaApiRestClient` / `novaApiHistoryRestClient`）；调宽全局会让实时同步的卡死检测一起变钝。
-- **持久化服务只加 `@ConditionalOnBean(DataSource)` 不够**：该条件在组件扫描期恒 false，必须在 `PersistenceServicesAutoConfiguration` 补 `@Bean` 兜底（既有 46 个服务都是这个形态）；只留 `@Service` 不加条件则会让无 DataSource 的测试上下文起不来。
+- 计划 `~/.workbuddy/plans/radiant-beacon-turing-27C472nZ.md`；分支 `feat/historical-backtest`；设计文档 `docs/backtest-design.md`。
+- **进度（10-26）**：P1 判定核心抽取 → P2 归档 → P3 客户端 → P4 编排/结算/指标/API（`efb5953`）→ P5 前端（`1bc2eaf`）→ P6 文档（`da77588`）。后端 **838** 项全绿（基线 820+18），前端 **101** 项（+21）、`tsc -b` 与 `vite build` 通过。**迁移到 v29 且已应用生产库**（`installed_on 23:03:16`，checksum `-1164027409` 与文件一致，无需 repair）。
+- **三条「同一份代码」**：判定调 `AsianDecisionEngine`、结算调 `MarketSettlementCalculatorRouter` + `SettlementMarginSupport.netProfit`（只提权为 public，公式未改）、指标调 `StatisticsCalculator`。复制一份公式 = 下次改四分盘规则时有一边静默不同步。
+- **无泄漏三道闸**：DB CHECK（`decision_at < kickoff_time`、`frozen_captured_at <= decision_at`）+ **状态传 `SCHEDULED`**（库里是 `FINISHED`，直接传会被 `NOT_SCHEDULED` 出口吃掉 → 结果是「没样本」而非「判错」，极难发现）+ 切片只取 `<=T`。`updateTime` 是北京时间，断言必须按 `Asia/Shanghai`。
+- **两套计数不能合并**：`total*` 用于展示、`batch*` 用于判终态；合并会让「中途某批全失败」被后续成功批次掩盖成 `SUCCEEDED`。标 SUCCEEDED 前强制校验无 `PENDING` 样本。
+- **`settleOnce` 的 `WHERE result_status='PENDING'` 返回 0 行是唯一「已结算过」信号** → 读待结算样本必须只取 PENDING（`selectPendingByRunId`）。
+- **`brierDelta = market − model`，正数才是模型更好，负值是合法结论**。市场 Brier 不是 0.25 而是 **0.1875 量级**（走盘记 0.5 恰在「市场恒 0.5」那腿拿满分）；押次边要取 `1−p`（漏了模型会算成 0.45²）。展示上用 `formatScore`（**不乘 100**）+ 文字判断（优于/不如/持平）不着色——页面已用正红负绿表收益，再接一个红会一色两义。
+- **口径版本号四个**：`aggregation_version` / `selector_version` / `model_version` / `builder_version`。不 bump 不是报错，而是**两份结论看起来同源**。`selector` 排序第一键是对齐大小球主盘（10-22「13/13 全小球」的修复），回测用不含该键的实现则冻结行不同而断言全过。
+- **归档必须自建 `odds_history_archive`，不复用 `raw_data_payloads`**（raw 按 run 计当前态、`data_type` 有 CHECK 白名单）。**归档失败分四档**：`SUCCESS`/`NO_HISTORY`(404)/`NO_QUOTE_YET`(空序列) 可负缓存；`RETRYABLE_FAILURE` 必重采；`PERMANENT_FAILURE`(400/401/403) 重采只重复错误。**HTTP 200 + 体里 `code=500`** 是上游偶发（换 `idEvent` 即 200），`ProviderHttpExecutor` 看不到响应体。
+- **`CHAR(n)` 出库补空格**会让指纹查表静默 miss（`run_key`/`group_key`/`payload_hash` 一律 VARCHAR）。静态断言 `doesNotContain("CHAR(32)")` 会被 `VARCHAR(32)` 命中，得用 `(?<!VAR)CHAR\(`。核对已应用版本与文件是否同源：`tools/backtest-schema-verify/V29ChecksumCheck.java`（按 Flyway `ChecksumCalculator` 逐行 `readLine`+CRC32 重算）。
+- **`RestClient` 无 per-call 读超时**（工厂级）→ 历史 60s 与实时 20s 只能拆两个 bean。
+- **持久化服务只加 `@ConditionalOnBean(DataSource)` 不够**：组件扫描期恒 false，必须 `PersistenceServicesAutoConfiguration` 补 `@Bean`；controller 侧用 `ObjectProvider` 惰性取，否则无 DataSource 的测试上下文起不来。
+- **前端**：参数组固定三行（合计/让球/大小球）——`ALL` 不是两市场相加；默认区间取**最近 30 天**而非「回溯起点到今天」（后者 129 天超 120 上限，一进页面预估按钮就灰，写测试时才暴露）；预算确认是人的动作，预估不自作主张带 `confirmBudget`；`PARTIAL` 用警告色而非成功色；antd 两字按钮自动插空格（「续 跑」），测试断言用正则。
+- **未做**：create → worker → 指标整链**在真实库上没跑过一次**；`BacktestMigrationIT` 未真跑（本地无 Docker）。
 
 ## 前端约定
 

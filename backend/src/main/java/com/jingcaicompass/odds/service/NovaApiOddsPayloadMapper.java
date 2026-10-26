@@ -13,12 +13,9 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import org.springframework.stereotype.Component;
@@ -54,9 +51,12 @@ import org.springframework.util.StringUtils;
  *
  * <p>但全量交叉积会失控：实测一场平博 9 档让球 × 16 档大小球 = 144 行，1xBet 达 15×42=630 行，
  * 一场四家庄就是上千行，而同步是每 20 分钟一轮。因此大小球侧只保留<b>跨庄去水概率最平衡的
- * {@value #TOTALS_LINES_KEPT} 档</b>（判据见 {@link #mostBalancedTotalsLines}）：
+ * {@value AsianTotalsLineSelector#DEFAULT_LINES_KEPT} 档</b>（判据见 {@link AsianTotalsLineSelector}）：
  * 真实抓包下每场约 110~160 行，且这 K 档必然包含各庄自己的主盘线。
  * 若将来需要完整大小球阶梯（例如邻线回投扩档），把 K 调大即可，代价是写入量线性增长。</p>
+ *
+ * <p>保留档的选取<b>不在这里实现</b>：历史回测要按同一口径还原截面，两处各写一份会让
+ * 「回测保留哪 4 档」与「实盘写入哪 4 档」静默分叉。</p>
  */
 @Component
 public class NovaApiOddsPayloadMapper {
@@ -67,8 +67,8 @@ public class NovaApiOddsPayloadMapper {
     private static final int HANDICAP_MARKET_ID = 4;
     private static final int TOTALS_MARKET_ID = 5;
 
-    /** 大小球侧保留的档位数（按跨庄去水概率的平衡度取前 K）。 */
-    static final int TOTALS_LINES_KEPT = 4;
+    /** 大小球侧保留的档位数（按跨庄去水概率的平衡度取前 K）；口径实现在选择器里。 */
+    static final int TOTALS_LINES_KEPT = AsianTotalsLineSelector.DEFAULT_LINES_KEPT;
 
     private static final String HOME = "Home";
     private static final String AWAY = "Away";
@@ -84,17 +84,8 @@ public class NovaApiOddsPayloadMapper {
      *
      * <p>低抽水白名单（{@code pinnacle,matchbook,betfair}）按编码匹配，中文名永远不命中并
      * 静默回退全量中位数——不是报错，是「看起来照常工作但置信度口径悄悄降级」。
-     * 未登记的庄家回退为小写原文，保证不会误命中白名单。</p>
+     * 映射表本体在 {@link BookmakerCodes}：历史回测要按同一张表还原庄家编码。</p>
      */
-    private static final Map<String, String> BOOKMAKER_CODES = Map.of(
-            "平博", "pinnacle",
-            "必发", "betfair",
-            "威廉希尔", "williamhill",
-            "Bet365", "bet365",
-            "1xBet", "1xbet",
-            "韦德", "betvictor",
-            "利记", "liji"
-    );
 
     /**
      * 解析聚合信封 {@code {provider, responses:[{matchId, status, body}]}}。
@@ -191,47 +182,13 @@ public class NovaApiOddsPayloadMapper {
     /**
      * 全庄最平衡的前 {@value #TOTALS_LINES_KEPT} 档大小球线。
      *
-     * <p>判据必须用「去水概率离 50/50 的距离」，<b>不能按报出家数</b>。按家数排会系统性地选中
-     * {@code 1.5 / 2.5 / 3.5 / 4.5} 这类整数与半球盘——它们档位稀疏、几乎每家都报，
-     * 而真正的现代主盘是 {@code 2.75 / 3.0} 这种四分盘，只有少数庄报。
-     * 按家数裁的后果是「聚合器把主盘定到 2.5」，看起来一切正常，但共识已经不是市场共识。</p>
-     *
-     * <p>排序：平衡度升序 → 家数降序 → 线值升序。家数作为次要键，是为了在两档同样平衡时
-     * 优先保留能满足 {@code minBookmakers>=2} 的那一档。</p>
+     * <p>口径实现在 {@link AsianTotalsLineSelector}（判据是「去水概率离 50/50 的距离」，不是家数），
+     * 这里只做一次结构转换：把内部的 {@code SidePair} 阶梯交给选择器。
+     * 不在此处重新实现，是为了让历史回测的截面还原与实时同步的落库保留档口径完全一致。</p>
      */
     private Set<BigDecimal> mostBalancedTotalsLines(Collection<BookmakerLines> allBookmakers) {
-        Map<BigDecimal, List<BigDecimal>> probabilities = new HashMap<>();
-        Map<BigDecimal, Integer> reportCounts = new HashMap<>();
-        for (BookmakerLines lines : allBookmakers) {
-            lines.totals.forEach((line, pair) -> {
-                if (!pair.isComplete()) {
-                    return;
-                }
-                probabilities.computeIfAbsent(line, key -> new ArrayList<>())
-                        .add(AsianMarketMath.devigFirst(pair.first, pair.second));
-                reportCounts.merge(line, 1, Integer::sum);
-            });
-        }
-
-        record Candidate(BigDecimal line, BigDecimal distance) {
-        }
-
-        Set<BigDecimal> kept = new LinkedHashSet<>();
-        probabilities.entrySet().stream()
-                .map(entry -> new Candidate(
-                        entry.getKey(),
-                        AsianMarketMath.median(entry.getValue())
-                                .subtract(new BigDecimal("0.5"))
-                                .abs()
-                ))
-                .sorted(Comparator
-                        .comparing(Candidate::distance)
-                        .thenComparing(Comparator.comparingInt(
-                                (Candidate candidate) -> -reportCounts.getOrDefault(candidate.line(), 0)))
-                        .thenComparing(Candidate::line))
-                .limit(TOTALS_LINES_KEPT)
-                .forEach(candidate -> kept.add(candidate.line()));
-        return kept;
+        return AsianTotalsLineSelector.select(
+                allBookmakers.stream().map(BookmakerLines::totalsQuotes).toList());
     }
 
     private List<AsianOddsLineDto> crossProduct(
@@ -298,11 +255,16 @@ public class NovaApiOddsPayloadMapper {
     }
 
     static String bookmakerCode(String chineseName) {
-        String trimmed = chineseName.trim();
-        return BOOKMAKER_CODES.getOrDefault(trimmed, trimmed.toLowerCase(Locale.ROOT));
+        return BookmakerCodes.of(chineseName);
     }
 
-    private static boolean isSuspended(JsonNode option) {
+    /**
+     * 解析 option 的暂停标志。
+     *
+     * <p>包内可见而不是私有：历史回测的截面还原（{@link OddsHistorySnapshotBuilder}）必须用
+     * 同一套判定，否则「哪一侧算不可交易」会在实时与回测之间分叉。</p>
+     */
+    static boolean isSuspended(JsonNode option) {
         JsonNode suspended = option.path("suspended");
         if (suspended.isMissingNode() || suspended.isNull()) {
             return false;
@@ -355,6 +317,14 @@ public class NovaApiOddsPayloadMapper {
     private static final class BookmakerLines {
         private final Map<BigDecimal, SidePair> handicap = new LinkedHashMap<>();
         private final Map<BigDecimal, SidePair> totals = new LinkedHashMap<>();
+
+        /** 交给 {@link AsianTotalsLineSelector} 的入参形态（只带两侧价格，不带时间）。 */
+        private Map<BigDecimal, AsianTotalsLineSelector.Quote> totalsQuotes() {
+            Map<BigDecimal, AsianTotalsLineSelector.Quote> quotes = new LinkedHashMap<>();
+            totals.forEach((line, pair) ->
+                    quotes.put(line, new AsianTotalsLineSelector.Quote(pair.first, pair.second)));
+            return quotes;
+        }
     }
 
     /** 同一档的两侧报价与各自更新时间。 */

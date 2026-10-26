@@ -7,10 +7,11 @@
 
 ## 流程与验证
 
-- 分支 `feat/<topic>`；同一时刻只一个任务 `IN_PROGRESS`。迁移最高 **V28**（`db/migration/` 有 Java 版 V22，新建 SQL 先 `ls` 避撞号）。
-- **「本地能启动」≠「CI 能过」**：CI 是空 Testcontainers PG16、V1~V28 全量重放、`stub` provider、65 个 IT 主动撞约束——声明矛盾类缺陷只在这里暴露。
+- 分支 `feat/<topic>`；同一时刻只一个任务 `IN_PROGRESS`。迁移最高 **V29**（`db/migration/` 有 Java 版 V22，新建 SQL 先 `ls` 避撞号）。
+- **「本地能启动」≠「CI 能过」**：CI 是空 Testcontainers PG16、V1~V29 全量重放、`stub` provider、65 个 IT 主动撞约束——声明矛盾类缺陷只在这里暴露。
 - 纯计算→单测；**Flyway 迁移 / PG 专有约束 / 触发器→必须真实 PG16 跑过**。无 Docker 用「生产库 `BEGIN`→执行→`ROLLBACK`」验语法（验不出声明矛盾）。无 Docker 就别加只在 CI 才暴露的约束（如 `leagues.name_zh` 唯一索引）。
-- `mvn -o test` 零 Docker（722 项）；`*IT.java` 仅 `-Pintegration`，迁移类一律 `flyway("<target>")`。CI 无前端门禁：`vitest run` + `tsc -b` + `vite build` 即收档。
+- `mvn -o test` 零 Docker（845 项）；`*IT.java` 仅 `-Pintegration`，迁移类一律 `flyway("<target>")`。CI 无前端门禁：`vitest run` + `tsc -b` + `vite build` 即收档。
+- **含明文库凭据的工具必须未跟踪或读环境变量**：`.gitignore` 已为此排除 `tools/verify-stage2/`；`tools/backtest-schema-verify/` 下的工具改为读 `DB_URL`/`DB_USER`/`DB_PASSWORD`（`V29ChecksumCheck`/`MigrateDryRun`/`ArchiveInspect`）。`tools/hist-backtest/SnapshotDebug` 同。**明文密码仍留在本分支 `e260ca0`/`efb5953` 历史里，分支无 upstream 从未推送——合入前洗历史或轮换库密码。**
 - 触发器 `RAISE ... USING CONSTRAINT='x'` 的约束名**不进 JDBC message**，断言只能比主消息文本。
 
 ## 亚盘模型硬约束
@@ -63,6 +64,7 @@
 - **按当日实体拼接的键都要算上界**：`request_key` 每场 8 字符，256 列宽 29 场溢出 → V28 加宽 1024 + 超 900 字符退化为「场次数 + SHA-256 前 16 字节」。
 - **`ProviderSyncTemplate` 必须自兜底**：原只 catch `fetcher.fetch()`，`savePayload`/`link` 在外，异常直冒调度层 → 记录永久 `RUNNING`、额度显示 0。已拆 `persistAndParse` + `finishUnexpectedFailure`。**见 `RUNNING` + `quota=0` + 无 payload，先查写库异常，别当卡死。**
 - **`@Scheduled` 没有任何超时**：`fixedDelay` =「上次结束 + 延迟」，未定制 `TaskScheduler` → 默认 `pool.size=1`，全部 Job 挤一个线程；`read-timeout` 是 socket 级。已加 `SyncRunRecoveryService`/`Runner`（`started_at < now-10min` 的 `RUNNING` → `FAILED`；放 `ApplicationRunner`）。
+- **`initialDelayString` 不认 Spring Boot 简写时长**（`30s`/`5m` 只对 `fixedDelayString` 有效），写占位符默认值 `"${...:60s}"` 会在创建 bean 时 `NumberFormatException` **起不来**——而该 bean 常带 `@ConditionalOnProperty`，默认配置下永远发现不了。统一走 `SyncTaskSchedule`/`BacktestSchedule` 的 SpEL 毫秒（`#{@xxx.pollIntervalMillis()}`），并对注解文本写断言。
 - **`@ConditionalOnBean` 对配置类里的 `@Bean` 在组件扫描阶段恒为 false**：八个 Job 里七个有 `@Bean` 兜底，唯独 `PredictionAutoPublishJob` 只有 `@Component` + `@ConditionalOnBean(Orchestrator)` → **从未创建过**（10-23 起无新预测且零日志）。已改 `@Bean` + `@ConditionalOnProperty`。**判据：actuator 无 `jingcai.job.execution` = 一个 job 都没记过账。**
 - **自动发布没有「赛前 N 小时」窗口**：条件只有 `kickoff_time > now` + `DRAFT` + 该模型版本尚无公开版本，生成受 `regenerate-interval: 3h` 节流；开赛后才补的场次被 `KICKOFF_PASSED` 挡掉、补不回来。
 - **没有映射层也没有旧源**：`SportteryProviderType` 只剩 `NOVA|STUB`、`AsianOddsProviderTypeEnum` 只剩 `STUB|NOVA_API`；`app.sporttery`/`app.asian-odds` 下的 base-url、api-key、超时、重试**从来没被读过**（Nova 只用 `app.nova`）。
@@ -80,23 +82,26 @@
 - **补算已开赛场次离线复刻、不写库**：纯函数直接 `new` + `backend/target/classes`，**不要手写公式**（手写版已两次末位漂移）。
 - **无头截图可验前端**：`msedge.exe --headless=new --disable-gpu --hide-scrollbars --window-size=1000,1100 --virtual-time-budget=9000 --screenshot=...`（本机无 playwright/puppeteer）。
 
-## 回测（P1~P6 已实现，真实区间未跑过）
+## 回测（P1~P6 已完成，整链已在真实库跑通）
 
 - 原型 `tools/hist-backtest/HistoryReplay.java`：odds-history 的 `points[]` 按「≤T 最后一条」切截面 → 伪装成交叉积 → 交给生产同一批纯函数。**已校验**：001（2042155）在 `10-23 15:14:21` 截面与实盘补算逐位一致。**决策时点必须显式固定**（同一场 T-45h/T-24h/T-18h 让球主 MEDIUM、T-9h/T-6h LOW、T-3h 客 MEDIUM、收盘 LOW）。
 - 计划 `~/.workbuddy/plans/radiant-beacon-turing-27C472nZ.md`；分支 `feat/historical-backtest`；设计文档 `docs/backtest-design.md`。
-- **进度（10-26）**：P1 判定核心抽取 → P2 归档 → P3 客户端 → P4 编排/结算/指标/API（`efb5953`）→ P5 前端（`1bc2eaf`）→ P6 文档（`da77588`）。后端 **838** 项全绿（基线 820+18），前端 **101** 项（+21）、`tsc -b` 与 `vite build` 通过。**迁移到 v29 且已应用生产库**（`installed_on 23:03:16`，checksum `-1164027409` 与文件一致，无需 repair）。
+- **进度（10-26）**：P1 判定核心抽取 → P2 归档 → P3 客户端 → P4 编排/结算/指标/API（`efb5953`）→ P5 前端（`1bc2eaf`）→ P6 文档（`da77588`）→ 首跑缺陷修复（`9a2e742`）。后端 **845** 项全绿（基线 820），前端 **101** 项（+21）、`tsc -b` 与 `vite build` 通过。**迁移到 v29 且已应用生产库**（`installed_on 23:03:16`，checksum `-1164027409` 与文件一致，无需 repair）。**整链已跑通**：10 场 × 2 组 → 20 条样本，复用 10/10、额度 0，`tight`/让球 4 腿 66.67%。
+- **首跑三个缺陷全部只在「默认关闭的开关打开」或「真实库真有数据」时触发**，单测与 CI 一个都盖不到：①`initialDelayString` **不认** `30s` 简写（`fixedDelayString` 认，两条解析路径）→ 起不来；②`processed_match_count` 被归档与判定各加一次（10→20 撞 `ck_backtest_runs_counts`，撞点在「归档成功、判定开始」，像判定坏了）；③`@Select` **不应用** `@TableField(typeHandler)` → `Map` 字段读回空、切片恒 0 行、全场 `MISSING_ROWS`，而归档状态/点数/庄家数全正常。修法见 `docs/backtest-design.md` §12。
 - **三条「同一份代码」**：判定调 `AsianDecisionEngine`、结算调 `MarketSettlementCalculatorRouter` + `SettlementMarginSupport.netProfit`（只提权为 public，公式未改）、指标调 `StatisticsCalculator`。复制一份公式 = 下次改四分盘规则时有一边静默不同步。
 - **无泄漏三道闸**：DB CHECK（`decision_at < kickoff_time`、`frozen_captured_at <= decision_at`）+ **状态传 `SCHEDULED`**（库里是 `FINISHED`，直接传会被 `NOT_SCHEDULED` 出口吃掉 → 结果是「没样本」而非「判错」，极难发现）+ 切片只取 `<=T`。`updateTime` 是北京时间，断言必须按 `Asia/Shanghai`。
 - **两套计数不能合并**：`total*` 用于展示、`batch*` 用于判终态；合并会让「中途某批全失败」被后续成功批次掩盖成 `SUCCEEDED`。标 SUCCEEDED 前强制校验无 `PENDING` 样本。
 - **`settleOnce` 的 `WHERE result_status='PENDING'` 返回 0 行是唯一「已结算过」信号** → 读待结算样本必须只取 PENDING（`selectPendingByRunId`）。
-- **`brierDelta = market − model`，正数才是模型更好，负值是合法结论**。市场 Brier 不是 0.25 而是 **0.1875 量级**（走盘记 0.5 恰在「市场恒 0.5」那腿拿满分）；押次边要取 `1−p`（漏了模型会算成 0.45²）。展示上用 `formatScore`（**不乘 100**）+ 文字判断（优于/不如/持平）不着色——页面已用正红负绿表收益，再接一个红会一色两义。
+- **`brierDelta = market − model`，正数才是模型更好，负值是合法结论**。但**当前模型下 Δ ≡ 0**：模型概率由主盘去水概率反解 λ 再投影回**同一条线**，与市场概率逐位相等（同 `asian-model-design.md` 的 `edge ≡ 0`）。**它不是「模型打平市场」而是恒等式**，不构成「模型优于市场」的证据；跨参数组比较看 ROI 与命中率。市场 Brier 不是 0.25 而是 **0.1875 量级**（走盘记 0.5 恰在「市场恒 0.5」那腿拿满分）；押次边要取 `1−p`（漏了模型会算成 0.45²）。展示上用 `formatScore`（**不乘 100**）+ 文字判断（优于/不如/持平）不着色——页面已用正红负绿表收益，再接一个红会一色两义。
 - **口径版本号四个**：`aggregation_version` / `selector_version` / `model_version` / `builder_version`。不 bump 不是报错，而是**两份结论看起来同源**。`selector` 排序第一键是对齐大小球主盘（10-22「13/13 全小球」的修复），回测用不含该键的实现则冻结行不同而断言全过。
 - **归档必须自建 `odds_history_archive`，不复用 `raw_data_payloads`**（raw 按 run 计当前态、`data_type` 有 CHECK 白名单）。**归档失败分四档**：`SUCCESS`/`NO_HISTORY`(404)/`NO_QUOTE_YET`(空序列) 可负缓存；`RETRYABLE_FAILURE` 必重采；`PERMANENT_FAILURE`(400/401/403) 重采只重复错误。**HTTP 200 + 体里 `code=500`** 是上游偶发（换 `idEvent` 即 200），`ProviderHttpExecutor` 看不到响应体。
 - **`CHAR(n)` 出库补空格**会让指纹查表静默 miss（`run_key`/`group_key`/`payload_hash` 一律 VARCHAR）。静态断言 `doesNotContain("CHAR(32)")` 会被 `VARCHAR(32)` 命中，得用 `(?<!VAR)CHAR\(`。核对已应用版本与文件是否同源：`tools/backtest-schema-verify/V29ChecksumCheck.java`（按 Flyway `ChecksumCalculator` 逐行 `readLine`+CRC32 重算）。
 - **`RestClient` 无 per-call 读超时**（工厂级）→ 历史 60s 与实时 20s 只能拆两个 bean。
 - **持久化服务只加 `@ConditionalOnBean(DataSource)` 不够**：组件扫描期恒 false，必须 `PersistenceServicesAutoConfiguration` 补 `@Bean`；controller 侧用 `ObjectProvider` 惰性取，否则无 DataSource 的测试上下文起不来。
 - **前端**：参数组固定三行（合计/让球/大小球）——`ALL` 不是两市场相加；默认区间取**最近 30 天**而非「回溯起点到今天」（后者 129 天超 120 上限，一进页面预估按钮就灰，写测试时才暴露）；预算确认是人的动作，预估不自作主张带 `confirmBudget`；`PARTIAL` 用警告色而非成功色；antd 两字按钮自动插空格（「续 跑」），测试断言用正则。
-- **未做**：create → worker → 指标整链**在真实库上没跑过一次**；`BacktestMigrationIT` 未真跑（本地无 Docker）。
+- **未做**：`BacktestMigrationIT` 未真跑（本地无 Docker，只在 `-Pintegration` 下）。`backtest_cases` 有 DELETE 守卫，跑废的 run 删不掉也不该删——它们是「哪一版出过什么错」的记录；公开端只显示 `SUCCEEDED`/`PARTIAL`，靠指标表的 `noDirection` 提示消歧。
+- **进度文案分两段**：归档看「N/M 场（%）」，判定及之后看「已产出 N 条样本」——归档结束时 `processed` 已等于 total，再说 100% 会让人以为做完了。状态名与阶段名同词（`ARCHIVING` 两边都是「补采历史赔率」）时去重。
+- **心跳不能只在「有数字可报」时发**：全零增量直接 return 会让判定阶段整批被跳过的 run 停心跳，重启自愈把它判成 `INTERRUPTED`。已加 `touchHeartbeat`。
 
 ## 前端约定
 

@@ -10,9 +10,18 @@ import java.sql.Statement;
 /** 一次性工具：把一份迁移 SQL 在单事务里跑一遍再回滚，用来在无 Docker 时验证语法与约束行为。 */
 public final class MigrateDryRun {
 
-    private static final String URL = "jdbc:postgresql://110.40.155.140:35432/jingcai_compass";
-    private static final String USER = "postgres";
-    private static final String PASSWORD = "CHANGE_ME_VIA_DB_PASSWORD";
+    // 凭据只从环境变量取，源码里不出现明文（见 .gitignore 里 tools/verify-stage2/ 的同一条约定）。
+    private static final String URL = require("DB_URL");
+    private static final String USER = require("DB_USER");
+    private static final String PASSWORD = require("DB_PASSWORD");
+
+    private static String require(String key) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("缺少环境变量 " + key + "（例：DB_URL=jdbc:postgresql://host:port/db）");
+        }
+        return value;
+    }
 
     public static void main(String[] args) throws Exception {
         String sql = Files.readString(Path.of(args[0]), StandardCharsets.UTF_8);

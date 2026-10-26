@@ -17,9 +17,19 @@ import java.util.zip.CRC32;
  */
 public final class V29ChecksumCheck {
 
-    private static final String URL = "jdbc:postgresql://110.40.155.140:35432/jingcai_compass";
-    private static final String USER = "postgres";
-    private static final String PASSWORD = "CHANGE_ME_VIA_DB_PASSWORD";
+    // 凭据只从环境变量取。仓库约定见 .gitignore：含明文库凭据的工具必须保持未跟踪，
+    // 而本文件要跟着文档一起走，就不能把密码写死在源码里。
+    private static final String URL = require("DB_URL");
+    private static final String USER = require("DB_USER");
+    private static final String PASSWORD = require("DB_PASSWORD");
+
+    private static String require(String key) {
+        String value = System.getenv(key);
+        if (value == null || value.isBlank()) {
+            throw new IllegalStateException("缺少环境变量 " + key + "（例：DB_URL=jdbc:postgresql://host:port/db）");
+        }
+        return value;
+    }
 
     public static void main(String[] args) throws Exception {
         // Flyway ChecksumCalculator：按行读取（行尾被 readLine 吃掉），逐行 update，最后取 CRC32 值的 int。

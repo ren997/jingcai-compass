@@ -46,6 +46,9 @@ export default function AdminLayout() {
           <NavLink to="/admin/manual-results">
             人工赛果补录
           </NavLink>
+          <NavLink to="/admin/backtest">
+            历史回测
+          </NavLink>
         </nav>
       </aside>
       <div className="admin-content">

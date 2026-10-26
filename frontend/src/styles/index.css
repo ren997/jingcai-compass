@@ -2277,3 +2277,166 @@ h1 {
   color: #84928b;
   font-size: 11px;
 }
+
+/* ---------- 历史回测 ---------- */
+
+/* 中间态用「进行中」色，与既有 .running 一致；warning/muted 只给回测的状态标签补两个缺口。 */
+.admin-status.warning {
+  color: #8a5a1f;
+  background: #fff4e2;
+}
+
+.admin-status.muted {
+  color: #6b7a71;
+  background: #f1f4f2;
+}
+
+.backtest-run-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.backtest-progress-text {
+  margin: 0 0 6px;
+  color: #40544a;
+  font-size: 13px;
+}
+
+/* 进度条用原生进度条，不引入组件：中间态只有它一个可视化元素。 */
+progress.backtest-progress {
+  width: 100%;
+  height: 8px;
+  margin: 0 0 14px;
+  border: none;
+  border-radius: 999px;
+  background: #eef2ee;
+  appearance: none;
+}
+
+progress.backtest-progress::-webkit-progress-bar {
+  border-radius: 999px;
+  background: #eef2ee;
+}
+
+progress.backtest-progress::-webkit-progress-value {
+  border-radius: 999px;
+  background: #3f7d5a;
+}
+
+progress.backtest-progress::-moz-progress-bar {
+  border-radius: 999px;
+  background: #3f7d5a;
+}
+
+/* 计数器与 run 卡片同一套 dl 栅格，但列数更多——回测的计数是这一页的主要信息。 */
+.backtest-counters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+  margin: 14px 0 0;
+}
+
+.backtest-counters dt {
+  color: #718077;
+  font-size: 11px;
+}
+
+.backtest-counters dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  color: #263d2e;
+  font-size: 14px;
+  font-weight: 650;
+}
+
+.backtest-estimate {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid #dde7e0;
+  border-radius: 10px;
+  background: #f8fbf9;
+}
+
+.backtest-parameter-sets {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.backtest-parameter-sets .section-heading {
+  align-items: flex-start;
+}
+
+.backtest-parameter-sets table input {
+  min-width: 90px;
+}
+
+.backtest-hint {
+  margin: 10px 0 0;
+  color: #6b7a71;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.backtest-notes {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e2eae4;
+  border-radius: 10px;
+  background: #fbfdfb;
+}
+
+.backtest-notes summary {
+  cursor: pointer;
+  color: #40544a;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.backtest-notes ul,
+.backtest-notes p {
+  margin: 10px 0 0;
+  color: #53645a;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+/* 收益按 A 股口径：正红负绿。与 Brier 判断分开，后者只用文字不着色。 */
+.backtest-profit.positive {
+  color: #b3261e;
+  font-weight: 650;
+}
+
+.backtest-profit.negative {
+  color: #1c7047;
+  font-weight: 650;
+}
+
+.backtest-profit.muted {
+  color: #84928b;
+}
+
+tbody tr.is-best-group {
+  background: #f4fbf6;
+}
+
+tbody tr.is-best-group th {
+  color: #1c7047;
+}
+
+.detail-section table small {
+  display: block;
+  margin-top: 2px;
+  color: #84928b;
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .backtest-counters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

@@ -9,6 +9,10 @@ const MatchDetailPage = lazy(() => import('../features/matches/MatchDetailPage')
 const HomePage = lazy(() => import('../features/home/HomePage'));
 const HistoryPage = lazy(() => import('../features/history/HistoryPage'));
 const StatisticsPage = lazy(() => import('../features/history/StatisticsPage'));
+const PublicBacktestListPage = lazy(() => import('../features/backtest/PublicBacktestListPage'));
+const PublicBacktestDetailPage = lazy(() => import('../features/backtest/PublicBacktestDetailPage'));
+const BacktestRunsPage = lazy(() => import('../features/backtest/BacktestRunsPage'));
+const BacktestRunDetailPage = lazy(() => import('../features/backtest/BacktestRunDetailPage'));
 const AdminHomePage = lazy(() => import('../pages/AdminHomePage'));
 const AdminSyncRunsPage = lazy(() => import('../features/admin/AdminSyncRunsPage'));
 const AdminSyncRunDetailPage = lazy(() => import('../features/admin/AdminSyncRunDetailPage'));
@@ -31,6 +35,8 @@ export default function App() {
           <Route path="matches/:matchId" element={<MatchDetailPage />} />
           <Route path="history" element={<HistoryPage />} />
           <Route path="statistics" element={<StatisticsPage />} />
+          <Route path="backtest" element={<PublicBacktestListPage />} />
+          <Route path="backtest/:runId" element={<PublicBacktestDetailPage />} />
         </Route>
         <Route path="admin/login" element={<AdminLoginPage />} />
         <Route element={<RequireAdmin />}>
@@ -44,6 +50,8 @@ export default function App() {
             <Route path="settlements" element={<AdminSettlementStatusesPage />} />
             <Route path="settlements/:predictionId" element={<AdminPredictionStatusDetailPage />} />
             <Route path="manual-results" element={<AdminManualResultsPage />} />
+            <Route path="backtest" element={<BacktestRunsPage />} />
+            <Route path="backtest/:runId" element={<BacktestRunDetailPage />} />
           </Route>
         </Route>
         <Route path="*" element={<NotFoundPage />} />

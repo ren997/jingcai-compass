@@ -81,6 +81,9 @@ app:
     connect-timeout: ${NOVA_CONNECT_TIMEOUT:5s}
     # 单次 /nova/tf/odds 要返回几十家机构的全部玩法，比体彩单接口重得多。
     read-timeout: ${NOVA_READ_TIMEOUT:20s}
+    # 历史赔率 /nova/tf/odds-history 单次要返回一场比赛的全史：实测老场次 388KB / 20.8s，
+    # 正好压在 read-timeout 上。单独放宽到 60s——它只服务回测归档，不影响实时同步的卡死检测。
+    history-read-timeout: ${NOVA_HISTORY_READ_TIMEOUT:60s}
     retry:
       max-attempts: ${NOVA_RETRY_MAX_ATTEMPTS:2}
       delay: ${NOVA_RETRY_DELAY:500ms}

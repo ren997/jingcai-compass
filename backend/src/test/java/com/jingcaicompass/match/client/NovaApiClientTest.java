@@ -96,7 +96,8 @@ class NovaApiClientTest {
     void producesVerifiableSignatureHeaders() throws Exception {
         KeyPair keyPair = generateKeyPair();
         String privateKeyBase64 = Base64.getEncoder().encodeToString(keyPair.getPrivate().getEncoded());
-        NovaApiClient client = new NovaApiClient(null, properties(API_KEY, privateKeyBase64), null);
+        NovaApiClient client = new NovaApiClient(
+                null, null, properties(API_KEY, privateKeyBase64), null);
 
         Map<String, String> headers = client.signatureHeaders(Map.of("date", "2026-10-21"), 1700000000000L);
 
@@ -133,6 +134,7 @@ class NovaApiClientTest {
                 privateKey,
                 Duration.ofSeconds(5),
                 Duration.ofSeconds(20),
+                Duration.ofSeconds(60),
                 new NovaApiProperties.RetryProperties(2, Duration.ofMillis(500)),
                 0
         );

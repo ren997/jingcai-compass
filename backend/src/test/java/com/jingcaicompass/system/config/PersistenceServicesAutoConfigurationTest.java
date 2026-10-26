@@ -18,6 +18,7 @@ import com.jingcaicompass.admin.service.AdminPredictionStatusQueryService;
 import com.jingcaicompass.admin.service.AdminSyncRunQueryService;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
 import com.jingcaicompass.audit.service.AuditLogService;
+import com.jingcaicompass.backtest.mapper.OddsHistoryArchiveMapper;
 import com.jingcaicompass.data.job.DataPipelineSyncJob;
 import com.jingcaicompass.data.mapper.DataProviderMapper;
 import com.jingcaicompass.data.mapper.DataSyncRunMapper;
@@ -118,6 +119,7 @@ class PersistenceServicesAutoConfigurationTest {
             .withBean(MatchResultFactMapper.class, () -> mock(MatchResultFactMapper.class))
             .withBean(SportteryPoolSnapshotMapper.class, () -> mock(SportteryPoolSnapshotMapper.class))
             .withBean(AsianOddsSnapshotMapper.class, () -> mock(AsianOddsSnapshotMapper.class))
+            .withBean(OddsHistoryArchiveMapper.class, () -> mock(OddsHistoryArchiveMapper.class))
             .withBean(PredictionMapper.class, () -> mock(PredictionMapper.class))
             .withBean(PredictionSnapshotMapper.class, () -> mock(PredictionSnapshotMapper.class))
             .withBean(SettlementMapper.class, () -> mock(SettlementMapper.class))

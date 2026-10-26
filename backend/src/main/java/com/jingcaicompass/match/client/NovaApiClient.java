@@ -64,15 +64,25 @@ public class NovaApiClient {
     private long nextSlotNanos = 0L;
 
     private final RestClient restClient;
+    /**
+     * 历史赔率专用客户端（读超时更长）。
+     *
+     * <p>签名、限速与重试必须与实时共用同一份实现——历史补采同样吃 30 次/分钟的额度，
+     * 而且签名规则一旦分叉就会出现「实时能签、历史 401」这种只在一侧复现的问题。
+     * 因此这里只换传输层（超时），其余逻辑一律复用。</p>
+     */
+    private final RestClient historyRestClient;
     private final NovaApiProperties properties;
     private final ProviderHttpExecutor httpExecutor;
 
     public NovaApiClient(
             @Qualifier("novaApiRestClient") RestClient restClient,
+            @Qualifier("novaApiHistoryRestClient") RestClient historyRestClient,
             NovaApiProperties properties,
             ProviderHttpExecutor httpExecutor
     ) {
         this.restClient = restClient;
+        this.historyRestClient = historyRestClient;
         this.properties = properties;
         this.httpExecutor = httpExecutor;
     }
@@ -85,6 +95,29 @@ public class NovaApiClient {
      * @param params       业务查询参数；可为空
      */
     public ProviderHttpResponse get(String providerCode, String path, Map<String, String> params) {
+        return get(restClient, providerCode, path, params);
+    }
+
+    /**
+     * 以 GET 调用历史类接口，使用更长的读超时。
+     *
+     * <p>只给 {@code /nova/tf/odds-history} 这类「整场全史」接口用：实测老场次响应 20.8s / 388KB，
+     * 而实时接口都在 1~2s 内返回。把所有请求都放宽到 60s 会让实时同步的卡死检测一起变钝。</p>
+     */
+    public ProviderHttpResponse getHistory(String providerCode, String path, Map<String, String> params) {
+        if (historyRestClient == null) {
+            // 未装配专用客户端时退化为通用超时：宁可慢一点失败，也不要在运行期抛 NPE。
+            return get(restClient, providerCode, path, params);
+        }
+        return get(historyRestClient, providerCode, path, params);
+    }
+
+    private ProviderHttpResponse get(
+            RestClient client,
+            String providerCode,
+            String path,
+            Map<String, String> params
+    ) {
         awaitPacingSlot();
         Map<String, String> encoded = encodeValues(params);
         String requestPath = buildRequestPath(path, encoded);
@@ -94,7 +127,7 @@ public class NovaApiClient {
                 properties.retry().delay()
         );
         ProviderHttpResponse response = httpExecutor.get(
-                restClient,
+                client,
                 providerCode,
                 ProviderHttpRequest.of(requestPath, headers),
                 policy,

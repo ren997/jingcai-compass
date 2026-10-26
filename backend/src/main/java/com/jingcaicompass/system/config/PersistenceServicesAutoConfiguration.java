@@ -22,6 +22,8 @@ import com.jingcaicompass.admin.service.AdminSportteryResultSyncServiceImpl;
 import com.jingcaicompass.admin.service.AdminManualMatchResultService;
 import com.jingcaicompass.admin.service.AdminManualMatchResultServiceImpl;
 import com.jingcaicompass.audit.mapper.AuditLogMapper;
+import com.jingcaicompass.backtest.mapper.OddsHistoryArchiveMapper;
+import com.jingcaicompass.backtest.service.BacktestArchiveService;
 import com.jingcaicompass.admin.mapper.AdminPredictionStatusMapper;
 import com.jingcaicompass.audit.service.AuditLogService;
 import com.jingcaicompass.audit.service.AuditLogServiceImpl;
@@ -70,6 +72,7 @@ import com.jingcaicompass.odds.client.AsianModelProperties;
 import com.jingcaicompass.odds.client.AsianOddsAggregationProperties;
 import com.jingcaicompass.odds.client.AsianOddsProviderProperties;
 import com.jingcaicompass.odds.job.AsianOddsSyncJob;
+import com.jingcaicompass.odds.client.NovaApiHistoryClient;
 import com.jingcaicompass.odds.mapper.AsianOddsSnapshotMapper;
 import com.jingcaicompass.odds.service.ActiveAsianOddsProvider;
 import com.jingcaicompass.odds.service.AsianOddsPayloadMapper;
@@ -127,6 +130,7 @@ import com.jingcaicompass.statistics.service.StatisticsQueryServiceImpl;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Clock;
 import javax.sql.DataSource;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -869,6 +873,28 @@ public class PersistenceServicesAutoConfiguration {
     @ConditionalOnMissingBean(AuditLogService.class)
     AuditLogService auditLogService(AuditLogMapper auditLogMapper) {
         return new AuditLogServiceImpl(auditLogMapper);
+    }
+
+    /**
+     * 回测归档服务。
+     *
+     * <p>{@code ObjectProvider<NovaApiHistoryClient>} 而不是直接注入：历史赔率客户端只在
+     * {@code app.asian-odds.provider=NOVA_API} 时存在，而归档服务本身要与数据源同时可用
+     * （管理端要能看到「归档失败」的记录）。真正需要客户端时才取，缺失时由服务自己抛
+     * 明确的错误，而不是让整个上下文起不来。</p>
+     */
+    @Bean
+    @ConditionalOnMissingBean(BacktestArchiveService.class)
+    BacktestArchiveService backtestArchiveService(
+            OddsHistoryArchiveMapper oddsHistoryArchiveMapper,
+            ObjectMapper objectMapper,
+            ObjectProvider<NovaApiHistoryClient> novaApiHistoryClientProvider
+    ) {
+        return new BacktestArchiveService(
+                oddsHistoryArchiveMapper,
+                objectMapper,
+                novaApiHistoryClientProvider
+        );
     }
 
     @Bean

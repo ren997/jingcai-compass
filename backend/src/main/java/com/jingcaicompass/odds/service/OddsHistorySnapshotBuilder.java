@@ -292,7 +292,7 @@ public final class OddsHistorySnapshotBuilder {
             if (!point.isObject()) {
                 continue;
             }
-            Instant at = parseInstant(text(point, "updateTime"));
+            Instant at = parseUpstreamInstant(text(point, "updateTime"));
             BigDecimal price = decimal(point, "odd");
             if (at == null || price == null || at.isAfter(decisionAt)) {
                 continue;
@@ -309,8 +309,11 @@ public final class OddsHistorySnapshotBuilder {
      *
      * <p>带偏移（{@code Z} / {@code +08:00}）按自身偏移解释；无偏移视为<b>北京时间</b>。
      * 这条判定不能简化成「一律按 UTC」——见类注释的第二条纪律。</p>
+     *
+     * <p>包内可见，供 {@link OddsHistoryPayloadTrimmer} 计算序列首末点时刻：
+     * 时区规则只能有一份实现，两处各写一份迟早出现「归档记的时刻」与「切片用的时刻」不一致。</p>
      */
-    private static Instant parseInstant(String value) {
+    static Instant parseUpstreamInstant(String value) {
         if (!StringUtils.hasText(value)) {
             return null;
         }

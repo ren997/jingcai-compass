@@ -3,6 +3,12 @@
 -- 四张表，各自独立成表而不是复用既有权表，理由逐条写在下面每段的开头。
 -- 本迁移刻意不含任何对 settlements / predictions 的写法：
 -- 回测结论绝不允许流进线上统计口径（见 ck_backtest_* 与 BacktestMigrationTest 的静态断言）。
+--
+-- 定长键（run_key / group_key / payload_hash）一律 VARCHAR 而不是 CHAR：
+-- PG 的 CHAR(n) 入库补空格、出库原样返回补过空格的值，于是 Java 侧「写进去的 32 位十六进制」
+-- 与「读回来的 32 位 + N 个空格」不再是同一个字符串。这三列都当 Map 键与内存中的指纹比对，
+-- 一旦读回带空格，查表会静默 miss（表现为「明明有归档却判定未采过」），
+-- 而 CHAR 在 PG 里既无空间优势也无性能优势，没有任何理由承担这个风险。
 
 -- ---------------------------------------------------------------------------
 -- 1) odds_history_archive：外部事实，只追加
@@ -27,7 +33,7 @@ CREATE TABLE odds_history_archive (
     http_status         INTEGER,
     upstream_code       INTEGER,
     payload             JSONB,
-    payload_hash        CHAR(64),
+    payload_hash        VARCHAR(64),
     bookmaker_count     INTEGER,
     point_count         INTEGER,
     series_start_at     TIMESTAMPTZ,
@@ -102,7 +108,7 @@ COMMENT ON COLUMN odds_history_archive.series_start_at IS
 -- 单独建表会让人误以为参数组可以跨 run 复用，而「同一组阈值换一批场次」恰恰是不可比的。
 CREATE TABLE backtest_runs (
     id                      BIGSERIAL PRIMARY KEY,
-    run_key                 CHAR(32)     NOT NULL,
+    run_key                 VARCHAR(32)  NOT NULL,
     run_name                VARCHAR(128) NOT NULL,
     run_status              VARCHAR(24)  NOT NULL,
     run_stage               VARCHAR(24)  NOT NULL,
@@ -196,7 +202,7 @@ COMMENT ON COLUMN backtest_runs.git_sha IS
 CREATE TABLE backtest_cases (
     id                      BIGSERIAL PRIMARY KEY,
     run_id                  BIGINT       NOT NULL,
-    group_key               CHAR(16)     NOT NULL,
+    group_key               VARCHAR(16)  NOT NULL,
     external_match_id       VARCHAR(64)  NOT NULL,
     match_id                BIGINT       NOT NULL,
     archive_id              BIGINT       NOT NULL,
@@ -362,7 +368,7 @@ COMMENT ON COLUMN backtest_cases.frozen_captured_at IS
 CREATE TABLE backtest_metrics (
     id                  BIGSERIAL PRIMARY KEY,
     run_id              BIGINT       NOT NULL,
-    group_key           CHAR(16)     NOT NULL,
+    group_key           VARCHAR(16)  NOT NULL,
     market_scope        VARCHAR(32)  NOT NULL,
     case_count          INTEGER      NOT NULL DEFAULT 0,
     decided_count       INTEGER      NOT NULL DEFAULT 0,

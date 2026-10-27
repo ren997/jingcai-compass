@@ -96,6 +96,8 @@
 - **口径版本号四个**：`aggregation_version` / `selector_version` / `model_version` / `builder_version`。不 bump 不是报错，而是**两份结论看起来同源**。`selector` 排序第一键是对齐大小球主盘（10-22「13/13 全小球」的修复），回测用不含该键的实现则冻结行不同而断言全过。
 - **归档必须自建 `odds_history_archive`，不复用 `raw_data_payloads`**（raw 按 run 计当前态、`data_type` 有 CHECK 白名单）。**归档失败分四档**：`SUCCESS`/`NO_HISTORY`(404)/`NO_QUOTE_YET`(空序列) 可负缓存；`RETRYABLE_FAILURE` 必重采；`PERMANENT_FAILURE`(400/401/403) 重采只重复错误。**HTTP 200 + 体里 `code=500`** 是上游偶发（换 `idEvent` 即 200），`ProviderHttpExecutor` 看不到响应体。
 - **`CHAR(n)` 出库补空格**会让指纹查表静默 miss（`run_key`/`group_key`/`payload_hash` 一律 VARCHAR）。静态断言 `doesNotContain("CHAR(32)")` 会被 `VARCHAR(32)` 命中，得用 `(?<!VAR)CHAR\(`。核对已应用版本与文件是否同源：`tools/backtest-schema-verify/V29ChecksumCheck.java`（按 Flyway `ChecksumCalculator` 逐行 `readLine`+CRC32 重算）。
+- **候选只来自 `matches` 表，回溯范围 = 赛程采集范围，不是接口回溯范围**（接口赛程能给 16 个月，但本库只有 2026-10 的 91 场可用：7/8 月 48 行无 `external_match_id`/无球队 ID，9 月 0 行）。想跑更早月份必须先回填赛程，而**管理端没有「按日期段同步赛程」的入口**。`dateTo` 硬上限是「昨天」（当日无最终赛果）。
+- **归档三桶必须恰好划分 `processed`**（`archive_reused+fetched+failed = processed`，`ck_backtest_runs_counts`）。失败场次**不能**同时进 `fetched` 与 `failed`（复用10+新采40+失败1=51 撞 processed=50，在批末 flush 抛错、run 变 FAILED，现场已归档几十场，像归档阶段崩了）。**只在真有补采失败时暴露**，全复用/全成功掩得住。互斥收在 `ArchiveCounter.add()`；负缓存复用进「内存里的 unavailable」供 PARTIAL 判定，不落库。
 - **`RestClient` 无 per-call 读超时**（工厂级）→ 历史 60s 与实时 20s 只能拆两个 bean。
 - **持久化服务只加 `@ConditionalOnBean(DataSource)` 不够**：组件扫描期恒 false，必须 `PersistenceServicesAutoConfiguration` 补 `@Bean`；controller 侧用 `ObjectProvider` 惰性取，否则无 DataSource 的测试上下文起不来。
 - **前端**：参数组固定三行（合计/让球/大小球）——`ALL` 不是两市场相加；默认区间取**最近 30 天**而非「回溯起点到今天」（后者 129 天超 120 上限，一进页面预估按钮就灰，写测试时才暴露）；预算确认是人的动作，预估不自作主张带 `confirmBudget`；`PARTIAL` 用警告色而非成功色；antd 两字按钮自动插空格（「续 跑」），测试断言用正则。

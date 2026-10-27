@@ -2437,6 +2437,66 @@ tbody tr.is-best-group th {
   color: #1c7047;
 }
 
+/**
+ * 参数组定义。`groupKey` 是创建时随便起的名字（baseline / tight / A），
+ * 名字本身不含信息，必须把四个阈值铺出来才知道这组严在哪。
+ *
+ * 放在表格外面而不是「参数组」列里：实测放进单元格会把那一列撑宽，
+ * 把「口径」「加权命中率」挤成两行。
+ */
+.backtest-param-defs {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e2eae4;
+  border-radius: 10px;
+  background: #fbfdfb;
+}
+
+.backtest-param-defs h3 {
+  margin: 0 0 6px;
+  color: #40544a;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.backtest-param-defs ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.backtest-param-defs li {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) 1fr;
+  gap: 2px 16px;
+  align-items: start;
+  padding: 4px 0;
+}
+
+.backtest-param-defs li strong {
+  color: #1f3a2c;
+  font-size: 12.5px;
+  font-weight: 650;
+}
+
+.backtest-param-thresholds span {
+  display: block;
+  color: #53645a;
+  font-size: 11.5px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/**
+ * 指标表全是短数值，折行只会更难读：「80 场 / 40 腿」被挤成
+ * 「80 场 / 40」+「腿」两行，「大小球」被拆成「大小」+「球」。
+ * 宁可让表格横向滚动（外层有 .table-scroll），也不要折断一个数字。
+ */
+.backtest-metrics-table th,
+.backtest-metrics-table td {
+  white-space: nowrap;
+}
+
 .detail-section table small {
   display: block;
   margin-top: 2px;

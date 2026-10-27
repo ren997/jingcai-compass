@@ -199,7 +199,8 @@ export type BacktestRunVo = {
   dateTo: string;
   leagueNames: string[];
   decisionLeadMinutes: number;
-  parameterSets: Array<Record<string, unknown>>;
+  /** 本次运行的参数组输入快照。指标表用它把 groupKey 翻译成四个阈值。 */
+  parameterSets: BacktestParameterSet[];
   providerCode: string;
   modelVersion: string;
   selectorVersion: string;

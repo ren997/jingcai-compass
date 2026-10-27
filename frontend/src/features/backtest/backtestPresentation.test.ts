@@ -9,6 +9,7 @@ import {
   formatProfit,
   formatRate,
   formatScore,
+  parameterSetThresholds,
   scopeMetrics,
 } from './backtestPresentation';
 
@@ -159,5 +160,26 @@ describe('backtest presentation', () => {
     expect(scopeMetrics(metrics, 'baseline', 'ALL')).toBeDefined();
     expect(scopeMetrics(metrics, 'baseline', 'ASIAN_TOTAL_GOALS')).toBeUndefined();
     expect(scopeMetrics(metrics, 'missing', 'ALL')).toBeUndefined();
+  });
+
+  it('turns a group name into the thresholds it actually stands for', () => {
+    expect(parameterSetThresholds({
+      groupKey: 'tight',
+      highConfidenceMargin: 0.08,
+      mediumConfidenceMargin: 0.12,
+      highDirectionSignal: 0.09,
+      mediumDirectionSignal: 0.04,
+    })).toEqual([
+      'HIGH 抽水≤0.080 方向≥0.090',
+      'MED 抽水≤0.120 方向≥0.040',
+    ]);
+  });
+
+  it('renders a placeholder instead of NaN when a threshold is missing', () => {
+    // 续跑时从库里还原的 parameter_sets 是 JSONB，缺字段不该渲染成 NaN。
+    expect(parameterSetThresholds({ groupKey: 'x' } as never)).toEqual([
+      'HIGH 抽水≤— 方向≥—',
+      'MED 抽水≤— 方向≥—',
+    ]);
   });
 });

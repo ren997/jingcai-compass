@@ -1,5 +1,10 @@
 import { Alert } from 'antd';
-import type { BacktestComparisonVo, BacktestMetricsVo, BacktestSkipReason } from '../../services/backtest';
+import type {
+  BacktestComparisonVo,
+  BacktestMetricsVo,
+  BacktestParameterSet,
+  BacktestSkipReason,
+} from '../../services/backtest';
 import { BACKTEST_MARKET_SCOPES } from '../../services/backtest';
 import {
   backtestMarketScopeLabels,
@@ -8,6 +13,7 @@ import {
   formatProfit,
   formatRate,
   formatScore,
+  parameterSetThresholds,
   skipReasonLabel,
 } from './backtestPresentation';
 
@@ -15,6 +21,11 @@ type BacktestMetricsTableProps = {
   comparison: BacktestComparisonVo | undefined;
   /** 只有终态才有指标；中间态显示等待文案而不是空表。 */
   isReady: boolean;
+  /**
+   * 参数组定义。`groupKey` 是用户自己起的名字（baseline / tight / 随便什么），
+   * 光看名字无法知道这一组严在哪，所以四个阈值要一并显示出来。
+   */
+  parameterSets?: BacktestParameterSet[];
 };
 
 /**
@@ -24,7 +35,11 @@ type BacktestMetricsTableProps = {
  * 放进同一个池子各算一次。合成一行会让人以为合计命中率是两市场命中率的平均，
  * 而实际上两个市场的注数并不相等。</p>
  */
-export default function BacktestMetricsTable({ comparison, isReady }: BacktestMetricsTableProps) {
+export default function BacktestMetricsTable({
+  comparison,
+  isReady,
+  parameterSets,
+}: BacktestMetricsTableProps) {
   if (!isReady) {
     return (
       <section className="detail-section">
@@ -82,14 +97,14 @@ export default function BacktestMetricsTable({ comparison, isReady }: BacktestMe
       )}
 
       <div className="table-scroll">
-        <table>
+        <table className="backtest-metrics-table">
           <thead>
             <tr>
               <th>参数组</th>
               <th>口径</th>
               <th>
                 样本（场）
-                <small className="backtest-th-note">/ 已结算（腿）</small>
+                <small className="backtest-th-note">已结算（腿）</small>
               </th>
               <th>方向（腿）</th>
               <th>命中率</th>
@@ -126,6 +141,33 @@ export default function BacktestMetricsTable({ comparison, isReady }: BacktestMe
           </tbody>
         </table>
       </div>
+
+      {/*
+        参数组定义放在表格外面，不塞进「参数组」列：那一列会被两行阈值撑宽，
+        把「口径」「加权命中率」挤到换行（实测截图确认过）。
+        组名是用户自己起的，光看名字无法知道这组严在哪，所以必须铺出来。
+      */}
+      {parameterSets && parameterSets.length > 0 ? (
+        <div className="backtest-param-defs">
+          <h3>参数组定义</h3>
+          <ul>
+            {parameterSets.map((set) => (
+              <li key={set.groupKey}>
+                <strong>{set.groupKey}</strong>
+                <span className="backtest-param-thresholds">
+                  {parameterSetThresholds(set).map((line) => (
+                    <span key={line}>{line}</span>
+                  ))}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="backtest-hint">
+            组名是创建回测时自己填的标识，没有固定含义。阈值只决定「发不发方向」，不决定「判什么」——
+            同一场比赛，各组给出的方向完全一致，门槛高的那组只是少发几条。
+          </p>
+        </div>
+      ) : null}
 
       <details className="backtest-notes">
         <summary>口径说明与跳过分布</summary>

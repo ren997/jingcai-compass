@@ -3,6 +3,7 @@ import type {
   BacktestDecisionStage,
   BacktestMarketScope,
   BacktestMetricsVo,
+  BacktestParameterSet,
   BacktestRunStatus,
   BacktestRunVo,
   BacktestSkipReason,
@@ -232,14 +233,20 @@ export function backtestVersionSummary(run: BacktestRunVo) {
   ].join(' · ');
 }
 
-/** 参数组的四个阈值摘要，用于表格列。 */
-export function formatParameterSet(parameterSet: Record<string, unknown>) {
-  const pick = (key: string) => {
-    const value = parameterSet[key];
-    return typeof value === 'number' ? value.toFixed(4) : String(value ?? '—');
-  };
-  return `margin ${pick('highConfidenceMargin')}/${pick('mediumConfidenceMargin')}`
-    + ` · signal ${pick('highDirectionSignal')}/${pick('mediumDirectionSignal')}`;
+/**
+ * 把一个参数组的四个阈值翻成两行文字。
+ *
+ * <p>{@code groupKey} 是创建时随便起的名字（baseline / tight / 严格 / A），
+ * 名字本身不含任何信息。不把阈值铺出来，看表的人只能猜两组差在哪，
+ * 或者误以为是两种不同的算法（其实是同一套判定、只是门槛不同）。</p>
+ */
+export function parameterSetThresholds(set: BacktestParameterSet): string[] {
+  const f = (value: number | undefined) =>
+    typeof value === 'number' && Number.isFinite(value) ? value.toFixed(3) : '—';
+  return [
+    `HIGH 抽水≤${f(set.highConfidenceMargin)} 方向≥${f(set.highDirectionSignal)}`,
+    `MED 抽水≤${f(set.mediumConfidenceMargin)} 方向≥${f(set.mediumDirectionSignal)}`,
+  ];
 }
 
 /**

@@ -1,7 +1,28 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import type { BacktestComparisonVo, BacktestMetricsVo } from '../../services/backtest';
+import type {
+  BacktestComparisonVo,
+  BacktestMetricsVo,
+  BacktestParameterSet,
+} from '../../services/backtest';
 import BacktestMetricsTable from './BacktestMetricsTable';
+
+const parameterSets: BacktestParameterSet[] = [
+  {
+    groupKey: 'baseline',
+    highConfidenceMargin: 0.1,
+    mediumConfidenceMargin: 0.16,
+    highDirectionSignal: 0.075,
+    mediumDirectionSignal: 0.025,
+  },
+  {
+    groupKey: 'tight',
+    highConfidenceMargin: 0.08,
+    mediumConfidenceMargin: 0.12,
+    highDirectionSignal: 0.09,
+    mediumDirectionSignal: 0.04,
+  },
+];
 
 function metrics(overrides: Partial<BacktestMetricsVo> = {}): BacktestMetricsVo {
   return {
@@ -52,9 +73,29 @@ describe('BacktestMetricsTable', () => {
     render(<BacktestMetricsTable comparison={comparison} isReady />);
     // 「样本 80 / 已结算 40」并排会被读成「只算了一半」，而 80 是场次、40 是腿。
     expect(screen.getByText('样本（场）')).toBeInTheDocument();
-    expect(screen.getByText('/ 已结算（腿）')).toBeInTheDocument();
+    expect(screen.getByText('已结算（腿）')).toBeInTheDocument();
     expect(screen.getByText('方向（腿）')).toBeInTheDocument();
     expect(screen.getAllByText('12 场 / 6 腿').length).toBeGreaterThan(0);
+  });
+
+  it('spells out what each parameter group means, once per group', () => {
+    render(
+      <BacktestMetricsTable comparison={comparison} isReady parameterSets={parameterSets} />,
+    );
+    // groupKey 是创建时起的名字，看名字看不出两组差在哪，所以阈值必须铺出来。
+    expect(screen.getByRole('heading', { name: '参数组定义' })).toBeInTheDocument();
+    expect(screen.getByText('HIGH 抽水≤0.100 方向≥0.075')).toBeInTheDocument();
+    expect(screen.getByText('MED 抽水≤0.160 方向≥0.025')).toBeInTheDocument();
+    expect(screen.getByText('HIGH 抽水≤0.080 方向≥0.090')).toBeInTheDocument();
+    // 阈值放在表格外的定义区，不随每组三行重复，也不把「参数组」列撑宽。
+    expect(screen.getAllByText('HIGH 抽水≤0.100 方向≥0.075')).toHaveLength(1);
+  });
+
+  it('omits the thresholds instead of inventing them', () => {
+    // 公开端不返回 parameterSets。缺定义时不显示，不编一组默认值。
+    render(<BacktestMetricsTable comparison={comparison} isReady />);
+    expect(screen.queryByText(/抽水≤/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '参数组定义' })).not.toBeInTheDocument();
   });
 
   it('explains why a group is the best instead of asserting it', () => {

@@ -223,6 +223,19 @@ describe('BacktestRunDetailPage', () => {
     expect(screen.queryByText(/跳过分布/)).not.toBeInTheDocument();
   });
 
+  it('shows the parameter group thresholds next to the group name', async () => {
+    // 页面只显示 groupKey（baseline）时，没人知道这组严在哪。run 详情里存着四个阈值，
+    // 必须传到指标表；漏传不会报错，只是页面上永远少一行解释。
+    renderDetail();
+
+    // 等阈值本身，而不是等「参数组指标」标题：指标未就绪时那个标题也会渲染，
+    // 用标题当等待条件会在表格还没出来时就通过。
+    await waitFor(() => {
+      expect(screen.getByText('HIGH 抽水≤0.100 方向≥0.075')).toBeInTheDocument();
+    });
+    expect(screen.getByText('MED 抽水≤0.160 方向≥0.025')).toBeInTheDocument();
+  });
+
   it('prints the skip distribution when the column is present', async () => {
     stubApi({
       run: run(),

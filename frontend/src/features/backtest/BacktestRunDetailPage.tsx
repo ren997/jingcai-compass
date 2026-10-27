@@ -88,7 +88,11 @@ export default function BacktestRunDetailPage() {
           {comparisonQuery.isError && (
             <Alert type="error" showIcon message={`指标读取失败：${comparisonQuery.error.message}`} />
           )}
-          <BacktestMetricsTable comparison={comparisonQuery.data} isReady={metricsReady} />
+          <BacktestMetricsTable
+            comparison={comparisonQuery.data}
+            isReady={metricsReady}
+            parameterSets={run.parameterSets}
+          />
 
           <BacktestCasesTable
             page={casesQuery.data}

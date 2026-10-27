@@ -179,7 +179,8 @@ export default function BacktestCasesTable({
                         {item.frozenTotalLine !== null && ` · 大小 ${formatAsianLine(item.frozenTotalLine)}`}
                       </td>
                       <td>
-                        {formatProbability(item.lambdaHome)} / {formatProbability(item.lambdaAway)}
+                        {/* λ 是期望进球数，不是概率：按 formatProbability 渲染会变成「196.1%」。 */}
+                        {formatDecimal(item.lambdaHome)} / {formatDecimal(item.lambdaAway)}
                       </td>
                       <td>
                         {formatScore4(item.handicapDispersion)} / {formatScore4(item.totalsDispersion)}
@@ -213,6 +214,11 @@ export default function BacktestCasesTable({
 
 function formatScore4(value: number | null | undefined) {
   return value === null || value === undefined ? '—' : value.toFixed(4);
+}
+
+/** 无量纲小数的直白写法（λ 期望进球数）。两位小数够读，多给反而看不出量级。 */
+function formatDecimal(value: number | null | undefined) {
+  return value === null || value === undefined ? '—' : value.toFixed(2);
 }
 
 /** 两个市场的置信度并列；只有一个方向时只显示那个。 */

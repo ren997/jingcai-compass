@@ -1,7 +1,7 @@
 # 历史回测：设计与改造方案
 
-> 状态：P1~P6 已实现，整链已在真实库跑通（10 场 / 2 参数组）
-> 版本：0.2 · 2026-10-26
+> 状态：P1~P6 已实现；真实库上跑过 10 场（链路验证）与 81 场（十月全月）
+> 版本：0.3 · 2026-10-27
 > 范围：在既有 `backend` 上增量建设，不新建工程、不改动生产预测链路
 > 相关：`docs/asian-model-design.md`（模型与阈值来源）、`docs/data-sources-novaapi.md`（历史赔率接口）、`backend/src/main/resources/db/migration/V29__add_historical_backtest.sql`
 
@@ -294,6 +294,35 @@ ROI 降序 → Brier 升序 → `settled` 降序。**判定理由必须一起返
   3. `@Select` 注解查询**不应用** `@TableField(typeHandler)`，`payload` 这个
      `Map<String,Object>` 字段读回来是空 → 切片恒 0 行、切场全 `MISSING_ROWS`，
      而归档状态、点数、庄家数全部正常。现在改用 `SELECT payload::text` 再 Jackson 解析。
+- **同一类坑踩了第二次，这次代价是整页白屏。** 归档的 `payload` 修好之后，
+  `backtest_metrics` 的 `skip_reason_counts` / `metrics_json` 走的还是
+  `@Select ... SELECT *`，于是两列读回 `null`——而写库是正常的（MP 的 insert 会用
+  typeHandler），所以库里一直有值、接口一直返回 `null`。表现是详情页
+  `Object.keys(null)` 抛 TypeError，被错误边界接住渲染成整页「页面报错」，
+  用户看不出问题出在一列附注上。修法：`selectByRunId` 改成 default 方法里的
+  `selectList(wrapper)`，让 MyBatis-Plus 自己拼 SQL 从而用上 `autoResultMap`；
+  原来写在 SQL 里的排序（`group_key` + `ALL→让球→大小球`）挪到内存，行数上限 8×3。
+  `BacktestMetricsMappingTest` 用反射钉住两件事：`selectByRunId` 不许改回 `@Select`、
+  两个 jsonb 字段不许删 `typeHandler`。**这两件事都不会让编译失败**，
+  只会在真实库上让某一列悄悄变 null。
+  同类约定：`OddsHistoryArchiveMapper` 的两个 `SELECT *` 方法返回的实体，
+  `payload` 恒为 `null`，只读状态字段——已在该方法上写明。
+- **详情页还有两处「类型与实现对不上」的显示错误**（不是崩溃，但同样是读代码读不出来的）：
+  - `BacktestResultStatus` 前端声明成 `PENDING | SETTLED | VOID | NO_RESULT | FAILED`，
+    后端只产生 `PENDING | FINAL | VOID`——五个值里四个不存在，真实值 `FINAL` 反而不在集合里。
+    所以除 `=== 'PENDING'` 之外的判断全在猜。已按后端枚举改正，前端测试里的 fixture 也跟着改。
+  - 逐场明细的 λ（期望进球数 1.96 / 1.11）用 `formatProbability` 渲染成了
+    「196.1% / 111.0%」。λ 不是概率，改成两位小数直写。
+- **跳过分布里最大的一项是「两市场不自洽」，而它其实全是「λ 解不出来」。**
+  十月全月 80 场（baseline 组）交叉统计：`INFEASIBLE` 44 场 → skipReason
+  `INCONSISTENT_ASIAN_MARKETS`；`DECIDED` 32 场；`BOTH_MARKETS_REJECTED` 4 场
+  （3 低置信 + 1 跨庄分歧过大）。**44 场里没有一场是真的残差或邻线超限**。
+  这是 `INCONSISTENT_ASIAN_MARKETS` 有两个出口（`!feasible()` 与残差/邻线超限）
+  带来的后果：逐场明细的「判定阶段」列能分开，但**汇总分布分不开**，
+  看分布会误以为「市场在打架」，实际是 `ImpliedPoissonModel` 的四种不可行之一
+  （`INVALID_INPUT` / `TOTALS_PROBABILITY_OUT_OF_RANGE` / `LAMBDA_SPLIT_IMPOSSIBLE` /
+  `HANDICAP_PROBABILITY_OUT_OF_RANGE`），目前这个原因没有落库。
+  样本利用率只有 40% 的根因在这里，不在上游没开价——要查得往 λ 反解那一步看。
 - **`BacktestMigrationIT` 未真跑。** 本机无 Docker，它只在 `-Pintegration` 下存在。
   生产库的 V29 是逐条执行验证的（见 `tools/backtest-schema-verify/`），
   但 CI 的空库全量重放没走过。

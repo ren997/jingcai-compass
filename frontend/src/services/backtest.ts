@@ -119,7 +119,18 @@ export type BacktestMarketScope = (typeof BACKTEST_MARKET_SCOPES)[number];
 
 export type BacktestOrientation = 'HOME_COVER' | 'AWAY_COVER' | 'OVER' | 'UNDER';
 
-export type BacktestResultStatus = 'PENDING' | 'SETTLED' | 'VOID' | 'NO_RESULT' | 'FAILED';
+/**
+ * 一场样本的赛果状态。
+ *
+ * <p>只有三个值，与 `settlements.settlement_status` 刻意不同：这里回答「这行怎么算收益」，
+ * 市场级输赢另有两列。`VOID` 是「比赛作废」而不是「走盘」——走盘在亚盘里是常态
+ * （四分之一盘打平），它属于 `FINAL` 下的 `PUSH`。</p>
+ *
+ * <p>这里曾经写成 `PENDING | SETTLED | VOID | NO_RESULT | FAILED`：五个值里有四个后端根本
+ * 不产生，而真实值 `FINAL` 反而不在集合里。类型和实现各说各话时不会有任何编译错误——
+ * 只有读代码的人会被误导，于是 `resultStatus === 'PENDING'` 之外的分支全凭猜。</p>
+ */
+export type BacktestResultStatus = 'PENDING' | 'FINAL' | 'VOID';
 
 export type BacktestSettlementStatus = 'HIT' | 'MISS' | 'PUSH' | 'HALF_WIN' | 'HALF_LOSS' | 'VOID';
 
@@ -291,7 +302,14 @@ export type BacktestMetricsVo = {
   /** market − model：正数才表示模型优于市场。负值是合法结论。 */
   brierDelta: number | null;
   brierSampleSize: number;
-  skipReasonCounts: Record<string, number>;
+  /**
+   * 各跳过原因的场次数。
+   *
+   * <p>允许 null：这一列是 jsonb，后端一旦用原生 `@Select` 读取就会绕过 jsonb typeHandler
+   * 读回 null（`autoResultMap` 只对 MyBatis-Plus 自己拼的 SQL 生效）。类型上声明成非空，
+   * 只会让下游忘记判空，然后在渲染时炸掉整页——所以这里如实写 null。</p>
+   */
+  skipReasonCounts: Record<string, number> | null;
   metricsJson: Record<string, unknown> | null;
   computedAt: string | null;
 };

@@ -1,5 +1,5 @@
 import { Alert } from 'antd';
-import type { BacktestComparisonVo, BacktestMetricsVo } from '../../services/backtest';
+import type { BacktestComparisonVo, BacktestMetricsVo, BacktestSkipReason } from '../../services/backtest';
 import { BACKTEST_MARKET_SCOPES } from '../../services/backtest';
 import {
   backtestMarketScopeLabels,
@@ -137,14 +137,21 @@ export default function BacktestMetricsTable({ comparison, isReady }: BacktestMe
           <li>合计口径独立计算，不等于让球与大小球相加：两个市场注数不等。</li>
           <li>样本为 0 时命中率与 ROI 显示「—」而不是 0%：没下注和下了不中不是一回事。</li>
         </ul>
-        {rows.filter(({ metrics }) => Object.keys(metrics.skipReasonCounts).length > 0).map(({ groupKey, metrics }) => (
-          <p key={`skip-${groupKey}-${metrics.marketScope}`}>
-            {groupKey} · {backtestMarketScopeLabels[metrics.marketScope]} 跳过分布：
-            {Object.entries(metrics.skipReasonCounts).map(([reason, count]) => (
-              <span key={reason}>{skipReasonLabel(reason as never)} {count}；</span>
-            ))}
-          </p>
-        ))}
+        {rows
+          .map(({ groupKey, metrics }) => ({
+            groupKey,
+            metrics,
+            entries: skipEntries(metrics.skipReasonCounts),
+          }))
+          .filter(({ entries }) => entries.length > 0)
+          .map(({ groupKey, metrics, entries }) => (
+            <p key={`skip-${groupKey}-${metrics.marketScope}`}>
+              {groupKey} · {backtestMarketScopeLabels[metrics.marketScope]} 跳过分布：
+              {entries.map(([reason, count]) => (
+                <span key={reason}>{skipReasonLabel(reason)} {count}；</span>
+              ))}
+            </p>
+          ))}
       </details>
     </section>
   );
@@ -156,4 +163,19 @@ function profitTone(roi: number | null | undefined) {
     return 'muted';
   }
   return roi > 0 ? 'positive' : 'negative';
+}
+
+/**
+ * 跳过分布的键值对，缺失时退化成空数组。
+ *
+ * <p>「跳过分布」是可选信息：它解释样本为什么少，但少一条解释不该让整页打不开。
+ * 这一列是 jsonb，后端读取路径一旦绕过 jsonb typeHandler 就整列读回 null，
+ * 而直接 `Object.keys(null)` 抛的是 TypeError，会被错误边界接住渲染成整页白屏——
+ * 用户看到的只是「页面报错」，看不出问题出在一列附注上。</p>
+ */
+function skipEntries(counts: Record<string, number> | null | undefined) {
+  if (!counts) {
+    return [] as Array<[BacktestSkipReason, number]>;
+  }
+  return Object.entries(counts) as Array<[BacktestSkipReason, number]>;
 }

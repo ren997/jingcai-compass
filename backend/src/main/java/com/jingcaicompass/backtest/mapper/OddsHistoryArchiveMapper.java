@@ -18,6 +18,11 @@ public interface OddsHistoryArchiveMapper extends BaseMapper<OddsHistoryArchiveE
      * <p>终局 = {@code SUCCESS} / {@code NO_HISTORY} / {@code NO_QUOTE_YET}；重采不会有不同结果。
      * {@code RETRYABLE_FAILURE} 与 {@code PERMANENT_FAILURE} 不在内：前者必须重采，
      * 后者要让人看见失败而不是被安静地复用。</p>
+     *
+     * <p><b>返回实体的 {@code payload} 字段在这里恒为 {@code null}，不要读它。</b>
+     * 这是 {@code SELECT *} + {@code @Select} 的原生映射，绕过了 jsonb typeHandler；
+     * 要载荷请用 {@link #selectPayloadTextById(Long)}。只读状态字段是安全的，
+     * 但在这条语句上加一个「顺手拿 payload」的改动，会拿到 null 且不报错。</p>
      */
     @Select("""
             SELECT *
@@ -54,6 +59,9 @@ public interface OddsHistoryArchiveMapper extends BaseMapper<OddsHistoryArchiveE
      *
      * <p>回测准备阶段一次性判定「哪些场次可以省掉 API 调用」，逐场查询会把这块变成 N 次往返；
      * 更重要的是逐场查询与「循环内发 API」写法几乎一样，很容易在后续改动里退化成 N+1。</p>
+     *
+     * <p>与 {@link #selectFinalByExternalMatchId} 同一约定：返回实体的 {@code payload} 恒为
+     * {@code null}，只读状态字段。</p>
      */
     @Select("""
             <script>

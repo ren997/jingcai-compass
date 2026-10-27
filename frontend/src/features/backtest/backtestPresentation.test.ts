@@ -50,7 +50,7 @@ const baseCase: BacktestCaseVo = {
   maxResidual: 1e-16,
   handicapGatePass: true,
   totalsGatePass: false,
-  resultStatus: 'SETTLED',
+  resultStatus: 'FINAL',
   homeScore: 2,
   awayScore: 1,
   handicapStatus: 'HIT',

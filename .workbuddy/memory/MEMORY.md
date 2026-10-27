@@ -9,7 +9,8 @@
 ## 流程与验证
 - 分支 `feat/<topic>`；同时只一个任务 `IN_PROGRESS`。迁移最高 **V29**（生产库已 v29，`db/migration/` 有 Java 版 V22，新建 SQL 先 `ls`）。
 - **「本地能启动」≠「CI 能过」**：CI 是空 PG16 + V1~V29 全量重放 + `stub` provider + 65 个 IT 主动撞约束。声明矛盾类缺陷只在这里暴露；无 Docker 就别加只在 CI 才暴露的约束。
-- 纯计算→单测；**迁移 / PG 专有约束 / 触发器→必须真实 PG16 跑过**。`mvn -o test` 零 Docker（**852** 项）；`*IT.java` 仅 `-Pintegration`。前端门禁：`vitest run`（**104**）+ `tsc -b` + `vite build`。
+- 纯计算→单测；**迁移 / PG 专有约束 / 触发器→必须真实 PG16 跑过**。`mvn -o test` 零 Docker（**852** 项）；`*IT.java` 仅 `-Pintegration`。前端门禁：`vitest run`（**110**）+ `tsc -b` + `vite build`。
+- **`cmd | tail && echo OK` 判断不出失败**：管道退出码是 `tail` 的。必须 `cmd > log 2>&1; echo "exit=$?"`。已因此漏看过一次 `TS2739`。
 - **含明文库凭据的工具必须未跟踪或读环境变量**。**明文密码仍在本分支 `e260ca0`/`efb5953` 历史里，分支从未推送——合入前洗历史或轮换库密码。**
 - 触发器 `RAISE ... USING CONSTRAINT='x'` 的约束名**不进 JDBC message**，断言只能比主消息文本。
 - **`@Select` 不应用 `@TableField(typeHandler)`**（`autoResultMap` 生成的 resultMap 只被 MP 自己拼的 SQL 使用）。**已踩两次**：归档 `payload`（切片恒 0 行）、`backtest_metrics` 两个 jsonb 列（**详情页整页白屏**）。共同特征：**写库正常、读回 null、不报错**。修法：`col::text` + Jackson，或 default 方法里的 `selectList(wrapper)`。
@@ -82,6 +83,7 @@
 - **归档三桶必须恰好划分 `processed`**（`reused+fetched+failed = processed`）。失败场次**不能**同时进 `fetched` 与 `failed`（复用10+新采40+失败1=51 撞 processed=50，run 变 FAILED 像归档崩了）。**只在真有补采失败时暴露**。互斥收在 `ArchiveCounter.add()`。
 - **归档必须自建 `odds_history_archive`**。**失败分四档**：`SUCCESS`/`NO_HISTORY`/`NO_QUOTE_YET` 可负缓存；`RETRYABLE_FAILURE` 必重采；`PERMANENT_FAILURE` 重采只重复错误。**HTTP 200 + 体里 `code=500`** 是上游偶发。
 - **候选只来自 `matches` 表，回溯范围 = 赛程采集范围**（本库只有 2026-10 的 91 场可用，7/8 月 48 行无外部 ID，9 月 0 行）。**管理端没有「按日期段同步赛程」的入口**，所以 6~9 月跑不了。`dateTo` 上限是「昨天」。
+- **参数组（`groupKey`）只决定「发不发」，不决定「判什么」**：名字是用户自填的，含义全在四个阈值（HIGH/MED 各一对：抽水上限 `margin` + 方向下限 `signal`）。**实测 160 条样本：tight 是 baseline 的真子集，方向不一致 0 场**，λ 不可行数与阈值无关（都 44 场）。收紧后 ROI 反而略差（−11.51%→−12.98%），不能解读为「模型变差」。
 - **样本利用率约 40%，主因是 λ 不可行**：十月 80 场 → `INFEASIBLE` 44 / `DECIDED` 32；44 场**全部**记成 `INCONSISTENT_ASIAN_MARKETS`，**没有一场是真的残差或邻线超限** → 看分布会误以为「市场在打架」。
 - **「样本」是场次、「已结算」是腿，两者分母不同，`settled/case` 不是完成度**。十月路径：81 场候选 → 80 场有赔率 → 32 场出方向 → 46 腿 → 40 腿已结算（完成度 87%）。ROI 分母 = 已结算腿数（`-4.605/40 = -11.51%`）。
 - **赛果同步有整天缺口，且无回填入口**（10-22 全 13 场、10-26 全 4 场均无赛果，`match_status` 停在 `SCHEDULED`）。**不是「跨零点」本身的问题**——10-20 那批同样跨零点却全有。缺「按日期段回填」这一能力，与赛程缺失同源，一个入口能一起解决。

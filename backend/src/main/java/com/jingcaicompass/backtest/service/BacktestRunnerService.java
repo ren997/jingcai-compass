@@ -157,18 +157,21 @@ public class BacktestRunnerService {
             int metrics = metricsService.recompute(runId, allCases, run.getModelVersion());
             long stillPending = caseMapper.countPending(runId);
 
-            // 有补采失败、或有样本赛果还没到 → PARTIAL。两者都不是「跑挂了」，
+            // 有补采失败、有场次没有可用序列、或有样本赛果还没到 → PARTIAL。三者都不是「跑挂了」，
             // 但也都不是「结论完整」，混成 SUCCEEDED 会让对比页把一个残缺批次当成完整批次。
-            BacktestRunStatusEnum terminal = archiveStats.failed() > 0 || stillPending > 0
-                    ? BacktestRunStatusEnum.PARTIAL
-                    : BacktestRunStatusEnum.SUCCEEDED;
+            BacktestRunStatusEnum terminal =
+                    archiveStats.failed() > 0 || archiveStats.unavailable() > 0 || stillPending > 0
+                            ? BacktestRunStatusEnum.PARTIAL
+                            : BacktestRunStatusEnum.SUCCEEDED;
             String note = terminal == BacktestRunStatusEnum.PARTIAL
-                    ? "补采失败 " + archiveStats.failed() + " 场 / 待结算样本 " + stillPending
+                    ? "补采失败 " + archiveStats.failed() + " 场 / 上游无可用序列 "
+                            + archiveStats.unavailable() + " 场 / 待结算样本 " + stillPending
                     : null;
             finish(runId, terminal, null, note, true);
-            log.info("回测结束 runKey={} 状态={} 归档(复用{} 新采{} 失败{}) 样本={} 结算={} 指标={} 待结算={}",
+            log.info("回测结束 runKey={} 状态={} 归档(复用{} 新采{} 失败{} 无序列{}) 样本={} 结算={} 指标={} 待结算={}",
                     run.getRunKey(), terminal, archiveStats.reused(), archiveStats.fetched(),
-                    archiveStats.failed(), caseStats.inserted(), settled, metrics, stillPending);
+                    archiveStats.failed(), archiveStats.unavailable(),
+                    caseStats.inserted(), settled, metrics, stillPending);
         } catch (RuntimeException exception) {
             log.error("回测执行失败 runKey={}", run.getRunKey(), exception);
             fail(runId, exception);
@@ -225,49 +228,29 @@ public class BacktestRunnerService {
     }
 
     private ArchiveStats runArchiving(Long runId, List<BacktestCandidateDto> candidates) {
-        // 两套计数：batch* 只用于「这一批的增量」刷进 addProgress，total* 用于终态判断。
+        // 两套计数：batch 只用于「这一批的增量」刷进 addProgress，total 用于终态判断。
         // 只保留一套的话，终态会按<b>最后一批</b>的失败数判断，前面批次的失败被静默丢掉，
         // 表现是「明明有 30 场没采到，run 却报 SUCCEEDED」。
-        int totalReused = 0;
-        int totalFetched = 0;
-        int totalFailed = 0;
-        int batchReused = 0;
-        int batchFetched = 0;
-        int batchFailed = 0;
-        int batchQuota = 0;
-        int batchProcessed = 0;
+        ArchiveCounter total = new ArchiveCounter();
+        ArchiveCounter batch = new ArchiveCounter();
         int batchSize = properties.worker().batchSize();
 
         for (BacktestCandidateDto candidate : candidates) {
             if (isCancelled(runId)) {
-                flushArchiveProgress(runId, batchProcessed, batchReused, batchFetched, batchFailed, batchQuota);
-                return new ArchiveStats(totalReused, totalFetched, totalFailed, true);
+                flushArchiveProgress(runId, batch);
+                return new ArchiveStats(total.reused(), total.fetched(), total.failed(),
+                        total.unavailable(), true);
             }
             ArchiveOutcome outcome = evaluationService.archive(candidate);
-            if (outcome.reused()) {
-                batchReused++;
-                totalReused++;
-            } else {
-                batchFetched++;
-                totalFetched++;
-            }
-            if (outcome.status() != BacktestArchiveStatusEnum.SUCCESS) {
-                batchFailed++;
-                totalFailed++;
-            }
-            batchQuota += outcome.quotaCost();
-            batchProcessed++;
-            if (batchProcessed % batchSize == 0) {
-                flushArchiveProgress(runId, batchProcessed, batchReused, batchFetched, batchFailed, batchQuota);
-                batchProcessed = 0;
-                batchReused = 0;
-                batchFetched = 0;
-                batchFailed = 0;
-                batchQuota = 0;
+            total.add(outcome);
+            batch.add(outcome);
+            if (batch.processed() >= batchSize) {
+                flushArchiveProgress(runId, batch);
+                batch.resetQuotaAndCounts();
             }
         }
-        flushArchiveProgress(runId, batchProcessed, batchReused, batchFetched, batchFailed, batchQuota);
-        return new ArchiveStats(totalReused, totalFetched, totalFailed, false);
+        flushArchiveProgress(runId, batch);
+        return new ArchiveStats(total.reused(), total.fetched(), total.failed(), total.unavailable(), false);
     }
 
     private CaseStats runEvaluation(
@@ -341,15 +324,9 @@ public class BacktestRunnerService {
      * 它恰好等于 total——同一批场次若在判定阶段再被加一遍，10 场会变成 20 场，
      * 撞约束的时机是「归档成功、判定开始时」，看上去像判定坏了。</p>
      */
-    private void flushArchiveProgress(
-            Long runId,
-            int processed,
-            int reused,
-            int fetched,
-            int failed,
-            int quota
-    ) {
-        writeProgress(runId, processed, reused, fetched, failed, 0, quota, BacktestStageEnum.ARCHIVING);
+    private void flushArchiveProgress(Long runId, ArchiveCounter counter) {
+        writeProgress(runId, counter.processed(), counter.reused(), counter.fetched(), counter.failed(),
+                0, counter.quota(), BacktestStageEnum.ARCHIVING);
     }
 
     /**
@@ -426,7 +403,90 @@ public class BacktestRunnerService {
     }
 
     /** 归档阶段计数。 */
-    private record ArchiveStats(int reused, int fetched, int failed, boolean cancelled) {
+    /**
+     * 归档阶段的计数器。
+     *
+     * <p><b>三个桶必须恰好划分 {@code processed}</b>：DB 的 {@code ck_backtest_runs_counts}
+     * 要求 {@code reused + fetched + failed = processed_match_count}。这意味着「失败的补采」
+     * 只能进 {@code failed}，不能再进 {@code fetched}——用两个独立 {@code if} 写就会得到
+     * 「复用 10 + 新采 40 + 失败 1 = 51，而 processed = 50」，且**只在真有失败时才成立**：
+     * 全成功或全复用的批次三个桶天然吻合，这个错误藏得住。把互斥关系收进 {@link #add}
+     * 之后，调用方写不出第四种组合。</p>
+     *
+     * <p>{@code unavailable} 是第四个数，但它<b>不落库</b>：负缓存（上游无该场记录 / 无变快点）
+     * 走的是复用，已经算在 {@code reused} 里，再落一列就会破坏上面那条等式。
+     * 它只用来让终态判定知道「这批有场次没有可用序列」，不该报 SUCCEEDED。</p>
+     */
+    static final class ArchiveCounter {
+
+        private int processed;
+        private int reused;
+        private int fetched;
+        private int failed;
+        private int unavailable;
+        private int quota;
+
+        void add(ArchiveOutcome outcome) {
+            processed++;
+            quota += outcome.quotaCost();
+            if (outcome.reused()) {
+                reused++;
+                if (outcome.status() != BacktestArchiveStatusEnum.SUCCESS) {
+                    unavailable++;
+                }
+            } else if (outcome.status() == BacktestArchiveStatusEnum.SUCCESS) {
+                fetched++;
+            } else {
+                failed++;
+            }
+        }
+
+        /** 刷进库之后把这一批清零；{@code unavailable} 与累计语义无关，一并清零即可。 */
+        void resetQuotaAndCounts() {
+            processed = 0;
+            reused = 0;
+            fetched = 0;
+            failed = 0;
+            unavailable = 0;
+            quota = 0;
+        }
+
+        int processed() {
+            return processed;
+        }
+
+        int reused() {
+            return reused;
+        }
+
+        int fetched() {
+            return fetched;
+        }
+
+        int failed() {
+            return failed;
+        }
+
+        int unavailable() {
+            return unavailable;
+        }
+
+        int quota() {
+            return quota;
+        }
+    }
+
+    /**
+     * 归档阶段的结论。
+     *
+     * @param reused      复用已有归档的场次（任意状态，含负缓存）
+     * @param fetched     本次新采且成功的场次
+     * @param failed      本次新采且失败的场次
+     * @param unavailable 复用到的负缓存场次（上游无记录 / 无变快点）——**只用于终态判定，不落库**，
+     *                    因为它已经算在 {@code reused} 里，再落一列就会破坏「三桶恰好划分 processed」
+     * @param cancelled   是否因取消而提前结束
+     */
+    private record ArchiveStats(int reused, int fetched, int failed, int unavailable, boolean cancelled) {
     }
 
     /** 判定阶段计数。 */

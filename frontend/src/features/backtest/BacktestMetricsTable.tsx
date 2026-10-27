@@ -87,8 +87,11 @@ export default function BacktestMetricsTable({ comparison, isReady }: BacktestMe
             <tr>
               <th>参数组</th>
               <th>口径</th>
-              <th>样本 / 已结算</th>
-              <th>方向数</th>
+              <th>
+                样本（场）
+                <small className="backtest-th-note">/ 已结算（腿）</small>
+              </th>
+              <th>方向（腿）</th>
               <th>命中率</th>
               <th>加权命中率</th>
               <th>ROI</th>
@@ -103,7 +106,9 @@ export default function BacktestMetricsTable({ comparison, isReady }: BacktestMe
                 className={groupKey === comparison.bestGroupKey ? 'is-best-group' : undefined}>
                 <th scope="row">{groupKey}</th>
                 <td>{backtestMarketScopeLabels[metrics.marketScope]}</td>
-                <td>{metrics.caseCount} / {metrics.settledCount}</td>
+                <td title={`样本 ${metrics.caseCount} 场（其中 ${metrics.decidedCount} 场出了方向），已结算 ${metrics.settledCount} 条腿`}>
+                  {metrics.caseCount} 场 / {metrics.settledCount} 腿
+                </td>
                 <td>{metrics.pickCount}</td>
                 <td>{formatRate(metrics.hitRate)}</td>
                 <td>{formatRate(metrics.weightedHitRate)}</td>
@@ -125,6 +130,11 @@ export default function BacktestMetricsTable({ comparison, isReady }: BacktestMe
       <details className="backtest-notes">
         <summary>口径说明与跳过分布</summary>
         <ul>
+          <li>
+            <strong>「样本」是场次，「已结算」是腿，两者分母不同，不能相除当完成度。</strong>
+            一场同时给出让球与大小球时算两条腿；没出方向的场次进场次、不进腿数。
+            所以「80 场 / 40 腿」不是「只算了一半」。
+          </li>
           <li>命中率分母不含走盘；走盘按 0.5 计入加权命中率与 Brier，不进命中率分母。</li>
           <li>
             Δ = 市场 Brier − 模型 Brier，<strong>正数才表示模型更好</strong>。负值是合法结论，不取绝对值。

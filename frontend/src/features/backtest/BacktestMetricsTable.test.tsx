@@ -48,6 +48,15 @@ const comparison: BacktestComparisonVo = {
 };
 
 describe('BacktestMetricsTable', () => {
+  it('labels the sample column with units so 场次 and 腿 are not read as a ratio', () => {
+    render(<BacktestMetricsTable comparison={comparison} isReady />);
+    // 「样本 80 / 已结算 40」并排会被读成「只算了一半」，而 80 是场次、40 是腿。
+    expect(screen.getByText('样本（场）')).toBeInTheDocument();
+    expect(screen.getByText('/ 已结算（腿）')).toBeInTheDocument();
+    expect(screen.getByText('方向（腿）')).toBeInTheDocument();
+    expect(screen.getAllByText('12 场 / 6 腿').length).toBeGreaterThan(0);
+  });
+
   it('explains why a group is the best instead of asserting it', () => {
     render(<BacktestMetricsTable comparison={comparison} isReady />);
     expect(screen.getByText('最优组：tight')).toBeInTheDocument();

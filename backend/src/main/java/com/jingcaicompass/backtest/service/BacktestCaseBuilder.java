@@ -113,10 +113,19 @@ public final class BacktestCaseBuilder {
 
         ImpliedPoissonModel.Solution solution = decision.solution();
         if (solution != null) {
-            entity.setLambdaHome(decimal(solution.lambdaHome()));
-            entity.setLambdaAway(decimal(solution.lambdaAway()));
-            // 残差列在表上是 double precision：它只用于「二分是否收敛」的诊断，不参与金额运算。
-            entity.setMaxResidual(solution.maxResidual());
+            if (solution.feasible()) {
+                entity.setLambdaHome(decimal(solution.lambdaHome()));
+                entity.setLambdaAway(decimal(solution.lambdaAway()));
+                // 残差列在表上是 double precision：它只用于「二分是否收敛」的诊断，不参与金额运算。
+                entity.setMaxResidual(solution.maxResidual());
+            } else {
+                // 不可行解的 λ 是 0 占位、残差是 +∞。写进去会同时污染两件事：
+                // 「平均 λ」被拉到 0，而 max_residual 是 double precision，
+                // 无穷大直接写库失败。这一支只留原因。
+                // 反解可行却被残差/邻线超限拒掉的场次走上面那一支，原因列留空——
+                // 混淆会让「搜索域不够宽」和「市场打架」统计成同一件事。
+                entity.setInfeasibilityReason(solution.infeasibility().name());
+            }
         }
 
         ImpliedPoissonModel.NeighborCheck neighborCheck = decision.neighborCheck();

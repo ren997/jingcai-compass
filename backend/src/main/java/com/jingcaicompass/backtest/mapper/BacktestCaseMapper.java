@@ -35,7 +35,8 @@ public interface BacktestCaseMapper extends BaseMapper<BacktestCaseEntity> {
                 handicap_dispersion, totals_dispersion, lambda_home, lambda_away,
                 model_cover_prob, market_cover_prob, edge_cover,
                 model_over_prob, market_over_prob, edge_over,
-                neighbor_max_deviation, max_residual, handicap_gate_pass, totals_gate_pass,
+                neighbor_max_deviation, max_residual, infeasibility_reason,
+                handicap_gate_pass, totals_gate_pass,
                 result_status
             ) VALUES (
                 #{item.runId}, #{item.groupKey}, #{item.externalMatchId}, #{item.matchId}, #{item.archiveId},
@@ -48,8 +49,8 @@ public interface BacktestCaseMapper extends BaseMapper<BacktestCaseEntity> {
                 #{item.handicapDispersion}, #{item.totalsDispersion}, #{item.lambdaHome}, #{item.lambdaAway},
                 #{item.modelCoverProb}, #{item.marketCoverProb}, #{item.edgeCover},
                 #{item.modelOverProb}, #{item.marketOverProb}, #{item.edgeOver},
-                #{item.neighborMaxDeviation}, #{item.maxResidual}, #{item.handicapGatePass},
-                #{item.totalsGatePass}, 'PENDING'
+                #{item.neighborMaxDeviation}, #{item.maxResidual}, #{item.infeasibilityReason},
+                #{item.handicapGatePass}, #{item.totalsGatePass}, 'PENDING'
             )
             ON CONFLICT (run_id, external_match_id, group_key, decision_at) DO NOTHING
             """)

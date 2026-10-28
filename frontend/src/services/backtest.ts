@@ -265,6 +265,8 @@ export type BacktestCaseVo = {
   edgeOver: number | null;
   neighborMaxDeviation: number | null;
   maxResidual: number | null;
+  /** λ 反解不可行原因；null 表示反解可行（此时仍可能因残差/邻线超限被拒） */
+  infeasibilityReason: string | null;
   handicapGatePass: boolean | null;
   totalsGatePass: boolean | null;
   resultStatus: BacktestResultStatus;

@@ -159,7 +159,7 @@ public class BacktestMetricsService {
 
         for (BacktestCaseEntity entity : cases) {
             if (entity.getSkipReason() != null) {
-                skipCounts.merge(entity.getSkipReason().getCode(), 1, Integer::sum);
+                skipCounts.merge(skipBucket(entity), 1, Integer::sum);
             } else {
                 decided++;
             }
@@ -389,6 +389,21 @@ public class BacktestMetricsService {
 
     private static BigDecimal zeroIfNull(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    /**
+     * 跳过计数用的桶名。{@code INCONSISTENT_ASIAN_MARKETS} 背后挂着五个出口，
+     * 其中「λ 反解无解」还有四种原因，而四种原因的处置方向完全不同
+     * （搜索域太窄 / 模型形状冲突 / 数据缺失）。
+     *
+     * <p>不细分时 8 月 117 场、9 月 165 场会显示成同一个数字，看分布会误以为
+     * 「市场在打架」——事实上残差与邻线校验一场都没超限。用 {@code 原因/细分}
+     * 写进同一个计数表，消费方不必改结构就能看到拆分。</p>
+     */
+    private static String skipBucket(BacktestCaseEntity entity) {
+        String code = entity.getSkipReason().getCode();
+        String detail = entity.getInfeasibilityReason();
+        return detail == null ? code : code + "/" + detail;
     }
 
     private static BigDecimal nullToMin(BigDecimal value) {

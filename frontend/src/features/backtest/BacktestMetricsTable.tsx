@@ -3,7 +3,6 @@ import type {
   BacktestComparisonVo,
   BacktestMetricsVo,
   BacktestParameterSet,
-  BacktestSkipReason,
 } from '../../services/backtest';
 import { BACKTEST_MARKET_SCOPES } from '../../services/backtest';
 import {
@@ -225,9 +224,16 @@ function profitTone(roi: number | null | undefined) {
  * 而直接 `Object.keys(null)` 抛的是 TypeError，会被错误边界接住渲染成整页白屏——
  * 用户看到的只是「页面报错」，看不出问题出在一列附注上。</p>
  */
+/**
+ * 跳过分布条目。
+ *
+ * <p>键不再一定是 `BacktestSkipReason`：λ 反解失败会被后端细分成
+ * `INCONSISTENT_ASIAN_MARKETS/<原因>`，所以按键原样透传给 `skipReasonLabel`，
+ * 由它决定翻译方式。</p>
+ */
 function skipEntries(counts: Record<string, number> | null | undefined) {
   if (!counts) {
-    return [] as Array<[BacktestSkipReason, number]>;
+    return [] as Array<[string, number]>;
   }
-  return Object.entries(counts) as Array<[BacktestSkipReason, number]>;
+  return Object.entries(counts);
 }

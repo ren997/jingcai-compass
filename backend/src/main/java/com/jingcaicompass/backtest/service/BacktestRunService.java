@@ -340,6 +340,7 @@ public class BacktestRunService {
                 entity.getEdgeOver(),
                 entity.getNeighborMaxDeviation(),
                 entity.getMaxResidual(),
+                entity.getInfeasibilityReason(),
                 entity.getHandicapGatePass(),
                 entity.getTotalsGatePass(),
                 entity.getResultStatus(),

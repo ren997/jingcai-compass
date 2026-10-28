@@ -133,6 +133,21 @@ public class BacktestCaseEntity {
     /** 主盘残差；量级 1e-16，定标 NUMERIC 会压成 0，故用双精度 */
     private Double maxResidual;
 
+    /**
+     * λ 反解不可行原因；null 表示反解可行
+     *
+     * <p>{@code skip_reason} 只有 {@code INCONSISTENT_ASIAN_MARKETS} 一个值可用，
+     * 但它同时覆盖「反解无解」与「残差/邻线超限」两个出口，前者又有四种原因。
+     * 这一列只承载四种不可行原因的细分，可行时为空——否则「市场打架」会与
+     * 「搜索域太窄」混成同一个数字。</p>
+     *
+     * <p>存字符串而非枚举：取值来自 odds 模块领域模型的
+     * {@code ImpliedPoissonModel.Infeasibility}，那是纯计算对象，不该为了持久化
+     * 反向依赖 MyBatis-Plus 的 {@code @EnumValue}。DB 侧由
+     * {@code ck_backtest_cases_infeasibility} 兜住取值集合。</p>
+     */
+    private String infeasibilityReason;
+
     /** 让球方向是否通过影子门槛（只记录不拦截） */
     private Boolean handicapGatePass;
 

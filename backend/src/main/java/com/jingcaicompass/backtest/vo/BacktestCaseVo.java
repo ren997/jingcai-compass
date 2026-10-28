@@ -58,6 +58,8 @@ public record BacktestCaseVo(
         BigDecimal edgeOver,
         BigDecimal neighborMaxDeviation,
         Double maxResidual,
+        /* λ 反解不可行原因（ImpliedPoissonModel.Infeasibility）；null 表示反解可行 */
+        String infeasibilityReason,
         Boolean handicapGatePass,
         Boolean totalsGatePass,
         BacktestResultStatusEnum resultStatus,

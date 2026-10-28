@@ -149,6 +149,7 @@ const cases: BacktestCaseVo = {
   edgeOver: 0,
   neighborMaxDeviation: 0.035683,
   maxResidual: 1.1102230246251565e-16,
+  infeasibilityReason: null,
   handicapGatePass: false,
   totalsGatePass: null,
   resultStatus: 'FINAL',

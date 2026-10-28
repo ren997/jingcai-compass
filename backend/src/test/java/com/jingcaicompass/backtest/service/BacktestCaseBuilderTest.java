@@ -185,6 +185,62 @@ class BacktestCaseBuilderTest {
         assertThat(entity.getTotalsGatePass()).isNull();
     }
 
+    @Test
+    void recordsInfeasibilityReasonOnlyWhenSolveFails() {
+        // 四种不可行原因必须能单独统计。此前 8 月 117 场、9 月 165 场全被记成同一个
+        // INCONSISTENT_ASIAN_MARKETS，和「残差/邻线超限」合在一起看，分布会误导成
+        // 「市场在打架」——而四种原因里三种是搜索域或数据问题，处置方向完全不同。
+        assertThat(reasonOf(ImpliedPoissonModel.Infeasibility.LAMBDA_SPLIT_IMPOSSIBLE, 0.0))
+                .isEqualTo("LAMBDA_SPLIT_IMPOSSIBLE");
+        assertThat(reasonOf(ImpliedPoissonModel.Infeasibility.TOTALS_PROBABILITY_OUT_OF_RANGE, 0.0))
+                .isEqualTo("TOTALS_PROBABILITY_OUT_OF_RANGE");
+        assertThat(reasonOf(ImpliedPoissonModel.Infeasibility.HANDICAP_PROBABILITY_OUT_OF_RANGE, 0.0))
+                .isEqualTo("HANDICAP_PROBABILITY_OUT_OF_RANGE");
+        assertThat(reasonOf(ImpliedPoissonModel.Infeasibility.INVALID_INPUT, 0.0))
+                .isEqualTo("INVALID_INPUT");
+
+        // 反解可行、只是残差超限：必须留空。写成 NONE 会让「市场打架」混进
+        // 「搜索域不够宽」那一桶，而这两件事的修法相反。
+        assertThat(reasonOf(ImpliedPoissonModel.Infeasibility.NONE, 0.05)).isNull();
+    }
+
+    @Test
+    void leavesLambdaAndResidualNullWhenSolveIsInfeasible() {
+        // 不可行解的 λ 是 0 占位、残差是 +∞。落库会把「平均 λ」拉到 0，
+        // 而 max_residual 是 double precision，写无穷大直接整批失败。
+        BacktestCaseEntity entity = BacktestCaseBuilder.build(
+                1L, "g", CANDIDATE, DECISION_AT, 1L,
+                decision(BaselinePredictionSkipReasonEnum.INCONSISTENT_ASIAN_MARKETS,
+                        null, null, null,
+                        solution(ImpliedPoissonModel.Infeasibility.LAMBDA_SPLIT_IMPOSSIBLE, 0.0),
+                        null, null));
+
+        assertThat(entity.getLambdaHome()).isNull();
+        assertThat(entity.getLambdaAway()).isNull();
+        assertThat(entity.getMaxResidual()).isNull();
+        assertThat(entity.getInfeasibilityReason()).isEqualTo("LAMBDA_SPLIT_IMPOSSIBLE");
+    }
+
+    @Test
+    void leavesInfeasibilityReasonNullWhenSolutionIsAbsent() {
+        AsianDecision decision = decision(
+                BaselinePredictionSkipReasonEnum.INSUFFICIENT_ASIAN_BOOKMAKERS,
+                null, null, null, null, null, null);
+
+        assertThat(BacktestCaseBuilder.build(1L, "g", CANDIDATE, DECISION_AT, 1L, decision)
+                .getInfeasibilityReason()).isNull();
+    }
+
+    private static String reasonOf(ImpliedPoissonModel.Infeasibility infeasibility, double residual) {
+        AsianDecision decision = decision(
+                BaselinePredictionSkipReasonEnum.INCONSISTENT_ASIAN_MARKETS,
+                null, null, null,
+                solution(infeasibility, residual),
+                null, null);
+        return BacktestCaseBuilder.build(1L, "g", CANDIDATE, DECISION_AT, 1L, decision)
+                .getInfeasibilityReason();
+    }
+
     private static AsianDecision decision(
             BaselinePredictionSkipReasonEnum skipReason,
             AsianOddsSnapshot frozen,

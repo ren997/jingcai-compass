@@ -129,7 +129,9 @@ public final class AsianDecisionEngine {
                 totalsBest.firstProbability().doubleValue());
         if (!solution.feasible()) {
             recordModel("infeasible", solution, null);
-            return skipped(input, BaselinePredictionSkipReasonEnum.INCONSISTENT_ASIAN_MARKETS);
+            // 带上 solution 才能让下游区分「搜索域太窄」与「市场打架」。
+            return skippedWithDiagnostics(
+                    input, BaselinePredictionSkipReasonEnum.INCONSISTENT_ASIAN_MARKETS, solution, null);
         }
 
         // 6) 邻线回投校验。主盘两方程是恰定的，残差只反映收敛精度；判断两个市场是否打架
@@ -144,7 +146,10 @@ public final class AsianDecisionEngine {
         if (BigDecimal.valueOf(solution.maxResidual()).compareTo(residualTolerance) > 0
                 || !neighborCheck.within(neighborTolerance)) {
             recordModel("inconsistent", solution, neighborCheck);
-            return skipped(input, BaselinePredictionSkipReasonEnum.INCONSISTENT_ASIAN_MARKETS);
+            // 同样带出去：这一支是「反解可行但邻线复现不了」，与上一支的修法相反
+            // （放宽搜索域 vs 收紧邻线容差），不能在下游被合并成一个「无解」。
+            return skippedWithDiagnostics(
+                    input, BaselinePredictionSkipReasonEnum.INCONSISTENT_ASIAN_MARKETS, solution, neighborCheck);
         }
         // lineCount == 0 时单独打标签：没有邻线不等于校验通过，不能让它伪装成「完美自洽」。
         recordModel(neighborCheck.validated() ? "solved" : "no-neighbor", solution, neighborCheck);
@@ -293,6 +298,28 @@ public final class AsianDecisionEngine {
     private static AsianDecision skipped(AsianDecisionInput input, BaselinePredictionSkipReasonEnum reason) {
         return new AsianDecision(
                 input.matchId(), null, reason, null, null, null, null, null, null, null, null);
+    }
+
+    /**
+     * 带诊断量的跳过。
+     *
+     * <p>{@code INCONSISTENT_ASIAN_MARKETS} 一个枚举值挂着两个出口：λ 反解无解、
+     * 反解可行但残差/邻线超限。区分它们的信息<b>只</b>存在于 {@code solution} 与
+     * {@code neighborCheck} 里——早期版本在跳过时把它们一起置空，于是回测拿到的
+     * {@code AsianDecision} 看起来永远是「无解」：{@code decision_stage} 只能判成
+     * INFEASIBLE，四种不可行原因也无从落库。</p>
+     *
+     * <p>注意不可行时 {@code solution.maxResidual()} 是无穷大、λ 是 0 占位，
+     * 消费方必须先用 {@code feasible()} 判断再取值。</p>
+     */
+    private static AsianDecision skippedWithDiagnostics(
+            AsianDecisionInput input,
+            BaselinePredictionSkipReasonEnum reason,
+            ImpliedPoissonModel.Solution solution,
+            ImpliedPoissonModel.NeighborCheck neighborCheck
+    ) {
+        return new AsianDecision(
+                input.matchId(), null, reason, null, null, null, null, solution, neighborCheck, null, null);
     }
 
     private void recordConsensus(String market, AsianMarketConsensusAggregator.LineConsensus consensus) {

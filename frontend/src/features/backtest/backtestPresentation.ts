@@ -106,8 +106,20 @@ export const backtestSkipReasonLabels: Record<BacktestSkipReason, string> = {
   LOW_CONFIDENCE_ASIAN_MARKETS: '两市场都没方向',
 };
 
-export const backtestMarketScopeLabels: Record<BacktestMarketScope, string> = {
-  ALL: '合计',
+/**
+ * λ 反解不可行的四种原因。
+ *
+ * <p>四种原因的处置方向完全不同，不能合成一个数字看：前两条是搜索域（MIN/MAX_LAMBDA）
+ * 不够宽，第三条是「总进球低 + 一边倒」在独立 Poisson 下本来就无解，第四条是上游数据缺失。</p>
+ */
+export const backtestInfeasibilityLabels: Record<string, string> = {
+  INVALID_INPUT: '输入不完整',
+  TOTALS_PROBABILITY_OUT_OF_RANGE: '大球概率超出搜索域',
+  HANDICAP_PROBABILITY_OUT_OF_RANGE: '赢盘概率超出搜索域',
+  LAMBDA_SPLIT_IMPOSSIBLE: '主客进球无法分离',
+};
+
+export const backtestMarketScopeLabels: Record<BacktestMarketScope, string> = {  ALL: '合计',
   ASIAN_HANDICAP: '让球',
   ASIAN_TOTAL_GOALS: '大小球',
 };
@@ -120,8 +132,19 @@ export function decisionStageLabel(stage: BacktestDecisionStage | null | undefin
   return stage ? backtestDecisionStageLabels[stage] : '—';
 }
 
-export function skipReasonLabel(reason: BacktestSkipReason | null | undefined) {
-  return reason ? backtestSkipReasonLabels[reason] : '—';
+export function skipReasonLabel(reason: string | null | undefined) {
+  if (!reason) {
+    return '—';
+  }
+  // 后端把「λ 反解不可行」的四种细分挂在 skip_reason 后面：
+  // `INCONSISTENT_ASIAN_MARKETS/LAMBDA_SPLIT_IMPOSSIBLE`。
+  // 有细分时主因必须改文案——此时它一定是反解失败，不是「两市场不自洽」；
+  // 留着原文案会让「搜索域太窄」看起来像「市场在打架」，正是要分开的两件事。
+  const [code, detail] = reason.split('/');
+  if (detail) {
+    return `反解 λ 不可行（${backtestInfeasibilityLabels[detail] ?? detail}）`;
+  }
+  return backtestSkipReasonLabels[code as BacktestSkipReason] ?? code;
 }
 
 /** 百分比；样本为 0 时后端给 null，此处保持「—」而不是 0%，两者含义完全不同。 */

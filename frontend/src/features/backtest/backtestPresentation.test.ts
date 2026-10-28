@@ -11,6 +11,7 @@ import {
   formatScore,
   parameterSetThresholds,
   scopeMetrics,
+  skipReasonLabel,
 } from './backtestPresentation';
 
 const baseCase: BacktestCaseVo = {
@@ -49,6 +50,7 @@ const baseCase: BacktestCaseVo = {
   edgeOver: 0,
   neighborMaxDeviation: 0.02,
   maxResidual: 1e-16,
+  infeasibilityReason: null,
   handicapGatePass: true,
   totalsGatePass: false,
   resultStatus: 'FINAL',
@@ -181,5 +183,32 @@ describe('backtest presentation', () => {
       'HIGH 抽水≤— 方向≥—',
       'MED 抽水≤— 方向≥—',
     ]);
+  });
+});
+
+describe('反解失败细分原因的文案', () => {
+  it('把四种不可行原因翻成处置方向', () => {
+    // 键来自后端 skipBucket：`INCONSISTENT_ASIAN_MARKETS/<Infeasibility>`。
+    // 这里有细分就一定不是「市场打架」，所以主因文案必须换掉；
+    // 保留原「两市场不自洽」会让「搜索域太窄」看起来像「市场在打架」，
+    // 而这两件事的修法相反——拆这一列的全部意义就在此。
+    expect(skipReasonLabel('INCONSISTENT_ASIAN_MARKETS/LAMBDA_SPLIT_IMPOSSIBLE'))
+      .toBe('反解 λ 不可行（主客进球无法分离）');
+    expect(skipReasonLabel('INCONSISTENT_ASIAN_MARKETS/TOTALS_PROBABILITY_OUT_OF_RANGE'))
+      .toBe('反解 λ 不可行（大球概率超出搜索域）');
+    expect(skipReasonLabel('INCONSISTENT_ASIAN_MARKETS/HANDICAP_PROBABILITY_OUT_OF_RANGE'))
+      .toBe('反解 λ 不可行（赢盘概率超出搜索域）');
+    expect(skipReasonLabel('INCONSISTENT_ASIAN_MARKETS/INVALID_INPUT'))
+      .toBe('反解 λ 不可行（输入不完整）');
+  });
+
+  it('无细分时仍是原语义', () => {
+    // 这一条确实对应残差/邻线超限，那时 infeasibility 是 NONE、细分列留空。
+    expect(skipReasonLabel('INCONSISTENT_ASIAN_MARKETS')).toBe('两市场不自洽');
+  });
+
+  it('未知细分留在括号里，不静默吞掉', () => {
+    expect(skipReasonLabel('INCONSISTENT_ASIAN_MARKETS/SOMETHING_NEW'))
+      .toBe('反解 λ 不可行（SOMETHING_NEW）');
   });
 });

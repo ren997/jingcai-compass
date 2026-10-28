@@ -313,16 +313,50 @@ ROI 降序 → Brier 升序 → `settled` 降序。**判定理由必须一起返
     所以除 `=== 'PENDING'` 之外的判断全在猜。已按后端枚举改正，前端测试里的 fixture 也跟着改。
   - 逐场明细的 λ（期望进球数 1.96 / 1.11）用 `formatProbability` 渲染成了
     「196.1% / 111.0%」。λ 不是概率，改成两位小数直写。
-- **跳过分布里最大的一项是「两市场不自洽」，而它其实全是「λ 解不出来」。**
-  十月全月 80 场（baseline 组）交叉统计：`INFEASIBLE` 44 场 → skipReason
-  `INCONSISTENT_ASIAN_MARKETS`；`DECIDED` 32 场；`BOTH_MARKETS_REJECTED` 4 场
-  （3 低置信 + 1 跨庄分歧过大）。**44 场里没有一场是真的残差或邻线超限**。
-  这是 `INCONSISTENT_ASIAN_MARKETS` 有两个出口（`!feasible()` 与残差/邻线超限）
-  带来的后果：逐场明细的「判定阶段」列能分开，但**汇总分布分不开**，
-  看分布会误以为「市场在打架」，实际是 `ImpliedPoissonModel` 的四种不可行之一
-  （`INVALID_INPUT` / `TOTALS_PROBABILITY_OUT_OF_RANGE` / `LAMBDA_SPLIT_IMPOSSIBLE` /
-  `HANDICAP_PROBABILITY_OUT_OF_RANGE`），目前这个原因没有落库。
-  样本利用率只有 40% 的根因在这里，不在上游没开价——要查得往 λ 反解那一步看。
+- **此前那条「40% 样本被 λ 不可行吞掉」的结论已被推翻（2026-10-28）。**
+  当时依据 `decision_stage = INFEASIBLE` 判断「反解无解」，但那个值本身是假的：
+  `AsianDecisionEngine.skipped()` 构造跳过结果时把 `solution` 置空，而
+  `BacktestDecisionStageEnum.of()` 只要看到 `solution == null` 就落到 `INFEASIBLE`。
+  于是「反解成功但邻线超限」和「反解无解」被写成同一个值——44 场、117 场、160 场
+  全成了「λ 解不出来」，而它们**一场都不是**。
+  现在 `skippedWithDiagnostics()` 把 `solution` 与 `neighborCheck` 一并带出，
+  `backtest_cases.infeasibility_reason`（V30）承载四种不可行原因的细分。重跑后真相：
+
+  | 区间 | 决策 | 邻线超限 | λ 真无解 | 低置信 | 缺数据/分歧 |
+  |---|---|---|---|---|---|
+  | 7 月 | 127 | 45 | **0** | 22 | 1 |
+  | 8 月 | 243 | 117 | **0** | 43 | 9 |
+  | 9 月 | 199 | 160 | **5** | 38 | 4 |
+
+  9 月那 5 场全是 `HANDICAP_PROBABILITY_OUT_OF_RANGE`（赢盘概率超出搜索域）。
+  残差超限三天**全为 0**——主盘两方程恰定，残差只有 1e-16 量级，本来就不可能超限。
+
+  **扼杀样本的是 `neighbor-tolerance = 0.04`，而且它切在了分布左侧**：
+  被拒场次的邻线偏差 min 0.0400~0.0409、p50 0.047~0.050、p90 0.066~0.069，
+  **八成的场次落在 0.04~0.06 这一档**。这些场次不是「两个市场打架」，而是独立
+  Poisson 在邻线上的系统性形状偏差刚好越过一条卡得很紧的线。放宽到 0.06 可救回
+  约八成被拒场次，0.10 救回 98%。但方向要记清楚：**放宽只增加样本量，不产生
+  alpha**——`edge ≡ 0` 不变，多出来的样本只让统计功效更高，不会让期望收益转正。
+  **实测反证：放宽会让 ROI 更差，这道闸门其实在过滤坏样本。** 八月同区间、同参数组，
+  只改 `ASIAN_MODEL_NEIGHBOR_TOLERANCE` 重跑（run #23 vs #21）：
+
+  | 容差 | 决策 | 腿 | 结算 | 加权命中 | ROI |
+  |---|---|---|---|---|---|
+  | 0.0400 | 243 | 365 | 357 | 50.45% | **−0.89%** |
+  | 0.0600 | 324 | 484 | 474 | 49.55% | **−2.39%** |
+
+  反推新增那 117 条腿的 ROI 是 **−6.96%**，远差于原样本的 −0.89%。
+  所以邻线偏差不是「市场打架」的度量，而是**模型不可信的度量**：模型与市场在其他
+  盘口线上分歧越大，越说明这场的解是 Poisson 形状偏差的产物而非信息优势。
+  往更紧的方向测没有意义——8 月会掉到 200 腿以下，ROI 置信区间 ±7%，读不出差异，
+  而按单月结果反向调容差本身就是过拟合。**容差保持 0.04。**
+- **新增落库列还有第四处要改：手写 INSERT 的列清单。**
+  `BacktestCaseMapper.insertIgnore` 是固定列数的 `@Insert`，不走 MP 自动映射。
+  V30 加列之后 Entity 有字段、`BacktestCaseBuilder` 也填了值，**但 SQL 里没有这一列**，
+  于是它永远为 null、不报错不警告，白跑一轮八月回测才发现。
+  现在 `BacktestCaseMapperSqlTest` 反射遍历 Entity 全部字段（排除自增、自动填充与
+  结算阶段那七列），断言每个列名都出现在 `insertIgnore` 的 SQL 里。再加列忘改 SQL 时，
+  测试会先挂，不用等一轮回测。
 - **`BacktestMigrationIT` 未真跑。** 本机无 Docker，它只在 `-Pintegration` 下存在。
   生产库的 V29 是逐条执行验证的（见 `tools/backtest-schema-verify/`），
   但 CI 的空库全量重放没走过。

@@ -49,7 +49,8 @@
 7. **回溯深度**：赛程/赛果 **≥16 个月**（`all-list?date=` 按单日拉，历史日也返回 `matchId`+队伍 ID）；**`odds-history` 仅约 4 个月**（`06-20` 起完整）——回测唯一硬约束。历史赔率 **6~7 家**（实时 10+），σ 不可互比。老场次 **20.8s**/388KB 逼近 `read-timeout 20s`。`points[]` 升序 = **变动快照非定时采样**，取「≤T 最后一条」即 T 时刻价。
 8. **`updateTime` 是北京时间不是 UTC**；生产 `parseTime` 按 UTC 解释——**回测无泄漏断言必须按 `Asia/Shanghai`**。**赛前约 1h45m 停更** →「收盘价」实为 T-105min 价。
 9. **多参数签名按字典序全签**（漏签 401 会列出参与验签的键）。接口文档内嵌 `assets/index-*.js`。
-10. **`football-info` 的伤停对历史场次可用**：`GET /nova/sports-lottery/football-info?matchId=`。`injuries[]` 真实字段是 `playerName/teamType/position/isInjured/isSuspended`（**文档写的 `playerId` 不存在，按它计数会得到 0**）；`lineups` **历史场次不返回**。`feature`（主客场战绩+场均进失球）与 `result` 是**滚动 20 场且按场次时点生成**——同一队 7 月与 10 月数字不同、分母恒为 20，故无前视泄漏，可作特征。
+10. **`football-info` 的 `injuries[]` 不可用于回测**：字段是 `playerName/teamType/position/isInjured/isSuspended`（文档写的 `playerId` 不存在，按它计数恒为 0）；`lineups` 历史场次不返回。**它不是当场快照**——穆西亚拉在三场德国队比赛里三次被标 `isInjured=true`，而同一份响应的 `players[]` 显示他场场首发（starts 1→2→3）。`players[]` 才是逐场快照（同队同球员赛季出场数 14/14 单调 +1），所以矛盾只能来自伤停数组。**拿它进回测＝用未来信息**。
+11. **`feature`/`result` 是滚动 20 场、按场次时点生成**（同一队 7 月 34 球→10 月 31 球，分母恒 20；`homeTeamAvgGoals = homeTeamTotalGoals/20`）；`history` 是**两队 H2H**（`totalMatches` 常为 2~3）而**不是**近 20 场；`resultDetails` 是**两队各近 20 场明细**，最大日期止于开赛前。这是唯一独立于市场的 λ 来源——本地 `matches` 只有 4 个月，每队仅十几场，滚不动 20 场。覆盖率：`players` 两队全空 30%，`injuries` 非空 77%。
 
 ## 单源与任务
 - **落库是交叉积**（让球线 × 大小球线），冻结行要同一行具备两市场。必须同时改 V25 唯一键与 `AsianOddsSnapshotWriter` 去重维度（含 `total_line`+`IS NULL`）。**大小球保留档按「去水概率离 50/50 的距离」取前 4**。

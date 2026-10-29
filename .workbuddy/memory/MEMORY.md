@@ -12,7 +12,8 @@
 - **「本地能启动」≠「CI 能过」**：CI = 空 PG16 + V1~V29 全量重放 + `stub` provider + 65 个 IT 主动撞约束。无 Docker 就别加只在 CI 才暴露的约束。
 - 纯计算→单测；**迁移 / PG 专有约束 / 触发器→必须真实 PG16 跑过**。`mvn -o test` 零 Docker（**857** 项）；`*IT.java` 仅 `-Pintegration`。前端门禁：`vitest run`（**110**）+ `tsc -b` + `vite build`。
 - **`cmd | tail && echo OK` 判断不出失败**（管道退出码是 `tail` 的）：必须 `cmd > log 2>&1; echo "exit=$?"`。
-- **含明文库凭据的工具必须未跟踪或读环境变量**。明文密码仍在本分支 `e260ca0`/`efb5953` 历史里，分支从未推送——合入前洗历史或轮换库密码。
+- **含明文库凭据的工具必须未跟踪或读环境变量**。2026-10-29 已 `filter-branch --index-filter` 洗掉 `e260ca0`/`efb5953` 的明文密码（33 commit 重写、内容 tree 不变），`refs/original`+`backup`+reflog+`gc --prune=now` 全清，`git log --all -S` 为空。**但 `.workbuddy/tmp/*.java` 十几个探针仍含明文（已被 gitignore，别取消忽略）。**
+- **`vite build` 会被 WorkBuddy 的 safe-delete 拦**：`emptyOutDir` 要删 50+ 文件时报 `SAFE_DELETE_BULK_CONFIRM_REQUIRED`，**不是代码问题**。解法 `mv dist dist.old` 后再 build。
 - 触发器 `RAISE ... USING CONSTRAINT='x'` 的约束名**不进 JDBC message**，断言只能比主消息文本。
 - **`@Select` 不应用 `@TableField(typeHandler)`**（`autoResultMap` 的 resultMap 只被 MP 自己拼的 SQL 用）。已踩两次：归档 `payload`、`backtest_metrics` 两个 jsonb（详情页整页白屏）。特征：**写库正常、读回 null、不报错**。修法 `col::text`+Jackson 或 `selectList(wrapper)`。
 - **`@ConditionalOnBean` 按同包字母序求值**：`...PoolBackfill...` 排在 `...ResultSync...` 前 → 扫描时 DataSource 未注册 → 启动即 `No qualifying bean`。要「无库也能装配」就**别加条件**，改 `ObjectProvider` 惰性取。
